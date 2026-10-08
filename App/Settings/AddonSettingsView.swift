@@ -49,6 +49,10 @@ struct AddonSettingsView: View {
                 }
             }
         }
+        #if !os(tvOS)
+        .scrollContentBackground(.hidden)
+        #endif
+        .background(Color.canvas)
         .navigationTitle("Addons")
         #if os(iOS)
         .toolbar { EditButton() }
