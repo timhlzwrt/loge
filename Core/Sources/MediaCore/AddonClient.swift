@@ -33,6 +33,11 @@ public struct AddonClient: Sendable {
         self.session = session
     }
 
+    /// Normalised form of the URL passed to `init`; equal for equivalent inputs.
+    public var manifestURL: String {
+        baseURL.absoluteString + "/manifest.json"
+    }
+
     public func manifest() async throws -> AddonManifest {
         try await fetch(baseURL.appending(path: "manifest.json"))
     }
