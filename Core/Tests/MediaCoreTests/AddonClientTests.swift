@@ -66,4 +66,25 @@ struct AddonClientTests {
         #expect(streams[0].behaviorHints?.proxyHeaders?.request?["User-Agent"] == "Example/1.0")
         #expect(streams[1].url == nil && streams[1].infoHash != nil)
     }
+
+    @Test func cleansPaddedStreamNames() throws {
+        // As sent by AIOStreams: leading spaces, zero-width joiners and trailing padding.
+        let json = #"{"name": "   4K \u200d\u200d    \u200d\u200d\u200d⚡\u200d\u200d\n  〈Remux〉\u200d     \u200d\n  ★★★★★            "}"#
+        let stream = try JSONDecoder().decode(StreamSource.self, from: Data(json.utf8))
+        #expect(stream.cleanName == "4K ⚡\n〈Remux〉\n★★★★★")
+
+        let blank = try JSONDecoder().decode(StreamSource.self, from: Data(#"{"name": " \u200d \n "}"#.utf8))
+        #expect(blank.cleanName == nil)
+    }
+
+    @Test func onlyHTTPStreamsArePlayable() throws {
+        let streams = try decodeFixture("streams", as: StreamsResponse.self).streams
+        #expect(streams[0].playbackURL?.host() == "debrid.example")
+        #expect(streams[0].requestHeaders == ["User-Agent": "Example/1.0"])
+        #expect(streams[1].playbackURL == nil)
+
+        var external = streams[0]
+        external.url = "magnet:?xt=urn:btih:0123"
+        #expect(external.playbackURL == nil)
+    }
 }

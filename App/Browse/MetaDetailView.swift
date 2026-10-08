@@ -20,7 +20,7 @@ struct MetaDetailView: View {
                 switch state {
                 case .loaded(let meta):
                     if let videos = meta.videos, !videos.isEmpty, meta.type == "series" {
-                        EpisodesSection(videos: videos)
+                        EpisodesSection(showName: meta.name, videos: videos)
                     }
                 case .failed(let message):
                     HStack {
@@ -69,6 +69,17 @@ struct MetaDetailView: View {
         if case .loaded(let meta) = state { meta } else { nil }
     }
 
+    /// Movies play themselves; series start at their first episode until
+    /// watch progress exists to resume from.
+    private var playRoute: (label: String, route: SourcesRoute)? {
+        guard preview.type == "series" else {
+            return ("Play", SourcesRoute(type: preview.type, id: preview.id, title: preview.name))
+        }
+        guard let first = loaded?.videos.flatMap(EpisodesSection.firstEpisode) else { return nil }
+        let code = EpisodesSection.code(for: first)
+        return ("Play \(code)", SourcesRoute(type: preview.type, id: first.id, title: "\(preview.name) · \(code)"))
+    }
+
     private var backdrop: some View {
         Artwork(url: loaded?.background ?? preview.background)
             .overlay { BackdropFade() }
@@ -99,6 +110,10 @@ struct MetaDetailView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .frame(maxWidth: 900, alignment: .leading)
+            }
+            if let play = playRoute {
+                PlayButton(label: play.label, route: play.route)
+                    .padding(.top, 6)
             }
         }
         .frame(maxWidth: .infinity, alignment: Alignment(horizontal: heroAlignment, vertical: .bottom))
@@ -151,11 +166,37 @@ private struct ExpandableText: View {
     }
 }
 
+private struct PlayButton: View {
+    let label: String
+    let route: SourcesRoute
+
+    var body: some View {
+        NavigationLink(value: route) {
+            Label(label, systemImage: "play.fill")
+                .font(.headline)
+                #if !os(tvOS)
+                .padding(.horizontal, 28)
+                .padding(.vertical, 12)
+                .background(.white, in: .capsule)
+                .foregroundStyle(.black)
+                #endif
+        }
+        #if os(tvOS)
+        // The system style supplies the focus highlight a custom background would lose.
+        .buttonStyle(.bordered)
+        #else
+        .buttonStyle(.plain)
+        #endif
+    }
+}
+
 private struct EpisodesSection: View {
+    let showName: String
     let videos: [Video]
     @State private var season: Int
 
-    init(videos: [Video]) {
+    init(showName: String, videos: [Video]) {
+        self.showName = showName
         self.videos = videos
         // Start on the first real season rather than specials (season 0).
         _season = State(initialValue: Self.seasons(in: videos).first ?? 0)
@@ -174,7 +215,20 @@ private struct EpisodesSection: View {
 
             ScrollView(.horizontal) {
                 LazyHStack(alignment: .top, spacing: Metrics.rowSpacing) {
-                    ForEach(episodes) { EpisodeCard(video: $0) }
+                    ForEach(episodes) { video in
+                        NavigationLink(value: SourcesRoute(
+                            type: "series",
+                            id: video.id,
+                            title: "\(showName) · \(Self.code(for: video))"
+                        )) {
+                            EpisodeCard(video: video)
+                        }
+                        #if os(tvOS)
+                        .buttonStyle(.card)
+                        #else
+                        .buttonStyle(.plain)
+                        #endif
+                    }
                 }
                 .padding(.horizontal, Metrics.gutter)
             }
@@ -185,6 +239,20 @@ private struct EpisodesSection: View {
 
     private var episodes: [Video] {
         videos.filter { $0.season == season }.sorted { ($0.episode ?? 0) < ($1.episode ?? 0) }
+    }
+
+    /// "S1 E2", or just the season or title when an addon omits numbering.
+    static func code(for video: Video) -> String {
+        switch (video.season, video.episode) {
+        case let (season?, episode?): "S\(season) E\(episode)"
+        case let (season?, nil): "S\(season)"
+        default: video.displayTitle ?? "Episode"
+        }
+    }
+
+    static func firstEpisode(in videos: [Video]) -> Video? {
+        guard let season = seasons(in: videos).first else { return videos.first }
+        return videos.filter { $0.season == season }.min { ($0.episode ?? 0) < ($1.episode ?? 0) }
     }
 
     /// Numbered seasons in order, with specials last.
@@ -218,10 +286,6 @@ private struct EpisodeCard: View {
             }
         }
         .frame(width: Metrics.episodeWidth, alignment: .leading)
-        #if os(tvOS)
-        // Episodes become playable in phase 4; until then they only need to take focus so the row scrolls.
-        .focusable()
-        #endif
     }
 
     /// Addons send ISO 8601 dates both with and without fractional seconds.
