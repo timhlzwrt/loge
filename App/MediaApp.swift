@@ -3,16 +3,21 @@ import SwiftUI
 
 @main
 struct MediaApp: App {
+    @State private var addonStore = AddonStore()
+
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environment(addonStore)
+                .task { await addonStore.refreshManifests() }
         }
     }
 }
 
-/// Phase 1 test screen: proves the addon client and the player work on every
+/// Test screen for the player, the addon client and addon settings on every
 /// platform. Replaced by the real browse UI in phase 3.
 struct ContentView: View {
+    @Environment(AddonStore.self) private var addonStore
     private static let testVideos: [(name: String, url: URL)] = [
         ("MKV · H.264 1080p", URL(string: "https://test-videos.co.uk/vids/bigbuckbunny/mkv/1080/Big_Buck_Bunny_1080_10s_30MB.mkv")!),
         ("MP4 · HEVC 1080p", URL(string: "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h265/1080/Big_Buck_Bunny_1080_10s_30MB.mp4")!),
@@ -34,6 +39,13 @@ struct ContentView: View {
     var body: some View {
         NavigationStack(path: $path) {
             List {
+                Section("Settings") {
+                    NavigationLink {
+                        AddonSettingsView()
+                    } label: {
+                        LabeledContent("Addons", value: "\(addonStore.addons.count)")
+                    }
+                }
                 Section("Playback") {
                     ForEach(Self.testVideos, id: \.url) { video in
                         NavigationLink(video.name, value: video.url)
