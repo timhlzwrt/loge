@@ -80,6 +80,33 @@ public struct StreamSource: Codable, Sendable, Equatable {
     public struct ProxyHeaders: Codable, Sendable, Equatable {
         public var request: [String: String]?
     }
+
+    /// The direct HTTP(S) link, if this source has one. Torrents, YouTube IDs
+    /// and external links (which open another app) don't.
+    public var playbackURL: URL? {
+        guard let url = url.flatMap(URL.init(string:)), url.scheme == "https" || url.scheme == "http" else {
+            return nil
+        }
+        return url
+    }
+
+    /// `name` without the padding addons add to line things up in Stremio's UI:
+    /// runs of spaces, zero-width joiners and blank lines.
+    public var cleanName: String? {
+        guard let name else { return nil }
+        let invisible = CharacterSet(charactersIn: "\u{200B}\u{200C}\u{200D}\u{FEFF}")
+        let lines = name.components(separatedBy: .newlines).map { line in
+            String(String.UnicodeScalarView(line.unicodeScalars.filter { !invisible.contains($0) }))
+                .split(whereSeparator: \.isWhitespace)
+                .joined(separator: " ")
+        }
+        let kept = lines.filter { !$0.isEmpty }
+        return kept.isEmpty ? nil : kept.joined(separator: "\n")
+    }
+
+    public var requestHeaders: [String: String] {
+        behaviorHints?.proxyHeaders?.request ?? [:]
+    }
 }
 
 struct CatalogResponse: Decodable {

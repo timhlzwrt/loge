@@ -48,7 +48,11 @@ struct Artwork: View {
 struct BackdropFade: View {
     var body: some View {
         LinearGradient(
-            stops: [.init(color: .canvas.opacity(0), location: 0.35), .init(color: .canvas, location: 1)],
+            stops: [
+                .init(color: .canvas.opacity(0), location: 0.25),
+                .init(color: .canvas.opacity(0.85), location: 0.6),
+                .init(color: .canvas, location: 0.85),
+            ],
             startPoint: .top, endPoint: .bottom
         )
     }

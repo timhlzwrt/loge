@@ -30,8 +30,67 @@ final class MPVPlayer {
         }
     }
 
+    var isWaiting: Bool {
+        status == .loading || status == .buffering
+    }
+
     private(set) var position: Double = 0
     private(set) var duration: Double?
+    private(set) var tracks: [Track] = []
+
+    struct Track: Identifiable, Equatable, Sendable {
+        enum Kind: String, Sendable { case audio, sub }
+
+        let id: Int
+        let kind: Kind
+        let title: String?
+        let language: String?
+        let codec: String?
+        let channelCount: Int?
+        let isForced: Bool
+        let isHearingImpaired: Bool
+        let isSelected: Bool
+
+        /// "English · Commentary · Dolby Digital 5.1" or "English · Forced". Streams often
+        /// carry several tracks per language, so the details that tell them apart are included.
+        var displayName: String {
+            let language = language.map { Locale.current.localizedString(forLanguageCode: $0) ?? $0 }
+            var parts = [language, title].compactMap { $0 }.filter { !$0.isEmpty }
+            switch kind {
+            case .audio:
+                let format = [codec.map(Self.codecName), channelCount.map(Self.channelLayout)].compactMap { $0 }
+                if !format.isEmpty { parts.append(format.joined(separator: " ")) }
+            case .sub:
+                if isForced { parts.append("Forced") }
+                if isHearingImpaired { parts.append("SDH") }
+            }
+            return parts.isEmpty ? "Track \(id)" : parts.joined(separator: " · ")
+        }
+
+        private static func codecName(_ codec: String) -> String {
+            switch codec {
+            case "aac": "AAC"
+            case "ac3": "Dolby Digital"
+            case "eac3": "Dolby Digital Plus"
+            case "truehd": "Dolby TrueHD"
+            case "dts": "DTS"
+            case "flac": "FLAC"
+            case "opus": "Opus"
+            case "mp3": "MP3"
+            default: codec.uppercased()
+            }
+        }
+
+        private static func channelLayout(_ count: Int) -> String {
+            switch count {
+            case 1: "Mono"
+            case 2: "Stereo"
+            case 6: "5.1"
+            case 8: "7.1"
+            default: "\(count) ch"
+            }
+        }
+    }
 
     @ObservationIgnored let layer = MPVMetalLayer()
 
@@ -60,6 +119,11 @@ final class MPVPlayer {
             ("keep-open", "yes"),
             ("subs-match-os-language", "yes"),
             ("subs-fallback", "yes"),
+            // Keep text subtitles inside the picture; mpv otherwise places them in the
+            // letterbox bars, which on a phone in portrait is where the controls are.
+            ("sub-use-margins", "no"),
+            // Size them to the picture rather than the window, which in portrait is far taller.
+            ("sub-scale-by-window", "no"),
         ] {
             check(mpv_set_option_string(handle, name, value), name)
         }
@@ -78,6 +142,8 @@ final class MPVPlayer {
         mpv_observe_property(handle, 0, "eof-reached", MPV_FORMAT_FLAG)
         mpv_observe_property(handle, 0, "time-pos", MPV_FORMAT_DOUBLE)
         mpv_observe_property(handle, 0, "duration", MPV_FORMAT_DOUBLE)
+        // Observed only as a change signal; the list itself is read through its sub-properties.
+        mpv_observe_property(handle, 0, "track-list", MPV_FORMAT_NONE)
 
         startEventThread()
     }
@@ -86,11 +152,24 @@ final class MPVPlayer {
         shutDown()
     }
 
-    func load(_ url: URL) {
+    /// - Parameter headers: Sent with every request for this file, e.g. debrid authorisation.
+    func load(_ url: URL, headers: [String: String] = [:]) {
         guard !isShutDown else { return }
         loadState = .loading
         position = 0
         duration = nil
+        tracks = []
+        // mpv sends User-Agent from its own option, so a header field would be ignored.
+        var fields = headers
+        if let key = fields.keys.first(where: { $0.caseInsensitiveCompare("User-Agent") == .orderedSame }),
+           let userAgent = fields.removeValue(forKey: key) {
+            setProperty("user-agent", userAgent)
+        }
+        // Built item by item: the single-string form splits on commas, which header values may contain.
+        command(["change-list", "http-header-fields", "clr", ""])
+        for (name, value) in fields.sorted(by: { $0.key < $1.key }) {
+            command(["change-list", "http-header-fields", "append", "\(name): \(value)"])
+        }
         command(["loadfile", url.absoluteString, "replace"])
     }
 
@@ -98,8 +177,31 @@ final class MPVPlayer {
         command(["cycle", "pause"])
     }
 
+    func play() {
+        setProperty("pause", "no")
+    }
+
+    func pause() {
+        setProperty("pause", "yes")
+    }
+
     func seek(by seconds: Double) {
         command(["seek", String(seconds), "relative"])
+    }
+
+    func seek(to seconds: Double) {
+        command(["seek", String(seconds), "absolute"])
+    }
+
+    /// Pass nil to turn subtitles off.
+    func select(_ track: Track?, kind: Track.Kind) {
+        setProperty(kind == .audio ? "aid" : "sid", track.map { String($0.id) } ?? "no")
+    }
+
+    /// Detaches video while the app is in the background; rendering into a
+    /// hidden layer leaves it black when the app returns.
+    func setVideoEnabled(_ isEnabled: Bool) {
+        setProperty("vid", isEnabled ? "auto" : "no")
     }
 
     /// Stops playback immediately; the player can't be reused afterwards.
@@ -116,6 +218,7 @@ final class MPVPlayer {
         case failed(String)
         case flag(String, Bool)
         case double(String, Double?)
+        case tracks([Track])
     }
 
     private func startEventThread() {
@@ -128,7 +231,7 @@ final class MPVPlayer {
         nonisolated(unsafe) let layer = layer
         Thread.detachNewThread {
             while let event = mpv_wait_event(handle, -1)?.pointee, event.event_id != MPV_EVENT_SHUTDOWN {
-                if let parsed = Self.parse(event) {
+                if let parsed = Self.parse(event, handle: handle) {
                     continuation.yield(parsed)
                 }
             }
@@ -144,7 +247,7 @@ final class MPVPlayer {
         }
     }
 
-    private nonisolated static func parse(_ event: mpv_event) -> Event? {
+    private nonisolated static func parse(_ event: mpv_event, handle: OpaquePointer) -> Event? {
         switch event.event_id {
         case MPV_EVENT_FILE_LOADED:
             return .fileLoaded
@@ -156,6 +259,9 @@ final class MPVPlayer {
         case MPV_EVENT_PROPERTY_CHANGE:
             guard let property = event.data?.load(as: mpv_event_property.self) else { return nil }
             let name = String(cString: property.name)
+            if name == "track-list" {
+                return .tracks(readTracks(handle))
+            }
             switch property.format {
             case MPV_FORMAT_FLAG:
                 return .flag(name, property.data.load(as: Int32.self) != 0)
@@ -175,6 +281,32 @@ final class MPVPlayer {
         }
     }
 
+    private nonisolated static func readTracks(_ handle: OpaquePointer) -> [Track] {
+        func string(_ name: String) -> String? {
+            guard let value = mpv_get_property_string(handle, name) else { return nil }
+            defer { mpv_free(value) }
+            return String(cString: value)
+        }
+        let count = string("track-list/count").flatMap(Int.init) ?? 0
+        return (0..<count).compactMap { index in
+            let prefix = "track-list/\(index)/"
+            guard let kind = string(prefix + "type").flatMap(Track.Kind.init(rawValue:)),
+                  let id = string(prefix + "id").flatMap(Int.init)
+            else { return nil } // Video tracks aren't selectable here.
+            return Track(
+                id: id,
+                kind: kind,
+                title: string(prefix + "title"),
+                language: string(prefix + "lang"),
+                codec: string(prefix + "codec"),
+                channelCount: string(prefix + "demux-channel-count").flatMap(Int.init),
+                isForced: string(prefix + "forced") == "yes",
+                isHearingImpaired: string(prefix + "hearing-impaired") == "yes",
+                isSelected: string(prefix + "selected") == "yes"
+            )
+        }
+    }
+
     private func apply(_ event: Event) {
         switch event {
         case .fileLoaded:
@@ -188,9 +320,16 @@ final class MPVPlayer {
         case .flag("eof-reached", let value):
             isEnded = value
         case .double("time-pos", let value):
-            position = value ?? 0
+            // mpv reports every frame; whole seconds are enough for the UI and
+            // avoid redrawing the controls 24+ times a second.
+            let seconds = (value ?? 0).rounded(.down)
+            if seconds != position {
+                position = seconds
+            }
         case .double("duration", let value):
             duration = value
+        case .tracks(let value):
+            tracks = value
         case .flag, .double:
             break
         }
@@ -208,6 +347,11 @@ final class MPVPlayer {
             }
         }
         check(status, args[0])
+    }
+
+    private func setProperty(_ name: String, _ value: String) {
+        guard !isShutDown else { return }
+        check(mpv_set_property_string(handle, name, value), name)
     }
 
     private func check(_ status: Int32, _ context: String) {

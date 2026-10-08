@@ -42,4 +42,10 @@ struct AddonRoutingTests {
         #expect([streams, cinemeta].metaClient(type: "movie", id: "tt0111161")?.manifestURL == AddonStore.cinemetaURL)
         #expect([streams, cinemeta].metaClient(type: "movie", id: "kitsu:1") == nil)
     }
+
+    @Test func streamProvidersFollowUserOrderAndCapabilities() {
+        let providers = [cinemeta, streams, notLoaded].streamProviders(type: "series", id: "tt0903747:1:1")
+        #expect(providers.map(\.name) == ["Example Streams"])
+        #expect([cinemeta, streams].streamProviders(type: "channel", id: "tt1").isEmpty)
+    }
 }
