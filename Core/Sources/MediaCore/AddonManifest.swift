@@ -11,10 +11,38 @@ public struct AddonManifest: Codable, Sendable, Equatable {
     public var idPrefixes: [String]?
     public var catalogs: [Catalog]
 
-    public struct Catalog: Codable, Sendable, Equatable {
+    public struct Catalog: Codable, Sendable, Hashable {
         public var type: String
         public var id: String
         public var name: String?
+        public var extra: [Extra]?
+        /// Legacy form of `extra[].isRequired`, still sent by many addons.
+        public var extraRequired: [String]?
+        /// Legacy form of `extra[].name`.
+        public var extraSupported: [String]?
+
+        public struct Extra: Codable, Sendable, Hashable {
+            public var name: String
+            public var isRequired: Bool?
+        }
+
+        /// Catalogs that need input (a genre, a query, a list of IDs) can't be shown as a plain row.
+        public var isBrowsable: Bool {
+            (extraRequired ?? []).isEmpty && !(extra ?? []).contains { $0.isRequired == true }
+        }
+
+        public var supportsSearch: Bool {
+            (extra ?? []).contains { $0.name == "search" } || (extraSupported ?? []).contains("search")
+        }
+    }
+
+    /// Whether this addon answers `resource` requests for an item, honouring
+    /// per-resource type and ID-prefix restrictions over the manifest-wide ones.
+    public func provides(_ resource: String, type: String, id: String) -> Bool {
+        guard let declared = resources.first(where: { $0.name == resource }) else { return false }
+        guard (declared.types ?? types).contains(type) else { return false }
+        guard let prefixes = declared.idPrefixes ?? idPrefixes else { return true }
+        return prefixes.contains { id.hasPrefix($0) }
     }
 
     /// Addons declare resources either as a bare name (`"stream"`) or as an object

@@ -4,7 +4,7 @@ import Foundation
 // malformed values, and one bad poster must not fail a whole catalog.
 
 /// A catalog entry: just enough to draw a poster tile.
-public struct MetaPreview: Codable, Sendable, Equatable, Identifiable {
+public struct MetaPreview: Codable, Sendable, Hashable, Identifiable {
     public var id: String
     public var type: String
     public var name: String
@@ -12,6 +12,14 @@ public struct MetaPreview: Codable, Sendable, Equatable, Identifiable {
     /// `"poster"` (2:3, the default), `"landscape"` or `"square"`.
     public var posterShape: String?
     public var releaseInfo: String?
+    // Optional extras that richer addons like Cinemeta include, enough to
+    // feature an item without fetching its full meta.
+    public var background: String?
+    public var logo: String?
+    public var description: String?
+    public var imdbRating: String?
+    public var genres: [String]?
+    public var runtime: String?
 }
 
 /// Full details for one title, from the `meta` resource.
@@ -27,6 +35,8 @@ public struct Meta: Codable, Sendable, Equatable, Identifiable {
     public var runtime: String?
     public var genres: [String]?
     public var imdbRating: String?
+    public var cast: [String]?
+    public var director: [String]?
     /// Episodes for series; absent or empty for movies.
     public var videos: [Video]?
 }

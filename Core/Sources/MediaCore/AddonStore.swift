@@ -36,7 +36,7 @@ public final class AddonStore {
 
     public typealias ManifestLoader = @Sendable (AddonClient) async throws -> AddonManifest
 
-    public static let cinemetaURL = "https://v3-cinemeta.strem.io/manifest.json"
+    public nonisolated static let cinemetaURL = "https://v3-cinemeta.strem.io/manifest.json"
     private static let defaultsKey = "installedAddons"
 
     public private(set) var addons: [InstalledAddon]
