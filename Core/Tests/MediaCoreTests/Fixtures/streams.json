@@ -1,0 +1,20 @@
+{
+  "streams": [
+    {
+      "name": "Debrid\n1080p",
+      "title": "Example.Movie.2024.1080p.mkv\n4.2 GB",
+      "url": "https://debrid.example/dl/abc123/Example.Movie.2024.1080p.mkv",
+      "behaviorHints": {
+        "bingeGroup": "debrid|1080p",
+        "filename": "Example.Movie.2024.1080p.mkv",
+        "proxyHeaders": { "request": { "User-Agent": "Example/1.0" } }
+      }
+    },
+    {
+      "name": "Torrent\n720p",
+      "title": "Example.Movie.2024.720p",
+      "infoHash": "0123456789abcdef0123456789abcdef01234567",
+      "fileIdx": 2
+    }
+  ]
+}
