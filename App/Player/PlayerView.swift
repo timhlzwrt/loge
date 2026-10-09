@@ -29,6 +29,7 @@ struct PlayerView: View {
     @State private var lastInteraction = Date.now
     @State private var lastRecordedPosition: Double = 0
     @State private var scrubPosition: Double?
+    @State private var isMenuOpen = false
     @State private var hasRememberedSource = false
     @State private var episodes: [Video] = []
     @State private var next: PlaybackRequest?
@@ -75,6 +76,7 @@ struct PlayerView: View {
                             title: current.title,
                             player: player,
                             scrubPosition: $scrubPosition,
+                            isMenuOpen: $isMenuOpen,
                             onClose: { dismiss() },
                             onInteract: showControls
                         )
@@ -119,12 +121,14 @@ struct PlayerView: View {
                 break
             }
         }
+        // Closing a menu counts as an interaction, so the countdown starts over.
+        .onChange(of: isMenuOpen) { _, open in if !open { showControls() } }
         .task(id: AutoHide(lastInteraction: lastInteraction, isPlaying: player?.status == .playing)) {
             // Restarts on each interaction and when playback starts, so controls shown
             // during a slow load still hide once the video is running. Cancellation
             // means one of those happened again.
             do { try await Task.sleep(for: .seconds(4)) } catch { return }
-            if player?.status == .playing && scrubPosition == nil {
+            if player?.status == .playing && scrubPosition == nil && !isMenuOpen {
                 controlsVisible = false
             }
         }
@@ -386,8 +390,9 @@ private struct SeekFlashView: View {
               systemImage: flash.seconds > 0 ? "goforward" : "gobackward")
             .font(.title2.weight(.semibold))
             .foregroundStyle(.white)
-            .padding(18)
-            .background(.black.opacity(0.4), in: .circle)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+            .background(.black.opacity(0.45), in: .capsule)
             .opacity(visible ? 1 : 0)
             .frame(maxWidth: .infinity, alignment: flash.seconds > 0 ? .trailing : .leading)
             .padding(.horizontal, 48)

@@ -34,16 +34,19 @@ targets:
         MARKETING_VERSION: "0.1"
         CURRENT_PROJECT_VERSION: 1
         SWIFT_VERSION: "6.0"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # tvOS icons are layered for the parallax effect and live in a brand-assets set.
+        ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletv*]: App Icon & Top Shelf Image
         # Ad-hoc signing lets the Mac build run locally without a developer account
         CODE_SIGN_IDENTITY[sdk=macosx*]: "-"
     scheme:
       testTargets:
         - MediaAppUITests
 
-  # Drives the Apple TV simulator's remote for manual testing; see UITests/RemoteDriverTests.swift.
+  # Manual UI checks: a remote driver for the Apple TV simulator and on-demand player tests.
   MediaAppUITests:
     type: bundle.ui-testing
-    platform: tvOS
+    supportedDestinations: [iOS, tvOS]
     sources: [UITests]
     dependencies:
       - target: MediaApp

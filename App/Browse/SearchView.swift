@@ -5,6 +5,8 @@ struct SearchView: View {
     @Environment(AddonStore.self) private var store
     @State private var query = ""
     @State private var submittedQuery = ""
+    /// Results per catalog for the current query, filled in as each one answers.
+    @State private var resultCounts: [CatalogSource.ID: Int] = [:]
     /// Newest first, one per line.
     @AppStorage("recentSearches") private var recentSearches = ""
 
@@ -20,8 +22,18 @@ struct SearchView: View {
             } else if query.isEmpty {
                 recent
             } else if !submittedQuery.isEmpty {
+                // Rows with no matches hide themselves, so without this an unsuccessful
+                // search would look like it was still loading.
+                if resultCounts.count == sources.count && resultCounts.values.allSatisfy({ $0 == 0 }) {
+                    ContentUnavailableView.search(text: submittedQuery)
+                        .padding(.top, 80)
+                }
                 LazyVStack(alignment: .leading, spacing: 32) {
-                    ForEach(sources) { CatalogRow(source: $0, search: submittedQuery) }
+                    ForEach(sources) { source in
+                        CatalogRow(source: source, search: submittedQuery, onLoaded: { count in
+                            resultCounts[source.id] = count
+                        })
+                    }
                 }
                 .padding(.vertical, 24)
             }
@@ -39,7 +51,9 @@ struct SearchView: View {
             } catch {
                 return
             }
-            submittedQuery = query.trimmingCharacters(in: .whitespaces)
+            let trimmed = query.trimmingCharacters(in: .whitespaces)
+            if trimmed != submittedQuery { resultCounts = [:] }
+            submittedQuery = trimmed
         }
     }
 
