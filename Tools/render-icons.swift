@@ -135,4 +135,15 @@ writeJSON([
     "info": info,
 ], to: brand)
 
+// White accent: artwork carries the colour, so controls, selection and focus stay neutral.
+// The asset form also reaches system chrome such as the Mac sidebar, which .tint doesn't.
+// On the Mac it also fills the selected sidebar row behind white text, so it's grey there.
+func accent(_ gray: String, idiom: String) -> [String: Any] {
+    ["color": ["color-space": "srgb", "components": ["red": gray, "green": gray, "blue": gray, "alpha": "1.000"]], "idiom": idiom]
+}
+writeJSON([
+    "colors": [accent("1.000", idiom: "universal"), accent("0.380", idiom: "mac")],
+    "info": info,
+], to: catalog.appending(path: "AccentColor.colorset"))
+
 print("Wrote \(catalog.path)")

@@ -93,9 +93,10 @@ struct SearchView: View {
         }
     }
 
+    /// Saves a search that found something; ones that didn't aren't worth repeating.
     private func remember(_ term: String) {
         let term = term.trimmingCharacters(in: .whitespaces)
-        guard term.count >= 2 else { return }
+        guard term.count >= 2, term == submittedQuery, resultCounts.values.contains(where: { $0 > 0 }) else { return }
         let others = recents.filter { $0.caseInsensitiveCompare(term) != .orderedSame }
         recentSearches = ([term] + others).prefix(10).joined(separator: "\n")
     }
