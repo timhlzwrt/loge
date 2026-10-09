@@ -98,7 +98,7 @@ struct MetaDetailView: View {
     private var hero: some View {
         VStack(alignment: heroAlignment, spacing: 14) {
             TitleLogo(logo: loaded?.logo ?? preview.logo, name: preview.name, maxHeight: logoHeight)
-                .frame(maxWidth: logoWidth)
+                .frame(maxWidth: logoWidth, alignment: Alignment(horizontal: heroAlignment, vertical: .center))
             (loaded?.infoLine ?? preview.infoLine)
             if let description = loaded?.description ?? preview.description {
                 ExpandableText(text: description)
@@ -145,24 +145,26 @@ private struct ExpandableText: View {
     @State private var isExpanded = false
 
     var body: some View {
+        #if os(tvOS)
+        // A focusable "More" would take initial focus from Play, which matters more on a TV.
+        Text(text)
+            .font(.callout)
+            .foregroundStyle(.white.opacity(0.8))
+            .lineLimit(4)
+        #else
         VStack(alignment: .leading, spacing: 4) {
             Text(text)
-                #if os(tvOS)
-                .font(.callout)
-                #else
                 .font(.subheadline)
-                #endif
                 .foregroundStyle(.white.opacity(0.8))
                 .lineLimit(isExpanded ? nil : 3)
             if !isExpanded {
                 Button("More") { isExpanded = true }
                     .font(.footnote.weight(.semibold))
-                    #if !os(tvOS)
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
-                    #endif
             }
         }
+        #endif
     }
 }
 
@@ -224,7 +226,8 @@ private struct EpisodesSection: View {
                             EpisodeCard(video: video)
                         }
                         #if os(tvOS)
-                        .buttonStyle(.card)
+                        // Lifts just the thumbnail on focus, with the text below it, like the TV app.
+                        .buttonStyle(.borderless)
                         #else
                         .buttonStyle(.plain)
                         #endif
@@ -271,6 +274,9 @@ private struct EpisodeCard: View {
             Artwork(url: video.thumbnail)
                 .frame(width: Metrics.episodeWidth, height: Metrics.episodeWidth * 9 / 16)
                 .clipShape(.rect(cornerRadius: 8))
+                #if os(tvOS)
+                .hoverEffect(.highlight)
+                #endif
             if let number = video.episode {
                 Text("Episode \(number)")
                     .font(.caption)
