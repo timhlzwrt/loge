@@ -7,6 +7,10 @@ struct MetaDetailView: View {
     @Environment(AddonStore.self) private var store
     @Environment(LibraryStore.self) private var library
     @State private var state = LoadState.loading
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    #endif
     /// Set by "Choose Source", which bypasses the remembered source.
     @State private var choosingSource: SourcesRoute?
 
@@ -36,6 +40,10 @@ struct MetaDetailView: View {
                         Button("Retry") { state = .loading }
                     }
                     .padding(.horizontal, Metrics.gutter)
+                case .loading where preview.type == "series":
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 40)
                 case .loading:
                     EmptyView()
                 }
@@ -161,7 +169,7 @@ struct MetaDetailView: View {
             }
             .ignoresSafeArea()
             #else
-            .frame(height: 560)
+            .frame(height: heroHeight + 40)
             .clipped()
             #endif
             .accessibilityHidden(true)
@@ -210,10 +218,15 @@ struct MetaDetailView: View {
     private let logoHeight: CGFloat = 110
     private let logoWidth: CGFloat = 360
     #else
-    private let heroAlignment = HorizontalAlignment.center
-    private let heroHeight: CGFloat = 520
-    private let logoHeight: CGFloat = 80
-    private let logoWidth: CGFloat = 240
+    // A centred stack suits a portrait phone; wider screens read better left-aligned,
+    // and a short landscape screen needs a shorter hero.
+    private var isWide: Bool { horizontalSizeClass == .regular || verticalSizeClass == .compact }
+    private var heroAlignment: HorizontalAlignment { isWide ? .leading : .center }
+    private var heroHeight: CGFloat {
+        verticalSizeClass == .compact ? 300 : horizontalSizeClass == .regular ? 560 : 520
+    }
+    private var logoHeight: CGFloat { isWide ? 100 : 80 }
+    private var logoWidth: CGFloat { isWide ? 360 : 240 }
     #endif
 }
 
@@ -436,6 +449,12 @@ private struct EpisodeCard: View {
             Text(video.displayTitle ?? "Untitled")
                 .font(.subheadline)
                 .lineLimit(2)
+            if let overview = video.overview, !overview.isEmpty {
+                Text(overview)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+            }
             if let date = video.releaseDate {
                 // Upcoming episodes say when they air rather than looking playable.
                 Text(video.isReleased() ? date.formatted(.dateTime.day().month().year()) : "Airs \(date.formatted(.dateTime.day().month()))")

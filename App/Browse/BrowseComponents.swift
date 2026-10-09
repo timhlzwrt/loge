@@ -6,6 +6,7 @@ extension Color {
     static let canvas = Color(red: 0.08, green: 0.08, blue: 0.09)
 }
 
+@MainActor
 enum Metrics {
     #if os(tvOS)
     static let posterWidth: CGFloat = 220
@@ -19,12 +20,16 @@ enum Metrics {
     static let gutter: CGFloat = 28
     static let rowSpacing: CGFloat = 16
     #else
-    static let posterWidth: CGFloat = 112
-    static let episodeWidth: CGFloat = 220
-    static let gutter: CGFloat = 16
-    static let rowSpacing: CGFloat = 12
+    // The idiom never changes while running, so these can stay constants.
+    private static let isPad = UIDevice.current.userInterfaceIdiom == .pad
+    static let posterWidth: CGFloat = isPad ? 160 : 112
+    static let episodeWidth: CGFloat = isPad ? 320 : 220
+    static let gutter: CGFloat = isPad ? 32 : 16
+    static let rowSpacing: CGFloat = isPad ? 18 : 12
     #endif
 }
+
+
 
 /// Remote artwork that fills whatever frame it's given, cropping rather than
 /// growing to the image's own size, with a quiet placeholder while loading or missing.

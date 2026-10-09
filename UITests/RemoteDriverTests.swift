@@ -1,3 +1,4 @@
+#if os(tvOS)
 import XCTest
 
 /// Drives the Apple TV simulator's Siri Remote from the command line, for checking
@@ -69,3 +70,4 @@ final class RemoteDriverTests: XCTestCase {
         try handle.write(contentsOf: Data(text.utf8))
     }
 }
+#endif

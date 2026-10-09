@@ -155,6 +155,10 @@ private struct FeaturedCarousel: View {
 
 private struct FeaturedCard: View {
     let meta: MetaPreview
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    #endif
 
     var body: some View {
         Artwork(url: meta.background)
@@ -171,17 +175,28 @@ private struct FeaturedCard: View {
                             .lineLimit(2)
                     }
                 }
+                // Long lines across a wide card are hard to read.
+                .frame(maxWidth: 620, alignment: .leading)
                 .padding(Metrics.gutter)
             }
             #if os(macOS)
             .aspectRatio(2.4, contentMode: .fit)
             #else
-            .aspectRatio(0.8, contentMode: .fit)
+            .aspectRatio(aspectRatio, contentMode: .fit)
             .clipShape(.rect(cornerRadius: 16))
             .padding(.horizontal, Metrics.gutter)
             #endif
             .clipped()
             .contentShape(.rect)
     }
+
+    #if os(iOS)
+    /// Tall on a portrait phone, a wide banner on iPad, and wider still in phone
+    /// landscape, where the screen is short.
+    private var aspectRatio: CGFloat {
+        if verticalSizeClass == .compact { return 3 }
+        return horizontalSizeClass == .regular ? 2.2 : 0.8
+    }
+    #endif
 }
 #endif

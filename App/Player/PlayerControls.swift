@@ -6,6 +6,8 @@ struct PlayerControls: View {
     let player: MPVPlayer
     /// Where the timeline is being dragged or swiped to; nil while it follows playback.
     @Binding var scrubPosition: Double?
+    /// True while one of the menus is open, so the controls don't hide out from under it.
+    @Binding var isMenuOpen: Bool
     let onClose: () -> Void
     let onInteract: () -> Void
 
@@ -53,8 +55,8 @@ struct PlayerControls: View {
                 .font(.headline)
                 .lineLimit(1)
             Spacer()
-            TrackMenu(player: player, onInteract: onInteract)
-            OptionsMenu(player: player, onInteract: onInteract)
+            TrackMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen)
+            OptionsMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen)
         }
         #if !os(tvOS)
         .buttonStyle(.plain)
@@ -140,20 +142,22 @@ struct PlayerControls: View {
     }
 }
 
-/// A menu item that shows a checkmark when on and selects when chosen.
-private func menuToggle(_ title: String, isOn: Bool, select: @escaping () -> Void) -> some View {
-    Button(action: select) {
-        if isOn {
-            Label(title, systemImage: "checkmark")
-        } else {
-            Text(title)
-        }
+/// Reports whether a menu is showing. Menus have no presentation state of their own,
+/// but their content appears and disappears with them.
+private struct MenuPresenceTracker: ViewModifier {
+    @Binding var isOpen: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .onAppear { isOpen = true }
+            .onDisappear { isOpen = false }
     }
 }
 
 private struct TrackMenu: View {
     let player: MPVPlayer
     let onInteract: () -> Void
+    @Binding var isOpen: Bool
 
     @AppStorage(PlaybackPreferences.subtitleScaleKey) private var subtitleScale = 1.0
 
@@ -164,35 +168,40 @@ private struct TrackMenu: View {
         if audio.count > 1 || !subtitles.isEmpty {
             Menu {
                 if audio.count > 1 {
-                    Section("Audio") {
-                        ForEach(audio) { track in
-                            menuToggle(track.displayName, isOn: track.isSelected) { player.select(track, kind: .audio) }
-                        }
+                    Picker("Audio", selection: selection(for: .audio, in: audio)) {
+                        ForEach(audio) { Text($0.displayName).tag(Optional($0.id)) }
                     }
+                    .pickerStyle(.inline)
                 }
                 if !subtitles.isEmpty {
-                    Section("Subtitles") {
-                        menuToggle("Off", isOn: !subtitles.contains(where: \.isSelected)) { player.select(nil, kind: .sub) }
-                        ForEach(subtitles) { track in
-                            menuToggle(track.displayName, isOn: track.isSelected) { player.select(track, kind: .sub) }
-                        }
+                    Picker("Subtitles", selection: selection(for: .sub, in: subtitles)) {
+                        Text("Off").tag(Int?.none)
+                        ForEach(subtitles) { Text($0.displayName).tag(Optional($0.id)) }
                     }
-                    Menu("Subtitle Size") {
-                        ForEach(PlaybackPreferences.subtitleScales, id: \.scale) { option in
-                            menuToggle(option.name, isOn: subtitleScale == option.scale) {
-                                subtitleScale = option.scale
-                                player.setSubtitleScale(option.scale)
-                            }
-                        }
+                    .pickerStyle(.inline)
+                    Picker("Subtitle Size", selection: $subtitleScale) {
+                        ForEach(PlaybackPreferences.subtitleScales, id: \.scale) { Text($0.name).tag($0.scale) }
                     }
+                    .pickerStyle(.menu)
                 }
+                Color.clear.frame(height: 0).modifier(MenuPresenceTracker(isOpen: $isOpen))
             } label: {
                 Label("Audio and subtitles", systemImage: "captions.bubble")
                     .labelStyle(.iconOnly)
                     .font(.title3)
             }
             .simultaneousGesture(TapGesture().onEnded(onInteract))
+            .onChange(of: subtitleScale) { _, scale in player.setSubtitleScale(scale) }
         }
+    }
+
+    /// The selected track's ID, or nil when that kind is turned off.
+    private func selection(for kind: MPVPlayer.Track.Kind, in tracks: [MPVPlayer.Track]) -> Binding<Int?> {
+        let player = player
+        return Binding(
+            get: { tracks.first(where: \.isSelected)?.id },
+            set: { id in player.select(tracks.first { $0.id == id }, kind: kind) }
+        )
     }
 
     /// HLS streams repeat the same rendition once per quality level; listing identical
@@ -216,23 +225,24 @@ private struct TrackMenu: View {
 private struct OptionsMenu: View {
     let player: MPVPlayer
     let onInteract: () -> Void
+    @Binding var isOpen: Bool
 
     private static let speeds = [0.5, 0.75, 1, 1.25, 1.5, 2]
 
     var body: some View {
+        let player = player
         Menu {
             Section("Speed") {
-                ForEach(Self.speeds, id: \.self) { value in
-                    menuToggle(value == 1 ? "Normal" : "\(value.formatted())×", isOn: player.speed == value) {
-                        player.setSpeed(value)
+                Picker("Speed", selection: Binding(get: { player.speed }, set: { player.setSpeed($0) })) {
+                    ForEach(Self.speeds, id: \.self) { value in
+                        Text(value == 1 ? "Normal" : "\(value.formatted())×").tag(value)
                     }
                 }
+                .pickerStyle(.inline)
+                .labelsHidden()
             }
-            Section {
-                menuToggle("Zoom to Fill", isOn: player.isZoomedToFill) {
-                    player.setZoomToFill(!player.isZoomedToFill)
-                }
-            }
+            Toggle("Zoom to Fill", isOn: Binding(get: { player.isZoomedToFill }, set: { player.setZoomToFill($0) }))
+            Color.clear.frame(height: 0).modifier(MenuPresenceTracker(isOpen: $isOpen))
         } label: {
             Label("Playback options", systemImage: player.speed == 1 ? "gauge.with.dots.needle.33percent" : "gauge.with.dots.needle.67percent")
                 .labelStyle(.iconOnly)
