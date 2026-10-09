@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    name: Core tests
+    runs-on: xcode-27
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift test
+        working-directory: Core
+
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: xcode-27
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: iOS
+            destination: generic/platform=iOS Simulator
+          - platform: tvOS
+            destination: generic/platform=tvOS Simulator
+          - platform: macOS
+            destination: platform=macOS
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install xcodegen
+      - run: xcodegen generate
+      # MPVKit's binary frameworks are large; keep them between runs.
+      - uses: actions/cache@v4
+        with:
+          path: .build/xcode/SourcePackages
+          key: spm-${{ hashFiles('project.yml', 'Vendor/MPVKit/Package.swift') }}
+      # Warnings fail the build, matching the "no warnings" rule in CLAUDE.md.
+      - run: >
+          xcodebuild build
+          -project MediaApp.xcodeproj
+          -scheme MediaApp
+          -destination '${{ matrix.destination }}'
+          -derivedDataPath .build/xcode
+          SWIFT_TREAT_WARNINGS_AS_ERRORS=YES
