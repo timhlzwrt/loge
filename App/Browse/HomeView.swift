@@ -3,6 +3,8 @@ import SwiftUI
 
 struct HomeView: View {
     @Environment(AddonStore.self) private var store
+    /// Replaced on pull-to-refresh, which rebuilds the rows so they load again.
+    @State private var refreshID = UUID()
 
     var body: some View {
         let sources = store.addons.homeCatalogs
@@ -10,7 +12,7 @@ struct HomeView: View {
             ContentUnavailableView(
                 "No catalogs yet",
                 systemImage: "square.stack",
-                description: Text("Install an addon with catalogs, such as Cinemeta, in Addons.")
+                description: Text("Install an addon with catalogs, such as Cinemeta, in Settings.")
             )
         } else {
             #if os(tvOS)
@@ -19,9 +21,16 @@ struct HomeView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 32) {
                     FeaturedCarousel(source: sources[0])
+                    ContinueWatchingRow()
+                    MyListRow()
                     ForEach(sources) { CatalogRow(source: $0) }
                 }
                 .padding(.bottom, 32)
+                .id(refreshID)
+            }
+            .refreshable {
+                await store.refreshManifests()
+                refreshID = UUID()
             }
             .background(Color.canvas)
             #endif
@@ -57,6 +66,8 @@ private struct TVHome: View {
                     .padding(.bottom, 24)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
+                        ContinueWatchingRow { focused = $0 }
+                        MyListRow { focused = $0 }
                         ForEach(sources) { source in
                             CatalogRow(source: source, isPrimary: source == sources.first) { focused = $0 }
                         }

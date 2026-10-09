@@ -44,6 +44,33 @@ struct Artwork: View {
     }
 }
 
+/// A thin bar along the bottom of artwork showing how much has been watched,
+/// or a checkmark once it's finished.
+struct WatchProgressBar: View {
+    let progress: WatchProgress
+
+    var body: some View {
+        if progress.isFinished {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.title3)
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(.black, .white)
+                .padding(8)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                .accessibilityLabel("Watched")
+        } else {
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Rectangle().fill(.white.opacity(0.3))
+                    Rectangle().fill(.white).frame(width: proxy.size.width * progress.fraction)
+                }
+            }
+            .frame(height: 4)
+            .accessibilityLabel("\(Int(progress.fraction * 100)) percent watched")
+        }
+    }
+}
+
 /// Fades a backdrop into the canvas so text placed over its lower part stays legible.
 struct BackdropFade: View {
     var body: some View {

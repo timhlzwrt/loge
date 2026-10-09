@@ -24,6 +24,8 @@ public struct AddonManifest: Codable, Sendable, Equatable {
         public struct Extra: Codable, Sendable, Hashable {
             public var name: String
             public var isRequired: Bool?
+            /// The allowed values, e.g. the genres a catalog can be filtered by.
+            public var options: [String]?
         }
 
         /// Catalogs that need input (a genre, a query, a list of IDs) can't be shown as a plain row.
@@ -32,7 +34,21 @@ public struct AddonManifest: Codable, Sendable, Equatable {
         }
 
         public var supportsSearch: Bool {
-            (extra ?? []).contains { $0.name == "search" } || (extraSupported ?? []).contains("search")
+            supports("search")
+        }
+
+        /// Whether further pages can be requested with the `skip` extra.
+        public var supportsPaging: Bool {
+            supports("skip")
+        }
+
+        /// Genres the catalog can be filtered by; empty if it can't.
+        public var genres: [String] {
+            (extra ?? []).first { $0.name == "genre" }?.options ?? []
+        }
+
+        private func supports(_ name: String) -> Bool {
+            (extra ?? []).contains { $0.name == name } || (extraSupported ?? []).contains(name)
         }
     }
 
