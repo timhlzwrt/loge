@@ -1,8 +1,7 @@
 // Renders every app icon and Apple TV top-shelf image into App/Assets.xcassets.
 // Run from the repository root: swift Tools/render-icons.swift
 //
-// The mark is a play triangle over a partly filled progress bar (the same bar the
-// app draws on Continue Watching), in white on the app's charcoal canvas.
+// The mark is Matinee's "m", two arches in white on the app's charcoal canvas.
 
 import CoreGraphics
 import Foundation
@@ -30,31 +29,25 @@ func render(width: Int, height: Int, layer: Layer, markScale: CGFloat = 0.62) ->
         let size = min(w, h) * markScale
         let origin = CGPoint(x: (w - size) / 2, y: (h - size) / 2)
 
-        // Triangle in the upper part of the mark, nudged right so it looks centred.
-        let triangle = CGRect(x: origin.x + size * 0.28, y: origin.y + size * 0.34, width: size * 0.48, height: size * 0.56)
+        // A lowercase "m" drawn as two arches, read also as a theatre's arcade or curtains.
+        let stroke = size * 0.13, radius = size * 0.185, leg = size * 0.42
+        let width = radius * 4 + stroke, height = radius + leg + stroke
+        let left = origin.x + (size - width) / 2 + stroke / 2
+        let bottom = origin.y + (size - height) / 2 + stroke / 2
+        let crown = bottom + leg
         let path = CGMutablePath()
-        let a = CGPoint(x: triangle.minX, y: triangle.minY)
-        let b = CGPoint(x: triangle.minX, y: triangle.maxY)
-        let c = CGPoint(x: triangle.maxX, y: triangle.midY)
-        let radius = size * 0.05
-        path.move(to: CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2))
-        path.addArc(tangent1End: b, tangent2End: c, radius: radius)
-        path.addArc(tangent1End: c, tangent2End: a, radius: radius)
-        path.addArc(tangent1End: a, tangent2End: b, radius: radius)
-        path.closeSubpath()
-        context.setFillColor(CGColor(gray: 1, alpha: 1))
+        for arch in 0..<2 {
+            let x = left + radius * 2 * CGFloat(arch)
+            path.move(to: CGPoint(x: x, y: bottom))
+            path.addArc(center: CGPoint(x: x + radius, y: crown), radius: radius, startAngle: .pi, endAngle: 0, clockwise: true)
+            path.addLine(to: CGPoint(x: x + radius * 2, y: bottom))
+        }
+        context.setStrokeColor(CGColor(gray: 1, alpha: 1))
+        context.setLineWidth(stroke)
+        context.setLineCap(.round)
+        context.setLineJoin(.round)
         context.addPath(path)
-        context.fillPath()
-
-        // Progress bar beneath it: a track with the first 60% filled.
-        let bar = CGRect(x: origin.x + size * 0.1, y: origin.y + size * 0.12, width: size * 0.8, height: size * 0.07)
-        let barPath = { (rect: CGRect) in CGPath(roundedRect: rect, cornerWidth: rect.height / 2, cornerHeight: rect.height / 2, transform: nil) }
-        context.setFillColor(CGColor(gray: 1, alpha: 0.28))
-        context.addPath(barPath(bar))
-        context.fillPath()
-        context.setFillColor(CGColor(gray: 1, alpha: 1))
-        context.addPath(barPath(CGRect(x: bar.minX, y: bar.minY, width: bar.width * 0.6, height: bar.height)))
-        context.fillPath()
+        context.strokePath()
     }
     return context.makeImage()!
 }
