@@ -1,7 +1,8 @@
 # MediaApp
 
-A private, never-published Stremio-addon client for iPhone/iPad, Apple TV and Mac, in
-native SwiftUI. It browses catalogs from Stremio addons, shows details, lists streams and
+Matinee: a private, never-published Stremio-addon client for iPhone/iPad, Apple TV and Mac,
+in native SwiftUI. The project, scheme and bundle ID keep the working name `MediaApp`; only
+the product name is Matinee, so saved data carries over. It browses catalogs from Stremio addons, shows details, lists streams and
 plays them with mpv. The look follows the Strand app: charcoal canvas, artwork-led, white
 accent, system font, no cards/gradients/badges.
 
@@ -21,7 +22,8 @@ accent, system font, no cards/gradients/badges.
 - `App/Settings/` — addons (install/reorder/remove) and playback language preferences.
 - `Tools/test-addon.py` — local stream addon at `http://127.0.0.1:8765/manifest.json` with
   test streams (MKV, HEVC, multi-track HLS, header-protected, broken, torrent).
-- `Tools/render-icons.swift` — regenerates `App/Assets.xcassets` (icons, top shelf, accent).
+- `Tools/render-icons.swift` — regenerates `App/Assets.xcassets` (icons, top shelf, accent);
+  the mark is a white two-arch "m" on the charcoal canvas.
   It deletes and rewrites the catalog, so change the script rather than the assets.
 
 ## Commands

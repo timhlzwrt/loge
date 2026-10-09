@@ -26,7 +26,8 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: MediaApp
+        # Bundle ID stays li.tjh.MediaApp so saved addons and library carry over.
+        PRODUCT_NAME: Matinee
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         # Landscape for full-screen video; portrait for browsing.
