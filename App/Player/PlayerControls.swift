@@ -29,10 +29,12 @@ struct PlayerControls: View {
         #endif
         .background {
             // Scrims behind the bars keep white controls readable over bright frames.
-            VStack {
+            // No spacing: in landscape the two scrims nearly fill the screen height, and
+            // any overflow would centre the stack and lift the bottom scrim off the edge.
+            VStack(spacing: 0) {
                 LinearGradient(colors: [.black.opacity(0.6), .clear], startPoint: .top, endPoint: .bottom)
                     .frame(height: 160)
-                Spacer()
+                Spacer(minLength: 0)
                 LinearGradient(colors: [.clear, .black.opacity(0.7)], startPoint: .top, endPoint: .bottom)
                     .frame(height: 220)
             }
