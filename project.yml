@@ -36,3 +36,18 @@ targets:
         SWIFT_VERSION: "6.0"
         # Ad-hoc signing lets the Mac build run locally without a developer account
         CODE_SIGN_IDENTITY[sdk=macosx*]: "-"
+    scheme:
+      testTargets:
+        - MediaAppUITests
+
+  # Drives the Apple TV simulator's remote for manual testing; see UITests/RemoteDriverTests.swift.
+  MediaAppUITests:
+    type: bundle.ui-testing
+    platform: tvOS
+    sources: [UITests]
+    dependencies:
+      - target: MediaApp
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "6.0"

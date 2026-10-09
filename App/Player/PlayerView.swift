@@ -18,6 +18,9 @@ struct PlayerView: View {
     @State private var player: MPVPlayer?
     @State private var controlsVisible = true
     @State private var lastInteraction = Date.now
+    #if os(tvOS)
+    @FocusState private var surfaceFocused: Bool
+    #endif
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
 
@@ -26,6 +29,9 @@ struct PlayerView: View {
             Color.black.ignoresSafeArea()
             if let player {
                 MPVVideoView(player: player).ignoresSafeArea()
+                #if os(tvOS)
+                remoteSurface(player)
+                #endif
                 if player.isWaiting && !transportVisible {
                     ProgressView().controlSize(.large)
                 }
@@ -73,8 +79,8 @@ struct PlayerView: View {
         }
         .onMoveCommand { direction in
             switch direction {
-            case .left: player?.seek(by: -10)
-            case .right: player?.seek(by: 10)
+            case .left where surfaceFocused: player?.seek(by: -10)
+            case .right where surfaceFocused: player?.seek(by: 10)
             default: break
             }
             showControls()
@@ -90,6 +96,36 @@ struct PlayerView: View {
         .persistentSystemOverlays(.hidden)
         #endif
     }
+
+    #if os(tvOS)
+    /// tvOS only delivers remote presses to focused views, and with the controls hidden
+    /// nothing else on screen is focusable. This invisible button covers the picture
+    /// below the top bar, so pressing up still moves focus to the track menu above it.
+    private func remoteSurface(_ player: MPVPlayer) -> some View {
+        Button {
+            player.togglePause()
+            showControls()
+        } label: {
+            Color.clear
+        }
+        .buttonStyle(InvisibleButtonStyle())
+        .focused($surfaceFocused)
+        .padding(.top, 200)
+        .ignoresSafeArea(edges: .bottom)
+        .onAppear { surfaceFocused = true }
+        // Hiding the controls removes the track menu; if it had focus, nothing would be
+        // left to receive remote presses.
+        .onChange(of: controlsVisible) { _, visible in
+            if !visible { surfaceFocused = true }
+        }
+    }
+
+    private struct InvisibleButtonStyle: ButtonStyle {
+        func makeBody(configuration: Configuration) -> some View {
+            configuration.label.contentShape(.rect)
+        }
+    }
+    #endif
 
     private struct AutoHide: Equatable {
         let lastInteraction: Date
@@ -167,7 +203,9 @@ private struct PlayerControls: View {
         // tvOS already keeps content inside its overscan-safe margins.
         .padding(20)
         #endif
+        #if !os(tvOS)
         .foregroundStyle(.white)
+        #endif
         .background {
             // Scrims behind the bars keep white controls readable over bright frames.
             VStack {
@@ -255,6 +293,10 @@ private struct PlayerControls: View {
                 )
                 #endif
                 HStack {
+                    #if os(tvOS)
+                    // tvOS has no on-screen play button, so this is the only sign playback is paused.
+                    Image(systemName: player.status == .paused ? "pause.fill" : "play.fill")
+                    #endif
                     Text(format(scrubPosition ?? player.position, longForm: duration >= 3600))
                     Spacer()
                     Text("-" + format(duration - (scrubPosition ?? player.position), longForm: duration >= 3600))

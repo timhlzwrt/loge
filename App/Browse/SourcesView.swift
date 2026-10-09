@@ -21,14 +21,30 @@ struct SourcesView: View {
 
     var body: some View {
         let providers = store.addons.streamProviders(type: route.type, id: route.id)
-        List {
+        Group {
             if providers.isEmpty {
                 ContentUnavailableView(
                     "No stream addons",
                     systemImage: "play.slash",
                     description: Text("Install an addon that provides streams in Addons.")
                 )
+            } else {
+                list(providers)
             }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.canvas)
+        .navigationTitle(route.title)
+        .task {
+            await load(providers)
+        }
+        #if !os(macOS)
+        .fullScreenCover(item: $playing) { PlayerView(request: $0) }
+        #endif
+    }
+
+    private func list(_ providers: [StreamProvider]) -> some View {
+        List {
             ForEach(providers) { provider in
                 Section(provider.name) {
                     switch results[provider.id] {
@@ -45,14 +61,6 @@ struct SourcesView: View {
         }
         #if !os(tvOS)
         .scrollContentBackground(.hidden)
-        #endif
-        .background(Color.canvas)
-        .navigationTitle(route.title)
-        .task {
-            await load(providers)
-        }
-        #if !os(macOS)
-        .fullScreenCover(item: $playing) { PlayerView(request: $0) }
         #endif
     }
 

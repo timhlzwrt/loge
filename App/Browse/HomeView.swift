@@ -48,18 +48,22 @@ private struct TVHome: View {
                 }
                 .animation(.easeInOut(duration: 0.4), value: focused?.id)
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    header
-                        .frame(height: 420, alignment: .bottomLeading)
-                        .padding(.horizontal, Metrics.gutter)
-                    ForEach(sources) { source in
-                        CatalogRow(source: source, isPrimary: source == sources.first) { focused = $0 }
+            // The header stays put while only the rows scroll beneath it, so the focused
+            // title's details remain visible whichever row it's in.
+            VStack(alignment: .leading, spacing: 0) {
+                header
+                    .frame(height: 400, alignment: .bottomLeading)
+                    .padding(.horizontal, Metrics.gutter)
+                    .padding(.bottom, 24)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 24) {
+                        ForEach(sources) { source in
+                            CatalogRow(source: source, isPrimary: source == sources.first) { focused = $0 }
+                        }
                     }
+                    .padding(.bottom, 60)
                 }
-                .padding(.bottom, 60)
             }
-            .scrollClipDisabled()
         }
         .background(Color.canvas)
     }

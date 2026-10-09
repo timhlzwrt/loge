@@ -11,8 +11,13 @@ struct AddonSettingsView: View {
         List {
             Section {
                 ForEach(store.addons) { addon in
-                    AddonRow(addon: addon, isUnreachable: store.unreachable.contains(addon.id))
-                        .contextMenu { actions(for: addon) }
+                    let row = AddonRow(addon: addon, isUnreachable: store.unreachable.contains(addon.id))
+                    #if os(tvOS)
+                    // Plain rows can't take focus on tvOS, so the row opens its actions instead.
+                    Menu { actions(for: addon) } label: { row }
+                    #else
+                    row.contextMenu { actions(for: addon) }
+                    #endif
                 }
                 #if !os(tvOS)
                 .onMove { store.move(fromOffsets: $0, toOffset: $1) }
@@ -24,6 +29,7 @@ struct AddonSettingsView: View {
                 Text("Installed")
             } footer: {
                 Text("Addons higher in the list are asked first.")
+                    .foregroundStyle(.secondary)
             }
 
             Section("Add addon") {
@@ -61,7 +67,7 @@ struct AddonSettingsView: View {
 
     @ViewBuilder
     private func actions(for addon: InstalledAddon) -> some View {
-        // tvOS lists have no drag-to-reorder, so moving lives in the context menu there.
+        // tvOS lists have no drag-to-reorder, so moving lives in the row's menu there.
         #if os(tvOS)
         if let index = store.addons.firstIndex(of: addon) {
             Button("Move Up", systemImage: "arrow.up") {
@@ -110,7 +116,7 @@ private struct AddonRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
                 Text(addon.displayName)
                     .font(.headline)
                 if let version = addon.manifest?.version {
@@ -142,5 +148,7 @@ private struct AddonRow: View {
                     .foregroundStyle(.secondary)
             }
         }
+        // Full-width rows, so focused rows on tvOS line up instead of hugging their text.
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
