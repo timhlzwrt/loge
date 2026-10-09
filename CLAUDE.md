@@ -25,6 +25,9 @@ accent, system font, no cards/gradients/badges.
 - `Tools/render-icons.swift` — regenerates `App/Assets.xcassets` (icons, top shelf, accent);
   the mark is a white two-arch "m" on the charcoal canvas.
   It deletes and rewrites the catalog, so change the script rather than the assets.
+- `Vendor/MPVKit/` — MPVKit's LGPL product with a patched `Libmpv.xcframework.zip` so mpv
+  follows layer resizes (rotation, window resize). Rebuild with `rebuild-libmpv.sh`; see its README.
+- `.github/workflows/ci.yml` — Core tests and warning-free builds for iOS, tvOS and macOS.
 
 ## Commands
 
@@ -64,7 +67,7 @@ Done: addon client, settings, browse UI, sources and player, tvOS polish, librar
 (resume, Continue Watching, My List, watched marking, Up Next), autoplay and next-episode,
 See All grid with genres, search with recents, app icons, iPad/landscape/Mac layouts.
 
-Decisions: MPVKit player; addons added as manual manifest URLs; cross-device sync via Trakt
+Decisions: MPVKit player (vendored with a resize patch); addons added as manual manifest URLs; cross-device sync via Trakt
 (not iCloud); no paid Apple developer account yet, so device installs expire after 7 days.
 
 Next, in plan order: Trakt sync (device-code login, scrobbling, pull playback progress; the

@@ -101,6 +101,31 @@ final class FlowTests: XCTestCase {
         XCUIDevice.shared.orientation = .portrait
     }
 
+    /// The picture should fill the new size after each turn; check the screenshots.
+    @MainActor
+    func testRotatingDuringPlayback() {
+        openSeries("Lanterns")
+        let play = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Play' OR label BEGINSWITH 'Resume'")).firstMatch
+        XCTAssertTrue(play.waitForExistence(timeout: 15))
+        play.tap()
+        let pause = app.buttons["Pause"]
+        XCTAssertTrue(pause.waitForExistence(timeout: 20), "Playback didn't start")
+
+        // The test clips are 10 seconds long, so both turns happen well before the end.
+        XCUIDevice.shared.orientation = .landscapeLeft
+        sleep(1)
+        screenshot("rotated-while-playing")
+
+        // A tap toggles the controls, so only tap when they're hidden.
+        if !pause.isHittable { app.tap() }
+        XCTAssertTrue(pause.waitForExistence(timeout: 3), "Player closed when rotated")
+        pause.tap()
+        XCUIDevice.shared.orientation = .portrait
+        sleep(2)
+        screenshot("rotated-while-paused")
+        app.buttons["Close"].tap()
+    }
+
     // MARK: Helpers
 
     @MainActor

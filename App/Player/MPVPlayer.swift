@@ -111,6 +111,9 @@ final class MPVPlayer {
         guard let handle = mpv_create() else { fatalError("mpv_create failed") }
         self.handle = handle
 
+        // Between a resize and mpv's first frame at the new size, show the last frame
+        // unscaled rather than stretched to the new shape.
+        layer.contentsGravity = .center
         var wid = Int64(Int(bitPattern: Unmanaged.passUnretained(layer).toOpaque()))
         check(mpv_set_option(handle, "wid", MPV_FORMAT_INT64, &wid), "wid")
         for (name, value) in [

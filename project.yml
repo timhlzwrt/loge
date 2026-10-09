@@ -10,9 +10,9 @@ options:
 packages:
   MediaCore:
     path: Core
+  # MPVKit with a patched Libmpv; see Vendor/MPVKit/README.md.
   MPVKit:
-    url: https://github.com/mpvkit/MPVKit
-    exactVersion: 1.1.0-n9.0.2
+    path: Vendor/MPVKit
 
 targets:
   MediaApp:
