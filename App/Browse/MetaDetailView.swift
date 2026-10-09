@@ -56,7 +56,6 @@ struct MetaDetailView: View {
         }
         .background(Color.canvas)
         #if os(iOS)
-        .ignoresSafeArea(edges: .top)
         .toolbarBackground(.hidden, for: .navigationBar)
         #endif
         .navigationDestination(item: $choosingSource) { SourcesView(route: $0) }
@@ -169,8 +168,11 @@ struct MetaDetailView: View {
             }
             .ignoresSafeArea()
             #else
-            .frame(height: heroHeight + 40)
+            // Extends under the status bar while the text stays below it; the extra height
+            // makes up for the part that moves up there.
+            .frame(height: heroHeight + 100)
             .clipped()
+            .ignoresSafeArea(edges: .top)
             #endif
             .accessibilityHidden(true)
     }
@@ -223,7 +225,7 @@ struct MetaDetailView: View {
     private var isWide: Bool { horizontalSizeClass == .regular || verticalSizeClass == .compact }
     private var heroAlignment: HorizontalAlignment { isWide ? .leading : .center }
     private var heroHeight: CGFloat {
-        verticalSizeClass == .compact ? 300 : horizontalSizeClass == .regular ? 560 : 520
+        verticalSizeClass == .compact ? 300 : horizontalSizeClass == .regular ? 500 : 460
     }
     private var logoHeight: CGFloat { isWide ? 100 : 80 }
     private var logoWidth: CGFloat { isWide ? 360 : 240 }

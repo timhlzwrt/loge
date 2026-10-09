@@ -15,6 +15,10 @@ struct MediaApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                #if os(macOS)
+                // Also corrects a too-small frame the system restored from an earlier launch.
+                .frame(minWidth: 900, minHeight: 600)
+                #endif
                 .environment(addonStore)
                 .environment(library)
                 .preferredColorScheme(.dark)
@@ -23,6 +27,10 @@ struct MediaApp: App {
                 .task { await addonStore.refreshManifests() }
         }
         #if os(macOS)
+        // Room for the hero and a couple of rows; the system remembers any size the user picks.
+        .defaultSize(width: 1280, height: 820)
+        #endif
+        #if os(macOS)
         // A window of its own, so playback can go full screen and sit beside the browser.
         WindowGroup("Player", for: PlaybackRequest.self) { $request in
             if let request {
@@ -30,6 +38,7 @@ struct MediaApp: App {
                     .environment(library)
                     .environment(addonStore)
                     .frame(minWidth: 640, minHeight: 360)
+                    .tint(.white)
                     .preferredColorScheme(.dark)
                     .navigationTitle(request.title)
             }
