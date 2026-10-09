@@ -64,9 +64,26 @@ struct CatalogRow: View {
 
     private func row(@ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: Metrics.rowSpacing) {
-            Text(source.title)
-                .font(.headline)
-                .padding(.horizontal, Metrics.gutter)
+            HStack(alignment: .firstTextBaseline) {
+                Text(source.title)
+                    .font(.headline)
+                Spacer()
+                #if !os(tvOS)
+                // On tvOS the row ends in a "See All" tile instead, which focus reaches naturally.
+                if search == nil {
+                    NavigationLink(value: source) {
+                        HStack(spacing: 4) {
+                            Text("See All")
+                            Image(systemName: "chevron.right").imageScale(.small)
+                        }
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                #endif
+            }
+            .padding(.horizontal, Metrics.gutter)
             content()
         }
     }
@@ -85,6 +102,17 @@ struct CatalogRow: View {
                     #endif
                     .focused($focusedID, equals: meta.id)
                 }
+                #if os(tvOS)
+                if search == nil {
+                    NavigationLink(value: source) {
+                        Label("See All", systemImage: "square.grid.2x2")
+                            .font(.headline)
+                            .frame(width: Metrics.posterWidth, height: Metrics.posterWidth * 1.5)
+                            .background(.white.opacity(0.06))
+                    }
+                    .buttonStyle(.card)
+                }
+                #endif
             }
             .padding(.horizontal, Metrics.gutter)
             #if os(tvOS)
@@ -111,6 +139,9 @@ struct CatalogRow: View {
 
 struct PosterTile: View {
     let meta: MetaPreview
+    /// Nil fills the width offered, as in a grid, keeping the 2:3 shape.
+    var width: CGFloat? = Metrics.posterWidth
+    @Environment(LibraryStore.self) private var library
 
     var body: some View {
         ZStack {
@@ -123,7 +154,14 @@ struct PosterTile: View {
                 .padding(8)
             Artwork(url: meta.poster)
         }
-        .frame(width: Metrics.posterWidth, height: Metrics.posterWidth * 1.5)
+        .overlay(alignment: .bottom) {
+            // Movies only: a series' progress belongs to its episodes.
+            if let progress = library.progress[meta.id] {
+                WatchProgressBar(progress: progress)
+            }
+        }
+        .frame(width: width, height: width.map { $0 * 1.5 })
+        .aspectRatio(2 / 3, contentMode: .fit)
         .clipShape(.rect(cornerRadius: 8))
         .accessibilityElement()
         .accessibilityLabel(meta.name)

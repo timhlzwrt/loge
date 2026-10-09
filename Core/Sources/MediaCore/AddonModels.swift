@@ -20,6 +20,25 @@ public struct MetaPreview: Codable, Sendable, Hashable, Identifiable {
     public var imdbRating: String?
     public var genres: [String]?
     public var runtime: String?
+
+    public init(
+        id: String, type: String, name: String, poster: String? = nil, posterShape: String? = nil,
+        releaseInfo: String? = nil, background: String? = nil, logo: String? = nil,
+        description: String? = nil, imdbRating: String? = nil, genres: [String]? = nil, runtime: String? = nil
+    ) {
+        self.id = id
+        self.type = type
+        self.name = name
+        self.poster = poster
+        self.posterShape = posterShape
+        self.releaseInfo = releaseInfo
+        self.background = background
+        self.logo = logo
+        self.description = description
+        self.imdbRating = imdbRating
+        self.genres = genres
+        self.runtime = runtime
+    }
 }
 
 /// Full details for one title, from the `meta` resource.
@@ -43,7 +62,7 @@ public struct Meta: Codable, Sendable, Equatable, Identifiable {
 
 /// An episode (or other playable item) within a `Meta`. Its `id` is what
 /// gets passed to the `stream` resource, e.g. `tt0903747:1:1`.
-public struct Video: Codable, Sendable, Equatable, Identifiable {
+public struct Video: Codable, Sendable, Hashable, Identifiable {
     public var id: String
     public var title: String?
     public var name: String?
@@ -55,10 +74,22 @@ public struct Video: Codable, Sendable, Equatable, Identifiable {
 
     /// Addons disagree on whether the episode name lives in `title` or `name`.
     public var displayTitle: String? { title ?? name }
+
+    /// Addons send ISO 8601 dates both with and without fractional seconds.
+    public var releaseDate: Date? {
+        guard let released else { return nil }
+        return (try? Date(released, strategy: Date.ISO8601FormatStyle(includingFractionalSeconds: true)))
+            ?? (try? Date(released, strategy: .iso8601))
+    }
+
+    /// False for announced episodes that haven't aired, which addons have no streams for yet.
+    public func isReleased(asOf date: Date = .now) -> Bool {
+        releaseDate.map { $0 <= date } ?? true
+    }
 }
 
 /// One playable source returned by a `stream` resource.
-public struct StreamSource: Codable, Sendable, Equatable {
+public struct StreamSource: Codable, Sendable, Hashable {
     public var name: String?
     public var title: String?
     public var description: String?
@@ -70,14 +101,14 @@ public struct StreamSource: Codable, Sendable, Equatable {
     public var externalUrl: String?
     public var behaviorHints: BehaviorHints?
 
-    public struct BehaviorHints: Codable, Sendable, Equatable {
+    public struct BehaviorHints: Codable, Sendable, Hashable {
         public var bingeGroup: String?
         public var filename: String?
         public var proxyHeaders: ProxyHeaders?
     }
 
     /// Some debrid addons require these headers on the media request itself.
-    public struct ProxyHeaders: Codable, Sendable, Equatable {
+    public struct ProxyHeaders: Codable, Sendable, Hashable {
         public var request: [String: String]?
     }
 
@@ -106,6 +137,13 @@ public struct StreamSource: Codable, Sendable, Equatable {
 
     public var requestHeaders: [String: String] {
         behaviorHints?.proxyHeaders?.request ?? [:]
+    }
+
+    /// The source to continue a series with: the playable stream in the same binge group
+    /// as the one last watched, which addons use to mean "same release, same quality".
+    public static func continuing(bingeGroup: String?, in streams: [StreamSource]) -> StreamSource? {
+        guard let bingeGroup else { return nil }
+        return streams.first { $0.behaviorHints?.bingeGroup == bingeGroup && $0.playbackURL != nil }
     }
 }
 

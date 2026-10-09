@@ -27,7 +27,8 @@ MANIFEST = {
 }
 
 STREAMS = [
-    {"name": "Test\n1080p", "description": "Big Buck Bunny · MKV H.264\n30 MB", "url": MKV},
+    {"name": "Test\n1080p", "description": "Big Buck Bunny · MKV H.264\n30 MB", "url": MKV,
+     "behaviorHints": {"bingeGroup": "test|1080p"}},
     {"name": "Test\nHEVC", "description": "Big Buck Bunny · MP4 HEVC",
      "url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h265/1080/Big_Buck_Bunny_1080_10s_30MB.mp4"},
     {"name": "Test\nTracks", "description": "Apple bipbop · HLS with several audio and subtitle tracks",

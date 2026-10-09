@@ -1,16 +1,25 @@
+import MediaCore
 import SwiftUI
 
 /// Everything needed to start playback. Codable so macOS can open it in its own window.
 struct PlaybackRequest: Codable, Hashable, Identifiable {
-    let title: String
-    let url: URL
+    var title: String
+    var url: URL
     var headers: [String: String] = [:]
+    /// What progress is recorded against; nil for playback that shouldn't be remembered.
+    var item: WatchItem?
+    var startAt: Double?
+    /// The addon the stream came from, where the next episode is looked up.
+    var providerURL: String?
+    /// The addon's grouping of the stream's release and quality, to keep for the next episode.
+    var bingeGroup: String?
 
     var id: URL { url }
 }
 
 struct PlayerView: View {
-    let request: PlaybackRequest
+    // The request changes when the next episode starts, without leaving the player.
+    @State private var current: PlaybackRequest
 
     // Created on appear rather than as a `@State` default, because SwiftUI evaluates
     // default values every time the view is re-initialised and each player
@@ -18,11 +27,29 @@ struct PlayerView: View {
     @State private var player: MPVPlayer?
     @State private var controlsVisible = true
     @State private var lastInteraction = Date.now
+    @State private var lastRecordedPosition: Double = 0
+    @State private var scrubPosition: Double?
+    @State private var hasRememberedSource = false
+    @State private var episodes: [Video] = []
+    @State private var next: PlaybackRequest?
+    @State private var seekFlash: SeekFlash?
+
+    @Environment(LibraryStore.self) private var library
+    @Environment(AddonStore.self) private var addons
+    // Empty means "file default" for audio and "off" for subtitles.
+    @AppStorage(PlaybackPreferences.audioKey) private var audioLanguage = ""
+    @AppStorage(PlaybackPreferences.subtitleKey) private var subtitleLanguage = ""
+    @AppStorage(PlaybackPreferences.subtitleScaleKey) private var subtitleScale = 1.0
     #if os(tvOS)
     @FocusState private var surfaceFocused: Bool
+    @State private var scrubStart: Double?
     #endif
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+
+    init(request: PlaybackRequest) {
+        _current = State(initialValue: request)
+    }
 
     var body: some View {
         ZStack {
@@ -31,27 +58,56 @@ struct PlayerView: View {
                 MPVVideoView(player: player).ignoresSafeArea()
                 #if os(tvOS)
                 remoteSurface(player)
+                #else
+                touchSurface(player)
                 #endif
+                if let seekFlash {
+                    SeekFlashView(flash: seekFlash)
+                }
                 if player.isWaiting && !transportVisible {
                     ProgressView().controlSize(.large)
                 }
                 if case .failed(let message) = player.status {
                     failure(message)
-                } else if controlsVisible {
-                    PlayerControls(title: request.title, player: player, onClose: { dismiss() }, onInteract: showControls)
+                } else {
+                    if controlsVisible {
+                        PlayerControls(
+                            title: current.title,
+                            player: player,
+                            scrubPosition: $scrubPosition,
+                            onClose: { dismiss() },
+                            onInteract: showControls
+                        )
                         .transition(.opacity)
+                    }
+                    if let next, showsNextEpisode(player) {
+                        NextEpisodeOverlay(nextTitle: next.title, hasEnded: player.status == .ended) {
+                            play(next)
+                        }
+                    }
                 }
             }
         }
         .animation(.easeInOut(duration: 0.2), value: controlsVisible)
-        #if !os(tvOS)
-        .contentShape(.rect)
-        .onTapGesture {
-            if controlsVisible { controlsVisible = false } else { showControls() }
-        }
-        #endif
         .onAppear(perform: start)
         .onDisappear(perform: stop)
+        .task(id: current.item?.metaID) { await loadEpisodes() }
+        .task(id: nextLookupKey) { await findNextEpisode() }
+        .onChange(of: player?.position) {
+            // Often enough that a crash or force-quit loses little, rarely enough not to churn storage.
+            if let position = player?.position, abs(position - lastRecordedPosition) >= 10 {
+                recordProgress()
+            }
+        }
+        .onChange(of: player?.status) { _, status in
+            switch status {
+            case .playing: rememberSource()
+            // A remembered source that no longer plays shouldn't be tried again.
+            case .failed:
+                if let item = current.item { library.forgetSource(metaID: item.metaID) }
+            default: break
+            }
+        }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .background:
@@ -68,7 +124,7 @@ struct PlayerView: View {
             // during a slow load still hide once the video is running. Cancellation
             // means one of those happened again.
             do { try await Task.sleep(for: .seconds(4)) } catch { return }
-            if player?.status == .playing {
+            if player?.status == .playing && scrubPosition == nil {
                 controlsVisible = false
             }
         }
@@ -78,6 +134,8 @@ struct PlayerView: View {
             showControls()
         }
         .onMoveCommand { direction in
+            // A swipe that scrubs shouldn't also jump 10 seconds.
+            guard scrubStart == nil else { return }
             switch direction {
             case .left where surfaceFocused: player?.seek(by: -10)
             case .right where surfaceFocused: player?.seek(by: 10)
@@ -97,10 +155,12 @@ struct PlayerView: View {
         #endif
     }
 
+    // MARK: Input
+
     #if os(tvOS)
     /// tvOS only delivers remote presses to focused views, and with the controls hidden
     /// nothing else on screen is focusable. This invisible button covers the picture
-    /// below the top bar, so pressing up still moves focus to the track menu above it.
+    /// below the top bar, so pressing up still moves focus to the menus above it.
     private func remoteSurface(_ player: MPVPlayer) -> some View {
         Button {
             player.togglePause()
@@ -113,17 +173,75 @@ struct PlayerView: View {
         .padding(.top, 200)
         .ignoresSafeArea(edges: .bottom)
         .onAppear { surfaceFocused = true }
-        // Hiding the controls removes the track menu; if it had focus, nothing would be
+        // Hiding the controls removes the menus; if one had focus, nothing would be
         // left to receive remote presses.
         .onChange(of: controlsVisible) { _, visible in
             if !visible { surfaceFocused = true }
         }
+        .background {
+            RemoteSwipeReader(
+                onChanged: { fraction in scrub(by: fraction, player: player) },
+                onEnded: { finishScrub(player) }
+            )
+        }
+    }
+
+    /// A full swipe across the touch surface moves five minutes, or a tenth of a long film.
+    private func scrub(by fraction: Double, player: MPVPlayer) {
+        guard surfaceFocused, let duration = player.duration, abs(fraction) > 0.03 else { return }
+        let start = scrubStart ?? player.position
+        scrubStart = start
+        let span = max(300, duration * 0.1)
+        scrubPosition = min(max(start + fraction * span, 0), duration)
+        showControls()
+    }
+
+    private func finishScrub(_ player: MPVPlayer) {
+        if let target = scrubPosition {
+            player.seek(to: target)
+        }
+        scrubStart = nil
+        scrubPosition = nil
     }
 
     private struct InvisibleButtonStyle: ButtonStyle {
         func makeBody(configuration: Configuration) -> some View {
             configuration.label.contentShape(.rect)
         }
+    }
+    #else
+    /// Tap to show or hide the controls. On iPhone also: double-tap either side to
+    /// skip 10 seconds, pinch to zoom, and swipe down to close.
+    private func touchSurface(_ player: MPVPlayer) -> some View {
+        HStack(spacing: 0) {
+            tapZone(player, seconds: -10)
+            tapZone(player, seconds: 10)
+        }
+        #if os(iOS)
+        .gesture(MagnifyGesture().onEnded { value in
+            if value.magnification > 1.15 { player.setZoomToFill(true) }
+            if value.magnification < 0.87 { player.setZoomToFill(false) }
+        })
+        .simultaneousGesture(DragGesture(minimumDistance: 40).onEnded { value in
+            if value.translation.height > 120 && abs(value.translation.width) < 80 {
+                dismiss()
+            }
+        })
+        #endif
+    }
+
+    private func tapZone(_ player: MPVPlayer, seconds: Double) -> some View {
+        Color.clear
+            .contentShape(.rect)
+            #if os(iOS)
+            .onTapGesture(count: 2) {
+                player.seek(by: seconds)
+                seekFlash = SeekFlash(seconds: Int(seconds))
+            }
+            #endif
+            .onTapGesture {
+                if controlsVisible { controlsVisible = false } else { showControls() }
+            }
     }
     #endif
 
@@ -141,16 +259,35 @@ struct PlayerView: View {
         #endif
     }
 
+    private func showControls() {
+        controlsVisible = true
+        lastInteraction = .now
+    }
+
+    // MARK: Lifecycle
+
     private func start() {
         let player = MPVPlayer()
-        player.load(request.url, headers: request.headers)
         self.player = player
+        load(current, into: player)
         #if !os(macOS)
         UIApplication.shared.isIdleTimerDisabled = true
         #endif
     }
 
+    private func load(_ request: PlaybackRequest, into player: MPVPlayer) {
+        player.setSubtitleScale(subtitleScale)
+        player.load(
+            request.url,
+            headers: request.headers,
+            startAt: request.startAt,
+            audioLanguage: audioLanguage.isEmpty ? nil : audioLanguage,
+            subtitleLanguage: subtitleLanguage.isEmpty ? nil : subtitleLanguage
+        )
+    }
+
     private func stop() {
+        recordProgress()
         player?.shutDown()
         player = nil
         #if !os(macOS)
@@ -158,9 +295,64 @@ struct PlayerView: View {
         #endif
     }
 
-    private func showControls() {
-        controlsVisible = true
-        lastInteraction = .now
+    private func recordProgress() {
+        // Live streams have no duration, and nothing is known before the file has loaded.
+        guard let item = current.item, let player, let duration = player.duration, player.position > 0 else { return }
+        library.record(item, position: player.position, duration: duration)
+        lastRecordedPosition = player.position
+    }
+
+    private func rememberSource() {
+        guard !hasRememberedSource, let item = current.item, let providerURL = current.providerURL else { return }
+        hasRememberedSource = true
+        library.rememberSource(
+            RememberedSource(itemID: item.id, providerURL: providerURL, url: current.url,
+                             headers: current.headers, bingeGroup: current.bingeGroup),
+            metaID: item.metaID
+        )
+    }
+
+    // MARK: Next episode
+
+    private func loadEpisodes() async {
+        guard let item = current.item, item.type == "series", episodes.isEmpty,
+              let client = addons.addons.metaClient(type: item.type, id: item.metaID)
+        else { return }
+        episodes = (try? await client.meta(type: item.type, id: item.metaID).videos) ?? []
+    }
+
+    /// Changes once the episode nears its end, which is when the lookup starts.
+    private var nextLookupKey: String? {
+        guard let item = current.item, !episodes.isEmpty, let duration = player?.duration,
+              let position = player?.position,
+              position >= NextEpisode.offerTime(duration: duration) - 60 || player?.status == .ended
+        else { return nil }
+        return item.id
+    }
+
+    private func findNextEpisode() async {
+        guard nextLookupKey != nil, next == nil else { return }
+        next = try? await NextEpisode.request(after: current, episodes: episodes)
+    }
+
+    private func showsNextEpisode(_ player: MPVPlayer) -> Bool {
+        guard let duration = player.duration else { return false }
+        return player.status == .ended || player.position >= NextEpisode.offerTime(duration: duration)
+    }
+
+    private func play(_ request: PlaybackRequest) {
+        guard let player else { return }
+        if let item = current.item {
+            recordProgress()
+            // Skipping the credits shouldn't leave the episode looking unfinished.
+            library.markWatched([item])
+        }
+        current = request
+        next = nil
+        hasRememberedSource = false
+        lastRecordedPosition = 0
+        load(request, into: player)
+        showControls()
     }
 
     private func failure(_ message: String) -> some View {
@@ -179,196 +371,31 @@ struct PlayerView: View {
     }
 }
 
-private struct PlayerControls: View {
-    let title: String
-    let player: MPVPlayer
-    let onClose: () -> Void
-    let onInteract: () -> Void
-
-    /// Where the scrubber is while being dragged; nil otherwise, so it follows playback.
-    @State private var scrubPosition: Double?
-
-    var body: some View {
-        VStack(alignment: .leading) {
-            topBar
-            Spacer()
-            #if !os(tvOS)
-            transport
-                .frame(maxWidth: .infinity)
-            Spacer()
-            #endif
-            timeline
-        }
-        #if !os(tvOS)
-        // tvOS already keeps content inside its overscan-safe margins.
-        .padding(20)
-        #endif
-        #if !os(tvOS)
-        .foregroundStyle(.white)
-        #endif
-        .background {
-            // Scrims behind the bars keep white controls readable over bright frames.
-            VStack {
-                LinearGradient(colors: [.black.opacity(0.6), .clear], startPoint: .top, endPoint: .bottom)
-                    .frame(height: 160)
-                Spacer()
-                LinearGradient(colors: [.clear, .black.opacity(0.7)], startPoint: .top, endPoint: .bottom)
-                    .frame(height: 220)
-            }
-            .ignoresSafeArea()
-            .allowsHitTesting(false)
-        }
-    }
-
-    private var topBar: some View {
-        HStack(spacing: 16) {
-            #if os(iOS)
-            Button("Close", systemImage: "xmark", action: onClose)
-                .labelStyle(.iconOnly)
-                .font(.title3)
-            #endif
-            Text(title)
-                .font(.headline)
-                .lineLimit(1)
-            Spacer()
-            TrackMenu(player: player, onInteract: onInteract)
-        }
-        #if !os(tvOS)
-        .buttonStyle(.plain)
-        #endif
-    }
-
-    #if !os(tvOS)
-    private var transport: some View {
-        HStack(spacing: 56) {
-            Button("Back 10 seconds", systemImage: "gobackward.10") {
-                player.seek(by: -10)
-                onInteract()
-            }
-            Group {
-                if player.isWaiting {
-                    ProgressView().controlSize(.large)
-                } else {
-                    Button(player.status == .playing ? "Pause" : "Play",
-                           systemImage: player.status == .playing ? "pause.fill" : "play.fill") {
-                        if player.status == .ended {
-                            player.seek(to: 0)
-                            player.play()
-                        } else {
-                            player.togglePause()
-                        }
-                        onInteract()
-                    }
-                }
-            }
-            .font(.system(size: 44))
-            .frame(width: 56, height: 56)
-            Button("Forward 10 seconds", systemImage: "goforward.10") {
-                player.seek(by: 10)
-                onInteract()
-            }
-        }
-        .labelStyle(.iconOnly)
-        .font(.title)
-        .buttonStyle(.plain)
-    }
-    #endif
-
-    private var timeline: some View {
-        VStack(spacing: 6) {
-            if let duration = player.duration, duration > 0 {
-                #if os(tvOS)
-                ProgressView(value: min(player.position, duration), total: duration)
-                #else
-                Slider(
-                    value: Binding(get: { scrubPosition ?? player.position }, set: { scrubPosition = $0 }),
-                    in: 0...duration,
-                    onEditingChanged: { isEditing in
-                        if !isEditing, let target = scrubPosition {
-                            player.seek(to: target)
-                            scrubPosition = nil
-                        }
-                        onInteract()
-                    }
-                )
-                #endif
-                HStack {
-                    #if os(tvOS)
-                    // tvOS has no on-screen play button, so this is the only sign playback is paused.
-                    Image(systemName: player.status == .paused ? "pause.fill" : "play.fill")
-                    #endif
-                    Text(format(scrubPosition ?? player.position, longForm: duration >= 3600))
-                    Spacer()
-                    Text("-" + format(duration - (scrubPosition ?? player.position), longForm: duration >= 3600))
-                }
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
-            } else {
-                // Live streams and files still loading have no duration to scrub through.
-                Text(format(player.position, longForm: false))
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private func format(_ seconds: Double, longForm: Bool) -> String {
-        Duration.seconds(max(seconds, 0)).formatted(.time(pattern: longForm ? .hourMinuteSecond : .minuteSecond))
-    }
+/// Feedback for a double-tap skip: "+10" or "−10" on the side that was tapped.
+private struct SeekFlash: Equatable {
+    let seconds: Int
+    let id = UUID()
 }
 
-private struct TrackMenu: View {
-    let player: MPVPlayer
-    let onInteract: () -> Void
+private struct SeekFlashView: View {
+    let flash: SeekFlash
+    @State private var visible = true
 
     var body: some View {
-        let audio = Self.distinct(player.tracks.filter { $0.kind == .audio })
-        let subtitles = Self.distinct(player.tracks.filter { $0.kind == .sub })
-        // A single audio track and no subtitles leaves nothing to choose.
-        if audio.count > 1 || !subtitles.isEmpty {
-            Menu {
-                if audio.count > 1 {
-                    Section("Audio") {
-                        ForEach(audio) { track in
-                            toggle(track.displayName, isOn: track.isSelected) { player.select(track, kind: .audio) }
-                        }
-                    }
-                }
-                if !subtitles.isEmpty {
-                    Section("Subtitles") {
-                        toggle("Off", isOn: !subtitles.contains(where: \.isSelected)) { player.select(nil, kind: .sub) }
-                        ForEach(subtitles) { track in
-                            toggle(track.displayName, isOn: track.isSelected) { player.select(track, kind: .sub) }
-                        }
-                    }
-                }
-            } label: {
-                Label("Audio and subtitles", systemImage: "captions.bubble")
-                    .labelStyle(.iconOnly)
-                    .font(.title3)
+        Label(flash.seconds > 0 ? "\(flash.seconds)" : "\(-flash.seconds)",
+              systemImage: flash.seconds > 0 ? "goforward" : "gobackward")
+            .font(.title2.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(18)
+            .background(.black.opacity(0.4), in: .circle)
+            .opacity(visible ? 1 : 0)
+            .frame(maxWidth: .infinity, alignment: flash.seconds > 0 ? .trailing : .leading)
+            .padding(.horizontal, 48)
+            .allowsHitTesting(false)
+            .task(id: flash.id) {
+                visible = true
+                try? await Task.sleep(for: .milliseconds(600))
+                withAnimation(.easeOut(duration: 0.3)) { visible = false }
             }
-            .simultaneousGesture(TapGesture().onEnded(onInteract))
-        }
-    }
-
-    /// HLS streams repeat the same rendition once per quality level; listing identical
-    /// entries helps nobody, so keep one of each, preferring the selected one.
-    private static func distinct(_ tracks: [MPVPlayer.Track]) -> [MPVPlayer.Track] {
-        var byName: [String: MPVPlayer.Track] = [:]
-        var order: [String] = []
-        for track in tracks {
-            if let existing = byName[track.displayName] {
-                if track.isSelected && !existing.isSelected { byName[track.displayName] = track }
-            } else {
-                byName[track.displayName] = track
-                order.append(track.displayName)
-            }
-        }
-        return order.compactMap { byName[$0] }
-    }
-
-    /// A menu item that shows a checkmark when on and selects when chosen.
-    private func toggle(_ title: String, isOn: Bool, select: @escaping () -> Void) -> some View {
-        Toggle(title, isOn: Binding(get: { isOn }, set: { _ in select() }))
     }
 }

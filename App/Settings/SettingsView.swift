@@ -1,7 +1,7 @@
 import MediaCore
 import SwiftUI
 
-struct AddonSettingsView: View {
+struct SettingsView: View {
     @Environment(AddonStore.self) private var store
     @State private var manifestURL = ""
     @State private var isInstalling = false
@@ -54,12 +54,14 @@ struct AddonSettingsView: View {
                         .foregroundStyle(.red)
                 }
             }
+
+            PlaybackSettingsSection()
         }
         #if !os(tvOS)
         .scrollContentBackground(.hidden)
         #endif
         .background(Color.canvas)
-        .navigationTitle("Addons")
+        .navigationTitle("Settings")
         #if os(iOS)
         .toolbar { EditButton() }
         #endif

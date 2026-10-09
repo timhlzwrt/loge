@@ -5,7 +5,10 @@ struct MetaDetailView: View {
     let preview: MetaPreview
 
     @Environment(AddonStore.self) private var store
+    @Environment(LibraryStore.self) private var library
     @State private var state = LoadState.loading
+    /// Set by "Choose Source", which bypasses the remembered source.
+    @State private var choosingSource: SourcesRoute?
 
     private enum LoadState {
         case loading
@@ -20,7 +23,11 @@ struct MetaDetailView: View {
                 switch state {
                 case .loaded(let meta):
                     if let videos = meta.videos, !videos.isEmpty, meta.type == "series" {
-                        EpisodesSection(showName: meta.name, videos: videos)
+                        EpisodesSection(
+                            videos: videos,
+                            upNextID: library.upNext(metaID: preview.id, videos: videos)?.video.id,
+                            route: route(for:)
+                        )
                     }
                 case .failed(let message):
                     HStack {
@@ -44,6 +51,7 @@ struct MetaDetailView: View {
         .ignoresSafeArea(edges: .top)
         .toolbarBackground(.hidden, for: .navigationBar)
         #endif
+        .navigationDestination(item: $choosingSource) { SourcesView(route: $0) }
         .task(id: isLoading) {
             guard isLoading else { return }
             guard let client = store.addons.metaClient(type: preview.type, id: preview.id) else {
@@ -69,15 +77,79 @@ struct MetaDetailView: View {
         if case .loaded(let meta) = state { meta } else { nil }
     }
 
-    /// Movies play themselves; series start at their first episode until
-    /// watch progress exists to resume from.
+    /// Movies play or resume themselves. Series continue where the viewer left off:
+    /// the unfinished episode, else the one after the last finished, else the first.
     private var playRoute: (label: String, route: SourcesRoute)? {
         guard preview.type == "series" else {
-            return ("Play", SourcesRoute(type: preview.type, id: preview.id, title: preview.name))
+            let label = library.resumePosition(for: preview.id) == nil ? "Play" : "Resume"
+            return (label, autoplaying(route(for: nil)))
         }
-        guard let first = loaded?.videos.flatMap(EpisodesSection.firstEpisode) else { return nil }
-        let code = EpisodesSection.code(for: first)
-        return ("Play \(code)", SourcesRoute(type: preview.type, id: first.id, title: "\(preview.name) · \(code)"))
+        guard let videos = loaded?.videos else { return nil }
+        if let next = library.upNext(metaID: preview.id, videos: videos) {
+            let code = EpisodesSection.code(for: next.video)
+            return ("\(next.resumeAt == nil ? "Play" : "Resume") \(code)", autoplaying(route(for: next.video)))
+        }
+        guard let first = EpisodesSection.firstEpisode(in: videos) else { return nil }
+        return ("Play \(EpisodesSection.code(for: first))", autoplaying(route(for: first)))
+    }
+
+    @ViewBuilder
+    private var moreMenu: some View {
+        if let play = playRoute {
+            Menu {
+                Button("Choose Source", systemImage: "list.bullet") {
+                    var route = play.route
+                    route.autoplay = false
+                    choosingSource = route
+                }
+                if preview.type != "series" {
+                    if library.isWatched(preview.id) {
+                        Button("Mark as Unwatched", systemImage: "eye.slash") { library.markUnwatched([preview.id]) }
+                    } else {
+                        Button("Mark as Watched", systemImage: "checkmark.circle") { library.markWatched([play.route.item]) }
+                    }
+                }
+            } label: {
+                Label("More", systemImage: "ellipsis")
+                    #if !os(tvOS)
+                    .labelStyle(.iconOnly)
+                    .font(.headline)
+                    .frame(width: 46, height: 46)
+                    .background(.white.opacity(0.15), in: .circle)
+                    #endif
+            }
+            #if os(tvOS)
+            .labelStyle(.iconOnly)
+            #else
+            .buttonStyle(.plain)
+            #endif
+        }
+    }
+
+    /// The sources route for the movie itself, or for one of the series' episodes.
+    private func route(for video: Video?) -> SourcesRoute {
+        let name = loaded?.name ?? preview.name
+        let item = WatchItem(
+            id: video?.id ?? preview.id,
+            type: preview.type,
+            metaID: preview.id,
+            title: name,
+            season: video?.season,
+            episode: video?.episode,
+            episodeTitle: video?.displayTitle,
+            poster: loaded?.poster ?? preview.poster,
+            background: loaded?.background ?? preview.background,
+            thumbnail: video?.thumbnail
+        )
+        let title = video.map { "\(name) · \(EpisodesSection.code(for: $0))" } ?? name
+        return SourcesRoute(item: item, title: title)
+    }
+
+    /// The Play button's route, which goes straight to playback when a source is remembered.
+    private func autoplaying(_ route: SourcesRoute) -> SourcesRoute {
+        var route = route
+        route.autoplay = true
+        return route
     }
 
     private var backdrop: some View {
@@ -111,10 +183,16 @@ struct MetaDetailView: View {
                     .lineLimit(1)
                     .frame(maxWidth: 900, alignment: .leading)
             }
-            if let play = playRoute {
-                PlayButton(label: play.label, route: play.route)
-                    .padding(.top, 6)
+            HStack(spacing: 16) {
+                if let play = playRoute {
+                    PlayButton(label: play.label, route: play.route)
+                }
+                MyListButton(isSaved: library.isSaved(preview.id)) {
+                    library.toggleSaved(preview)
+                }
+                moreMenu
             }
+            .padding(.top, 6)
         }
         .frame(maxWidth: .infinity, alignment: Alignment(horizontal: heroAlignment, vertical: .bottom))
         .frame(minHeight: heroHeight, alignment: .bottom)
@@ -192,51 +270,109 @@ private struct PlayButton: View {
     }
 }
 
-private struct EpisodesSection: View {
-    let showName: String
-    let videos: [Video]
-    @State private var season: Int
+private struct MyListButton: View {
+    let isSaved: Bool
+    let toggle: () -> Void
 
-    init(showName: String, videos: [Video]) {
-        self.showName = showName
+    var body: some View {
+        Button(action: toggle) {
+            Label("My List", systemImage: isSaved ? "checkmark" : "plus")
+                .contentTransition(.symbolEffect(.replace))
+                #if !os(tvOS)
+                .labelStyle(.iconOnly)
+                .font(.headline)
+                .frame(width: 46, height: 46)
+                .background(.white.opacity(0.15), in: .circle)
+                #endif
+        }
+        #if os(tvOS)
+        .buttonStyle(.bordered)
+        #else
+        .buttonStyle(.plain)
+        .accessibilityValue(isSaved ? "Added" : "Not added")
+        #endif
+    }
+}
+
+private struct EpisodesSection: View {
+    let videos: [Video]
+    let upNextID: String?
+    let route: (Video) -> SourcesRoute
+    @State private var season: Int
+    @Environment(LibraryStore.self) private var library
+
+    init(videos: [Video], upNextID: String?, route: @escaping (Video) -> SourcesRoute) {
         self.videos = videos
-        // Start on the first real season rather than specials (season 0).
-        _season = State(initialValue: Self.seasons(in: videos).first ?? 0)
+        self.upNextID = upNextID
+        self.route = route
+        // Open on the season being watched, otherwise the first real one rather than specials (season 0).
+        let upNextSeason = videos.first { $0.id == upNextID }?.season
+        _season = State(initialValue: upNextSeason ?? Self.seasons(in: videos).first ?? 0)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.rowSpacing) {
-            Picker("Season", selection: $season) {
-                ForEach(Self.seasons(in: videos), id: \.self) { number in
-                    Text(number == 0 ? "Specials" : "Season \(number)").tag(number)
-                }
-            }
-            .pickerStyle(.menu)
-            .fixedSize()
-            .padding(.horizontal, Metrics.gutter)
-
-            ScrollView(.horizontal) {
-                LazyHStack(alignment: .top, spacing: Metrics.rowSpacing) {
-                    ForEach(episodes) { video in
-                        NavigationLink(value: SourcesRoute(
-                            type: "series",
-                            id: video.id,
-                            title: "\(showName) · \(Self.code(for: video))"
-                        )) {
-                            EpisodeCard(video: video)
-                        }
-                        #if os(tvOS)
-                        // Lifts just the thumbnail on focus, with the text below it, like the TV app.
-                        .buttonStyle(.borderless)
-                        #else
-                        .buttonStyle(.plain)
-                        #endif
+            HStack(spacing: 12) {
+                Picker("Season", selection: $season) {
+                    ForEach(Self.seasons(in: videos), id: \.self) { number in
+                        Text(number == 0 ? "Specials" : "Season \(number)").tag(number)
                     }
                 }
-                .padding(.horizontal, Metrics.gutter)
+                .pickerStyle(.menu)
+                .fixedSize()
+                Menu {
+                    Button("Mark Season as Watched", systemImage: "checkmark.circle") {
+                        library.markWatched(episodes.filter { $0.isReleased() }.map { route($0).item })
+                    }
+                    Button("Mark Season as Unwatched", systemImage: "eye.slash") {
+                        library.markUnwatched(episodes.map(\.id))
+                    }
+                } label: {
+                    Label("Season options", systemImage: "ellipsis.circle")
+                        .labelStyle(.iconOnly)
+                }
+                #if !os(tvOS)
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                #endif
             }
-            .scrollIndicators(.hidden)
-            .scrollClipDisabled()
+            .padding(.horizontal, Metrics.gutter)
+
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal) {
+                    LazyHStack(alignment: .top, spacing: Metrics.rowSpacing) {
+                        ForEach(episodes) { video in
+                            NavigationLink(value: route(video)) {
+                                EpisodeCard(video: video, isUpNext: video.id == upNextID)
+                            }
+                            #if os(tvOS)
+                            // Lifts just the thumbnail on focus, with the text below it, like the TV app.
+                            .buttonStyle(.borderless)
+                            #else
+                            .buttonStyle(.plain)
+                            #endif
+                            .contextMenu { watchedActions(for: video) }
+                            .id(video.id)
+                        }
+                    }
+                }
+                // Margins rather than padding, so scrolling to Up Next keeps the inset.
+                .contentMargins(.horizontal, Metrics.gutter, for: .scrollContent)
+                .scrollIndicators(.hidden)
+                .scrollClipDisabled()
+                .onAppear {
+                    if let upNextID { proxy.scrollTo(upNextID, anchor: .leading) }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func watchedActions(for video: Video) -> some View {
+        if library.isWatched(video.id) {
+            Button("Mark as Unwatched", systemImage: "eye.slash") { library.markUnwatched([video.id]) }
+        } else {
+            Button("Mark as Watched", systemImage: "checkmark.circle") { library.markWatched([route(video).item]) }
         }
     }
 
@@ -268,36 +404,45 @@ private struct EpisodesSection: View {
 
 private struct EpisodeCard: View {
     let video: Video
+    let isUpNext: Bool
+    @Environment(LibraryStore.self) private var library
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Artwork(url: video.thumbnail)
+                .overlay(alignment: .bottom) {
+                    if let progress = library.progress[video.id] {
+                        WatchProgressBar(progress: progress)
+                    }
+                }
                 .frame(width: Metrics.episodeWidth, height: Metrics.episodeWidth * 9 / 16)
                 .clipShape(.rect(cornerRadius: 8))
+                .opacity(video.isReleased() ? 1 : 0.5)
                 #if os(tvOS)
                 .hoverEffect(.highlight)
                 #endif
-            if let number = video.episode {
-                Text("Episode \(number)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            HStack(spacing: 6) {
+                if isUpNext {
+                    Text("Up Next")
+                        .foregroundStyle(.primary)
+                        .fontWeight(.semibold)
+                }
+                if let number = video.episode {
+                    Text("Episode \(number)")
+                        .foregroundStyle(.secondary)
+                }
             }
+            .font(.caption)
             Text(video.displayTitle ?? "Untitled")
                 .font(.subheadline)
                 .lineLimit(2)
-            if let date = releaseDate {
-                Text(date, format: .dateTime.day().month().year())
+            if let date = video.releaseDate {
+                // Upcoming episodes say when they air rather than looking playable.
+                Text(video.isReleased() ? date.formatted(.dateTime.day().month().year()) : "Airs \(date.formatted(.dateTime.day().month()))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
         .frame(width: Metrics.episodeWidth, alignment: .leading)
-    }
-
-    /// Addons send ISO 8601 dates both with and without fractional seconds.
-    private var releaseDate: Date? {
-        guard let released = video.released else { return nil }
-        return (try? Date(released, strategy: Date.ISO8601FormatStyle(includingFractionalSeconds: true)))
-            ?? (try? Date(released, strategy: .iso8601))
     }
 }

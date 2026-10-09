@@ -1,5 +1,6 @@
 import Foundation
 import Libmpv
+import MediaCore
 import Observation
 import QuartzCore
 import os
@@ -37,6 +38,8 @@ final class MPVPlayer {
     private(set) var position: Double = 0
     private(set) var duration: Double?
     private(set) var tracks: [Track] = []
+    private(set) var speed = 1.0
+    private(set) var isZoomedToFill = false
 
     struct Track: Identifiable, Equatable, Sendable {
         enum Kind: String, Sendable { case audio, sub }
@@ -117,8 +120,6 @@ final class MPVPlayer {
             ("hwdec", "videotoolbox"),
             // Stay on the last frame at the end instead of unloading the file.
             ("keep-open", "yes"),
-            ("subs-match-os-language", "yes"),
-            ("subs-fallback", "yes"),
             // Keep text subtitles inside the picture; mpv otherwise places them in the
             // letterbox bars, which on a phone in portrait is where the controls are.
             ("sub-use-margins", "no"),
@@ -152,8 +153,18 @@ final class MPVPlayer {
         shutDown()
     }
 
-    /// - Parameter headers: Sent with every request for this file, e.g. debrid authorisation.
-    func load(_ url: URL, headers: [String: String] = [:]) {
+    /// - Parameters:
+    ///   - headers: Sent with every request for this file, e.g. debrid authorisation.
+    ///   - startAt: Seconds into the file to start from, for resuming.
+    ///   - audioLanguage: ISO 639-1 code to prefer; nil keeps the file's default track.
+    ///   - subtitleLanguage: ISO 639-1 code to show; nil turns subtitles off.
+    func load(
+        _ url: URL,
+        headers: [String: String] = [:],
+        startAt: Double? = nil,
+        audioLanguage: String? = nil,
+        subtitleLanguage: String? = nil
+    ) {
         guard !isShutDown else { return }
         loadState = .loading
         position = 0
@@ -170,6 +181,19 @@ final class MPVPlayer {
         for (name, value) in fields.sorted(by: { $0.key < $1.key }) {
             command(["change-list", "http-header-fields", "append", "\(name): \(value)"])
         }
+        // These are global options, so each is set explicitly rather than left over from the last file.
+        setProperty("start", startAt.map { String(Int($0)) } ?? "none")
+        setProperty("alang", audioLanguage.map(LanguageCodes.trackTags) ?? "")
+        if let subtitleLanguage {
+            setProperty("slang", LanguageCodes.trackTags(for: subtitleLanguage))
+            setProperty("sid", "auto")
+        } else {
+            // Otherwise mpv shows any track the file marks as default.
+            setProperty("sid", "no")
+        }
+        // mpv pauses at the end of a file and keeps that for the next one, which
+        // would leave the next episode waiting on its first frame.
+        setProperty("pause", "no")
         command(["loadfile", url.absoluteString, "replace"])
     }
 
@@ -191,6 +215,23 @@ final class MPVPlayer {
 
     func seek(to seconds: Double) {
         command(["seek", String(seconds), "absolute"])
+    }
+
+    /// 1 is normal speed.
+    func setSpeed(_ speed: Double) {
+        self.speed = speed
+        setProperty("speed", String(speed))
+    }
+
+    /// Multiplies the subtitle font size; 1 is mpv's default.
+    func setSubtitleScale(_ scale: Double) {
+        setProperty("sub-scale", String(scale))
+    }
+
+    /// Crops the picture to fill the screen instead of letterboxing it.
+    func setZoomToFill(_ fill: Bool) {
+        isZoomedToFill = fill
+        setProperty("panscan", fill ? "1.0" : "0.0")
     }
 
     /// Pass nil to turn subtitles off.

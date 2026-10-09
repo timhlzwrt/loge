@@ -4,6 +4,7 @@ import SwiftUI
 @main
 struct MediaApp: App {
     @State private var addonStore = AddonStore()
+    @State private var library = LibraryStore()
 
     init() {
         // Artwork is fetched through the shared session; the default cache is too
@@ -15,6 +16,7 @@ struct MediaApp: App {
         WindowGroup {
             RootView()
                 .environment(addonStore)
+                .environment(library)
                 .preferredColorScheme(.dark)
                 // No accent colour: artwork carries the colour, controls stay neutral.
                 .tint(.white)
@@ -25,6 +27,8 @@ struct MediaApp: App {
         WindowGroup("Player", for: PlaybackRequest.self) { $request in
             if let request {
                 PlayerView(request: request)
+                    .environment(library)
+                    .environment(addonStore)
                     .frame(minWidth: 640, minHeight: 360)
                     .preferredColorScheme(.dark)
                     .navigationTitle(request.title)
@@ -43,8 +47,8 @@ struct RootView: View {
             Tab("Search", systemImage: "magnifyingglass", role: .search) {
                 BrowseStack { SearchView() }
             }
-            Tab("Addons", systemImage: "puzzlepiece.extension") {
-                NavigationStack { AddonSettingsView() }
+            Tab("Settings", systemImage: "gearshape") {
+                NavigationStack { SettingsView() }
             }
         }
         .tabViewStyle(.sidebarAdaptable)
@@ -60,6 +64,7 @@ private struct BrowseStack<Content: View>: View {
             content
                 .navigationDestination(for: MetaPreview.self) { MetaDetailView(preview: $0) }
                 .navigationDestination(for: SourcesRoute.self) { SourcesView(route: $0) }
+                .navigationDestination(for: CatalogSource.self) { CatalogGridView(source: $0) }
         }
     }
 }

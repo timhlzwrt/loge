@@ -12,9 +12,13 @@ public struct CatalogSource: Sendable, Hashable, Identifiable {
         [catalog.name ?? catalog.id, Self.typeLabel(catalog.type)].joined(separator: " ")
     }
 
-    public func items(search: String? = nil) async throws -> [MetaPreview] {
+    /// - Parameter skip: How many items to skip, for loading further pages.
+    public func items(search: String? = nil, genre: String? = nil, skip: Int = 0) async throws -> [MetaPreview] {
         let client = try AddonClient(manifestURL: manifestURL)
-        let extra = search.map { [(name: "search", value: $0)] } ?? []
+        var extra: [(name: String, value: String)] = []
+        if let search { extra.append((name: "search", value: search)) }
+        if let genre { extra.append((name: "genre", value: genre)) }
+        if skip > 0 { extra.append((name: "skip", value: String(skip))) }
         return try await client.catalog(type: catalog.type, id: catalog.id, extra: extra)
     }
 
