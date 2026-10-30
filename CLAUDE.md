@@ -1,8 +1,8 @@
 # MediaApp
 
-Matinee: a private, never-published Stremio-addon client for iPhone/iPad, Apple TV and Mac,
+Loge: a private, never-published Stremio-addon client for iPhone/iPad, Apple TV and Mac,
 in native SwiftUI. The project, scheme and bundle ID keep the working name `MediaApp`; only
-the product name is Matinee, so saved data carries over. It browses catalogs from Stremio addons, shows details, lists streams and
+the product name is Loge, so saved data carries over. It browses catalogs from Stremio addons, shows details, lists streams and
 plays them with mpv. The look follows the Strand app: charcoal canvas, artwork-led, white
 accent, system font, no cards/gradients/badges.
 
