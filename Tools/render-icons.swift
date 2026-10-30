@@ -1,7 +1,7 @@
 // Renders every app icon and Apple TV top-shelf image into App/Assets.xcassets.
 // Run from the repository root: swift Tools/render-icons.swift
 //
-// The mark is Matinee's "m", two arches in white on the app's charcoal canvas.
+// The mark is Loge's "l", a white stroke with a turned foot on the app's charcoal canvas.
 
 import CoreGraphics
 import Foundation
@@ -29,19 +29,14 @@ func render(width: Int, height: Int, layer: Layer, markScale: CGFloat = 0.62) ->
         let size = min(w, h) * markScale
         let origin = CGPoint(x: (w - size) / 2, y: (h - size) / 2)
 
-        // A lowercase "m" drawn as two arches, read also as a theatre's arcade or curtains.
-        let stroke = size * 0.13, radius = size * 0.185, leg = size * 0.42
-        let width = radius * 4 + stroke, height = radius + leg + stroke
-        let left = origin.x + (size - width) / 2 + stroke / 2
-        let bottom = origin.y + (size - height) / 2 + stroke / 2
-        let crown = bottom + leg
+        // A lowercase "l" whose foot turns out to the right; centred on the whole glyph, foot included.
+        let stroke = size * 0.13, height = size * 0.66, foot = size * 0.16
+        let x = origin.x + size / 2 - foot / 2
+        let top = origin.y + (size + height) / 2, bottom = origin.y + (size - height) / 2
         let path = CGMutablePath()
-        for arch in 0..<2 {
-            let x = left + radius * 2 * CGFloat(arch)
-            path.move(to: CGPoint(x: x, y: bottom))
-            path.addArc(center: CGPoint(x: x + radius, y: crown), radius: radius, startAngle: .pi, endAngle: 0, clockwise: true)
-            path.addLine(to: CGPoint(x: x + radius * 2, y: bottom))
-        }
+        path.move(to: CGPoint(x: x, y: top))
+        path.addLine(to: CGPoint(x: x, y: bottom + foot))
+        path.addArc(center: CGPoint(x: x + foot, y: bottom + foot), radius: foot, startAngle: .pi, endAngle: .pi * 1.5, clockwise: false)
         context.setStrokeColor(CGColor(gray: 1, alpha: 1))
         context.setLineWidth(stroke)
         context.setLineCap(.round)

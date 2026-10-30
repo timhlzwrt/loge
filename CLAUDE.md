@@ -23,7 +23,7 @@ accent, system font, no cards/gradients/badges.
 - `Tools/test-addon.py` — local stream addon at `http://127.0.0.1:8765/manifest.json` with
   test streams (MKV, HEVC, multi-track HLS, header-protected, broken, torrent).
 - `Tools/render-icons.swift` — regenerates `App/Assets.xcassets` (icons, top shelf, accent);
-  the mark is a white two-arch "m" on the charcoal canvas.
+  the mark is a white "l" with a turned foot on the charcoal canvas.
   It deletes and rewrites the catalog, so change the script rather than the assets.
 - `Vendor/MPVKit/` — MPVKit's LGPL product with a patched `Libmpv.xcframework.zip` so mpv
   follows layer resizes (rotation, window resize). Rebuild with `rebuild-libmpv.sh`; see its README.
