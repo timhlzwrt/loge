@@ -81,8 +81,11 @@ private struct TVHome: View {
                             CatalogRow(source: source, isPrimary: source == sources.first) { focused = $0 }
                         }
                     }
+                    .scrollTargetLayout()
                     .padding(.bottom, 60)
                 }
+                // Moving focus down a row scrolls by whole rows, so the focused row keeps its title.
+                .scrollTargetBehavior(.viewAligned)
             }
         }
         .background(Color.canvas)

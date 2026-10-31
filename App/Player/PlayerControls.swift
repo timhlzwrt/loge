@@ -55,6 +55,8 @@ struct PlayerControls: View {
                 .lineLimit(1)
             timeline
         }
+        // Full width even before the timeline knows the duration, so the title doesn't start centred.
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background { scrims }
     }
     #endif

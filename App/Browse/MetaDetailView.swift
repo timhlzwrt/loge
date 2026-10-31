@@ -202,7 +202,8 @@ struct MetaDetailView: View {
 
     #if os(tvOS)
     private let heroAlignment = HorizontalAlignment.leading
-    private let heroHeight: CGFloat = 560
+    /// A movie has nothing under its buttons, so its details sit low on the screen, as on Home.
+    private var heroHeight: CGFloat { preview.type == "series" ? 560 : 880 }
     private let logoHeight: CGFloat = 160
     private let logoWidth: CGFloat = 560
     private let synopsisWidth: CGFloat = 900
@@ -234,18 +235,32 @@ struct MetaDetailView: View {
 private struct ExpandableText: View {
     let text: String
     @State private var isExpanded = false
+    @State private var fullHeight: CGFloat = 0
+    @State private var shownHeight: CGFloat = 0
 
     var body: some View {
+        let isTruncated = !isExpanded && fullHeight > shownHeight + 1
         Button {
-            isExpanded.toggle()
+            if isTruncated || isExpanded { isExpanded.toggle() }
         } label: {
             Text(text)
                 .font(.synopsis)
                 .foregroundStyle(.white.opacity(0.88))
                 .lineLimit(isExpanded ? nil : 2)
+                // Otherwise the hero's stack squeezes the expanded text back to a few lines.
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { shownHeight = $0 }
+                .background(alignment: .top) {
+                    // The unclamped text, measured to tell whether two lines cut it short.
+                    Text(text)
+                        .font(.synopsis)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .hidden()
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { fullHeight = $0 }
+                }
                 .overlay(alignment: .bottomTrailing) {
-                    if !isExpanded {
+                    if isTruncated {
                         Text("more")
                             .font(.synopsis.weight(.semibold))
                             .foregroundStyle(.secondary)
@@ -257,7 +272,7 @@ private struct ExpandableText: View {
                 }
         }
         .buttonStyle(.plain)
-        .accessibilityHint(isExpanded ? "" : "Shows the whole description")
+        .accessibilityHint(isTruncated ? "Shows the whole description" : "")
     }
 }
 
@@ -295,7 +310,7 @@ private struct EpisodesSection: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Metrics.rowSpacing) {
+        VStack(alignment: .leading, spacing: Metrics.headerSpacing) {
             seasonMenu
                 .padding(.horizontal, Metrics.gutter)
             #if os(macOS)
@@ -370,11 +385,11 @@ private struct EpisodesSection: View {
                     .font(.footnote.weight(.bold))
                     .foregroundStyle(.secondary)
             }
-            .foregroundStyle(.white)
         }
         #if os(tvOS)
-        .buttonStyle(.borderless)
+        .buttonStyle(SeasonMenuStyle())
         #else
+        .foregroundStyle(.white)
         .buttonStyle(.plain)
         #endif
         .fixedSize()
@@ -426,6 +441,35 @@ private struct EpisodesSection: View {
         }
     }
 }
+
+#if os(tvOS)
+/// The title stays where it is and gains the white focus platter around it, since a
+/// borderless menu shows no focus at all.
+private struct SeasonMenuStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        StyledLabel(configuration: configuration)
+    }
+
+    private struct StyledLabel: View {
+        let configuration: Configuration
+        @Environment(\.isFocused) private var isFocused
+
+        var body: some View {
+            configuration.label
+                .foregroundStyle(isFocused ? .black : .white)
+                .background {
+                    Capsule()
+                        .fill(.white)
+                        .padding(.horizontal, -20)
+                        .padding(.vertical, -6)
+                        .opacity(isFocused ? 1 : 0)
+                }
+                .scaleEffect(isFocused ? 1.04 : 1)
+                .animation(.easeOut(duration: 0.15), value: isFocused)
+        }
+    }
+}
+#endif
 
 private struct EpisodeCard: View {
     let video: Video
