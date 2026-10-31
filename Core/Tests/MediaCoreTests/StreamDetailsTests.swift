@@ -14,11 +14,11 @@ struct StreamDetailsTests {
         #expect(details.resolution == .ultraHD)
         #expect(details.dynamicRange == ["Dolby Vision", "HDR10"])
         #expect(details.codec == "HEVC")
-        #expect(details.audio == ["Atmos", "TrueHD", "7.1"])
-        #expect(details.source == "Remux")
+        #expect(details.audio == ["TrueHD", "Atmos", "7.1"])
+        #expect(details.releaseType == "Remux")
         #expect(details.size == Measurement(value: 58.2, unit: .gigabytes))
         #expect(details.isCached == true)
-        #expect(details.picture == "4K · Dolby Vision · HDR10 · HEVC")
+        #expect(details.summary == "HEVC · Dolby Vision · TrueHD Atmos 7.1")
     }
 
     @Test func readsATorrentioStyleWebRelease() {
@@ -32,8 +32,8 @@ struct StreamDetailsTests {
         #expect(details.resolution == .fullHD)
         #expect(details.dynamicRange.isEmpty)
         #expect(details.codec == "AVC")
-        #expect(details.audio == ["Dolby Digital Plus", "5.1"])
-        #expect(details.source == "WEB-DL")
+        #expect(details.audio == ["DD+", "5.1"])
+        #expect(details.releaseType == "WEB-DL")
         #expect(details.size == Measurement(value: 2.4, unit: .gigabytes))
         #expect(details.isCached == false)
     }
@@ -46,8 +46,8 @@ struct StreamDetailsTests {
     @Test func leavesUnknownsEmpty() {
         let details = StreamDetails(text: "Debrid\nSome file")
         #expect(details.resolution == nil)
-        #expect(details.picture == nil)
-        #expect(details.file == nil)
+        #expect(details.summary == nil)
+        #expect(details.sizeLabel == nil)
         #expect(details.isCached == nil)
     }
 
@@ -59,14 +59,36 @@ struct StreamDetailsTests {
         #expect(details.isCached == false)
     }
 
-    @Test func sortsByResolutionThenCacheThenSize() {
-        let small4K = StreamDetails(text: "2160p 10 GB")
-        let big4K = StreamDetails(text: "2160p 40 GB")
-        let cached1080 = StreamDetails(text: "[RD+] 1080p 2 GB")
-        let uncached1080 = StreamDetails(text: "[RD download] 1080p 20 GB")
-        let unknown = StreamDetails(text: "file")
+    @Test func readsTagsWrittenAgainstChannels() {
+        let details = StreamDetails(text: "Show.S02E01.720p.WEBRip.AAC2.0.x264-GROUP 310 MB")
+        #expect(details.resolution == .hd)
+        #expect(details.releaseType == "WEB")
+        #expect(details.audio == ["AAC", "2.0"])
+        #expect(details.summary == "AVC · AAC 2.0")
+        #expect(StreamDetails(text: "1080p BluRay DTS5.1").audio == ["DTS", "5.1"])
+        #expect(StreamDetails(text: "1080p DD5.1").audio == ["DD", "5.1"])
+    }
 
-        let sorted = [unknown, uncached1080, small4K, cached1080, big4K].sorted(by: StreamDetails.bestFirst)
-        #expect(sorted == [big4K, small4K, cached1080, uncached1080, unknown])
+    @Test func namesTheReleaseType() {
+        #expect(StreamDetails(text: "Movie.2019.1080p.BluRay.x264").releaseType == "BluRay")
+        #expect(StreamDetails(text: "Movie.2019.1080p.BDRip").releaseType == "BluRay")
+        #expect(StreamDetails(text: "Show.S01E01.2160p.WEB.H265").releaseType == "WEB")
+        #expect(StreamDetails(text: "Show S01E01 WEB DL").releaseType == "WEB-DL")
+        #expect(StreamDetails(text: "Website.Story.1080p").releaseType == nil)
+    }
+
+    @Test func listsSizesInTheirOwnUnits() {
+        #expect(StreamDetails(text: "640 MB").sizeLabel == "640 MB")
+        #expect(StreamDetails(text: "1.2 TB").size == Measurement(value: 1.2, unit: .terabytes))
+    }
+
+    @Test func sortsLargerFilesFirst() {
+        let small = StreamDetails(text: "2160p 10 GB")
+        let big = StreamDetails(text: "2160p 40 GB")
+        let megabytes = StreamDetails(text: "2160p 900 MB")
+        let unknown = StreamDetails(text: "2160p")
+
+        let sorted = [unknown, small, megabytes, big].sorted(by: StreamDetails.largerFirst)
+        #expect(sorted == [big, small, megabytes, unknown])
     }
 }

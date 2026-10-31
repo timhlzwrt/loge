@@ -34,10 +34,10 @@ enum NextEpisode {
     }
 }
 
-/// "Next Episode" in the corner near the end of an episode; once it has ended,
-/// a countdown that starts the next one unless cancelled.
+/// A glass card in the corner near the end of an episode: the next one's still and title,
+/// with Play Now and Cancel. Once the episode has ended, a countdown plays it unless cancelled.
 struct NextEpisodeOverlay: View {
-    let nextTitle: String
+    let next: PlaybackRequest
     let hasEnded: Bool
     let play: () -> Void
 
@@ -46,35 +46,37 @@ struct NextEpisodeOverlay: View {
 
     var body: some View {
         if !cancelled {
-            VStack(alignment: .trailing, spacing: 10) {
-                Text(nextTitle)
-                    .font(.footnote)
-                    .foregroundStyle(.white.opacity(0.8))
-                    .lineLimit(1)
-                HStack(spacing: 12) {
-                    if hasEnded {
-                        Button("Cancel") { cancelled = true }
-                            #if !os(tvOS)
-                            .buttonStyle(.plain)
-                            .foregroundStyle(.white)
-                            #endif
-                    }
-                    Button(action: play) {
-                        Label(hasEnded ? "Next Episode in \(secondsLeft)" : "Next Episode", systemImage: "forward.end.fill")
-                            .font(.headline)
-                            .monospacedDigit()
-                            #if !os(tvOS)
-                            .padding(.horizontal, 18)
-                            .padding(.vertical, 10)
-                            .background(.white, in: .capsule)
+            HStack(spacing: 12) {
+                Artwork(url: next.item?.thumbnail ?? next.item?.background)
+                    .frame(width: Self.stillWidth, height: Self.stillWidth * 9 / 16)
+                    .clipShape(.rect(cornerRadius: 8))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(hasEnded ? "Up Next · in \(secondsLeft) s" : "Up Next")
+                        .font(.caption.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                    Text(episodeTitle)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                    HStack(spacing: 8) {
+                        Button("Play Now", action: play)
+                            .buttonStyle(.glassProminent)
                             .foregroundStyle(.black)
+                        Button("Cancel") { cancelled = true }
+                            .buttonStyle(.glass)
+                            #if os(macOS)
+                            .tint(.clear)
                             #endif
                     }
                     #if !os(tvOS)
-                    .buttonStyle(.plain)
+                    .controlSize(.small)
                     #endif
+                    .padding(.top, 4)
                 }
+                .frame(maxWidth: Self.textWidth, alignment: .leading)
             }
+            .padding(10)
+            .glassEffect(in: .rect(cornerRadius: Self.radius))
             .padding(24)
             // Clears the timeline at the bottom of the controls.
             .padding(.bottom, 70)
@@ -90,4 +92,20 @@ struct NextEpisodeOverlay: View {
             }
         }
     }
+
+    /// "7 · The Case of the Winged Scarab", or the request's title when the episode has none.
+    private var episodeTitle: String {
+        guard let item = next.item, let title = item.episodeTitle else { return next.title }
+        return [item.episode.map(String.init), title].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    #if os(tvOS)
+    private static let stillWidth: CGFloat = 240
+    private static let textWidth: CGFloat = 420
+    private static let radius: CGFloat = 30
+    #else
+    private static let stillWidth: CGFloat = 128
+    private static let textWidth: CGFloat = 200
+    private static let radius: CGFloat = 18
+    #endif
 }

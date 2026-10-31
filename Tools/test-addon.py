@@ -27,10 +27,13 @@ MANIFEST = {
 }
 
 STREAMS = [
-    {"name": "Test\n1080p", "description": "Big Buck Bunny · MKV H.264\n30 MB", "url": MKV,
+    {"name": "[RD+] Test\n2160p", "description": "BluRay REMUX DV HDR10 HEVC TrueHD Atmos 7.1\n58.2 GB",
+     "url": MKV, "behaviorHints": {"bingeGroup": "test|2160p", "filename": "Big.Buck.Bunny.2008.2160p.REMUX.mkv"}},
+    {"name": "[RD download] Test\n720p", "description": "WEBRip AAC2.0 x264\n310 MB", "url": MKV},
+    {"name": "Test\n1080p", "description": "Big Buck Bunny · BluRay H.264 DTS 5.1\n30 MB", "url": MKV,
      "subtitles": [{"id": "stream-en", "url": f"{BASE}/subs/stream-en.srt", "lang": "eng"}],
      "behaviorHints": {"bingeGroup": "test|1080p", "filename": "Big_Buck_Bunny_1080_10s_30MB.mkv"}},
-    {"name": "Test\nHEVC", "description": "Big Buck Bunny · MP4 HEVC",
+    {"name": "Test\nHEVC", "description": "Big Buck Bunny · 1080p WEB-DL HEVC DDP5.1\n1.4 GB",
      "url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h265/1080/Big_Buck_Bunny_1080_10s_30MB.mp4"},
     {"name": "Test\nTracks", "description": "Apple bipbop · HLS with several audio and subtitle tracks",
      "url": "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_adv_example_hevc/master.m3u8"},

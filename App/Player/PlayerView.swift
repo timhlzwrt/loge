@@ -31,11 +31,15 @@ struct PlayerView: View {
     @State private var isMenuOpen = false
     @State private var adjustingTiming: MPVPlayer.Track.Kind?
     @State private var seekFlash: SeekFlash?
+    /// The sources for what's playing, to switch to another file.
+    @State private var choosingSource: SourcesRoute?
 
     @Environment(PlaybackSession.self) private var session
     #if os(tvOS)
     @FocusState private var surfaceFocused: Bool
     @State private var scrubStart: Double?
+    /// Info, Subtitles and Audio, shown by swiping down.
+    @State private var isPanelShown = false
     #endif
     @Environment(\.scenePhase) private var scenePhase
 
@@ -75,12 +79,19 @@ struct PlayerView: View {
                             isMenuOpen: $isMenuOpen,
                             adjustingTiming: $adjustingTiming,
                             onClose: { session.end() },
+                            onChooseSource: chooseSource(for: current),
                             onInteract: showControls
                         )
                         .transition(.opacity)
                     }
+                    #if os(tvOS)
+                    if isPanelShown {
+                        PlayerPanel(title: current.title, player: player, onInteract: showControls)
+                            .transition(.opacity)
+                    }
+                    #endif
                     if let next = session.next, showsNextEpisode(player) {
-                        NextEpisodeOverlay(nextTitle: next.title, hasEnded: player.status == .ended) {
+                        NextEpisodeOverlay(next: next, hasEnded: player.status == .ended) {
                             session.playNext()
                             showControls()
                         }
@@ -100,6 +111,10 @@ struct PlayerView: View {
         }
         // Closing a menu counts as an interaction, so the countdown starts over.
         .onChange(of: isMenuOpen) { _, open in if !open { showControls() } }
+        #if os(iOS)
+        .sheet(item: $choosingSource) { SourcesView(route: $0, isChoosing: true) }
+        .onChange(of: choosingSource == nil) { _, closed in isMenuOpen = !closed }
+        #endif
         .task(id: AutoHide(lastInteraction: lastInteraction, isPlaying: player?.status == .playing)) {
             // Restarts on each interaction and when playback starts, so controls shown
             // during a slow load still hide once the video is running. Cancellation
@@ -120,10 +135,18 @@ struct PlayerView: View {
             switch direction {
             case .left where surfaceFocused: player?.seek(by: -10)
             case .right where surfaceFocused: player?.seek(by: 10)
+            case .down where surfaceFocused && !isPanelShown: isPanelShown = true
             default: break
             }
             showControls()
         }
+        // Menu closes the panel first; without it, Menu leaves the player as usual.
+        .onExitCommand(perform: isPanelShown ? { isPanelShown = false } : nil)
+        .onChange(of: isPanelShown) { _, shown in
+            isMenuOpen = shown
+            if !shown { surfaceFocused = true }
+        }
+        .animation(.easeInOut(duration: 0.2), value: isPanelShown)
         #elseif os(macOS)
         .focusable()
         .focusEffectDisabled()
@@ -141,7 +164,7 @@ struct PlayerView: View {
     #if os(tvOS)
     /// tvOS only delivers remote presses to focused views, and with the controls hidden
     /// nothing else on screen is focusable. This invisible button covers the picture
-    /// below the top bar, so pressing up still moves focus to the menus above it.
+    /// below the panel's tabs, so pressing up from it moves focus back into the panel.
     private func remoteSurface(_ player: MPVPlayer) -> some View {
         Button {
             player.togglePause()
@@ -237,6 +260,16 @@ struct PlayerView: View {
         false
         #else
         controlsVisible
+        #endif
+    }
+
+    /// Lists the sources for what's playing; not for playback that has no title behind it.
+    private func chooseSource(for current: PlaybackRequest) -> (() -> Void)? {
+        #if os(iOS)
+        guard let item = current.item else { return nil }
+        return { choosingSource = SourcesRoute(item: item, title: current.title) }
+        #else
+        nil
         #endif
     }
 

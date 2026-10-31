@@ -14,7 +14,7 @@ struct ContinueWatchingRow: View {
         if !entries.isEmpty {
             VStack(alignment: .leading, spacing: Metrics.rowSpacing) {
                 Text("Continue Watching")
-                    .font(.headline)
+                    .font(.sectionTitle)
                     .padding(.horizontal, Metrics.gutter)
                 ScrollView(.horizontal) {
                     LazyHStack(alignment: .top, spacing: Metrics.rowSpacing) {
@@ -53,35 +53,55 @@ struct ContinueWatchingRow: View {
     }
 }
 
+/// The still with its title over it; the progress bar says how far along it is.
 private struct ContinueWatchingCard: View {
     let entry: WatchProgress
+    #if os(tvOS)
+    @Environment(\.isFocused) private var isFocused
+    #endif
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 12) {
             Artwork(url: entry.item.thumbnail ?? entry.item.background)
-                .overlay(alignment: .bottom) { WatchProgressBar(progress: entry) }
-                .frame(width: Metrics.episodeWidth, height: Metrics.episodeWidth * 9 / 16)
-                .clipShape(.rect(cornerRadius: 8))
+                .overlay {
+                    // Keeps the title legible over bright stills.
+                    LinearGradient(colors: [.clear, .black.opacity(0.45)], startPoint: .center, endPoint: .bottom)
+                }
+                .overlay(alignment: .bottomLeading) {
+                    Text(entry.item.title)
+                        .font(.cardTitle)
+                        .lineLimit(1)
+                        .shadow(color: .black.opacity(0.6), radius: 8, y: 1)
+                        .padding(.horizontal, WatchProgressBar.inset)
+                        .padding(.bottom, WatchProgressBar.inset * 0.75 + WatchProgressBar.height + 6)
+                }
+                .overlay { WatchProgressBar(progress: entry) }
+                .frame(width: Metrics.cardWidth, height: Metrics.cardWidth * 9 / 16)
+                .clipShape(.rect(cornerRadius: Metrics.cardRadius))
                 #if os(tvOS)
                 .hoverEffect(.highlight)
                 #endif
-            Text(entry.item.title)
-                .font(.subheadline)
-                .lineLimit(1)
-            Text(subtitle)
-                .font(.caption)
+            #if os(tvOS)
+            // Only the focused card says how long is left; the space is kept so the row doesn't jump.
+            Text("\(minutesLeft) min left")
+                .font(.metaLine)
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
+                .opacity(isFocused ? 1 : 0)
+                .padding(.top, 8)
+            #endif
         }
-        .frame(width: Metrics.episodeWidth, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityTitle)
+        .accessibilityValue("\(minutesLeft) minutes left")
     }
 
-    /// "S1 E2 · Trust Fall · 31 min left", or just the time left for movies.
-    private var subtitle: String {
-        let minutesLeft = max(Int((entry.duration - entry.position) / 60), 1)
-        return [entry.item.episodeCode, entry.item.episodeTitle, "\(minutesLeft) min left"]
-            .compactMap { $0 }
-            .joined(separator: " · ")
+    private var minutesLeft: Int {
+        max(Int((entry.duration - entry.position) / 60), 1)
+    }
+
+    /// "Lanterns, S1 E2, Trust Fall": the card shows only the title, but which episode matters.
+    private var accessibilityTitle: String {
+        [entry.item.title, entry.item.episodeCode, entry.item.episodeTitle].compactMap { $0 }.joined(separator: ", ")
     }
 }
 
@@ -96,7 +116,7 @@ struct MyListRow: View {
         if !library.saved.isEmpty {
             VStack(alignment: .leading, spacing: Metrics.rowSpacing) {
                 Text("My List")
-                    .font(.headline)
+                    .font(.sectionTitle)
                     .padding(.horizontal, Metrics.gutter)
                 ScrollView(.horizontal) {
                     LazyHStack(spacing: Metrics.rowSpacing) {
@@ -126,5 +146,44 @@ struct MyListRow: View {
                 }
             }
         }
+    }
+}
+
+/// Everything on My List as a grid, newest first.
+struct MyListView: View {
+    @Environment(LibraryStore.self) private var library
+
+    var body: some View {
+        Group {
+            if library.saved.isEmpty {
+                ContentUnavailableView(
+                    "Nothing on My List",
+                    systemImage: "plus",
+                    description: Text("Add a title with the + button on its page.")
+                )
+            } else {
+                ScrollView {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: Metrics.posterWidth), spacing: Metrics.rowSpacing)],
+                              spacing: Metrics.rowSpacing) {
+                        ForEach(library.saved) { meta in
+                            NavigationLink(value: meta) {
+                                PosterTile(meta: meta, width: nil)
+                            }
+                            #if os(tvOS)
+                            .buttonStyle(.card)
+                            #else
+                            .buttonStyle(.plain)
+                            #endif
+                        }
+                    }
+                    .padding(.horizontal, Metrics.gutter)
+                    .padding(.bottom, 24)
+                }
+                .scrollClipDisabled()
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.canvas)
+        .navigationTitle("My List")
     }
 }
