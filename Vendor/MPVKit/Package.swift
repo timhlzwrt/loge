@@ -1,7 +1,7 @@
 // swift-tools-version:5.8
 // MPVKit 1.1.0-n9.0.2 (mpv v0.41.0), LGPL product only, with Libmpv rebuilt from
-// patch/0004-moltenvk-resize.patch so mpv follows the layer when it's resized.
-// Every other binary is MPVKit's own release. See README.md to rebuild.
+// patch/ to add an AVFoundation video output. Every other binary is MPVKit's own
+// release. See README.md to rebuild.
 
 import PackageDescription
 

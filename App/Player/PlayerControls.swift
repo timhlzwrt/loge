@@ -4,10 +4,13 @@ import SwiftUI
 struct PlayerControls: View {
     let title: String
     let player: MPVPlayer
+    let pictureInPicture: PictureInPicture?
     /// Where the timeline is being dragged or swiped to; nil while it follows playback.
     @Binding var scrubPosition: Double?
     /// True while one of the menus is open, so the controls don't hide out from under it.
     @Binding var isMenuOpen: Bool
+    /// Which timing panel is showing, if any.
+    @Binding var adjustingTiming: MPVPlayer.Track.Kind?
     let onClose: () -> Void
     let onInteract: () -> Void
 
@@ -20,6 +23,10 @@ struct PlayerControls: View {
                 .frame(maxWidth: .infinity)
             Spacer()
             #endif
+            if let kind = adjustingTiming {
+                TimingPanel(player: player, kind: kind, onInteract: onInteract) { adjustingTiming = nil }
+                    .frame(maxWidth: .infinity)
+            }
             timeline
         }
         #if !os(tvOS)
@@ -57,8 +64,16 @@ struct PlayerControls: View {
                 .font(.headline)
                 .lineLimit(1)
             Spacer()
-            TrackMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen)
-            OptionsMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen)
+            // The icons get full-size touch targets; the glyphs alone are small to hit.
+            if let pictureInPicture, pictureInPicture.isPossible {
+                Button("Picture in Picture", systemImage: "pip.enter", action: pictureInPicture.start)
+                    .labelStyle(.iconOnly)
+                    .font(.title3)
+                    .frame(width: 44, height: 44)
+                    .contentShape(.rect)
+            }
+            TrackMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen, adjustingTiming: $adjustingTiming)
+            OptionsMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen, adjustingTiming: $adjustingTiming)
         }
         #if !os(tvOS)
         .buttonStyle(.plain)
@@ -160,6 +175,7 @@ private struct TrackMenu: View {
     let player: MPVPlayer
     let onInteract: () -> Void
     @Binding var isOpen: Bool
+    @Binding var adjustingTiming: MPVPlayer.Track.Kind?
 
     @AppStorage(PlaybackPreferences.subtitleScaleKey) private var subtitleScale = 1.0
 
@@ -185,12 +201,17 @@ private struct TrackMenu: View {
                         ForEach(PlaybackPreferences.subtitleScales, id: \.scale) { Text($0.name).tag($0.scale) }
                     }
                     .pickerStyle(.menu)
+                    if subtitles.contains(where: \.isSelected) {
+                        Button("Subtitle Timing…", systemImage: "timer") { adjustingTiming = .sub }
+                    }
                 }
                 Color.clear.frame(height: 0).modifier(MenuPresenceTracker(isOpen: $isOpen))
             } label: {
                 Label("Audio and subtitles", systemImage: "captions.bubble")
                     .labelStyle(.iconOnly)
                     .font(.title3)
+                    .frame(width: 44, height: 44)
+                    .contentShape(.rect)
             }
             .simultaneousGesture(TapGesture().onEnded(onInteract))
             .onChange(of: subtitleScale) { _, scale in player.setSubtitleScale(scale) }
@@ -228,6 +249,7 @@ private struct OptionsMenu: View {
     let player: MPVPlayer
     let onInteract: () -> Void
     @Binding var isOpen: Bool
+    @Binding var adjustingTiming: MPVPlayer.Track.Kind?
 
     private static let speeds = [0.5, 0.75, 1, 1.25, 1.5, 2]
 
@@ -244,12 +266,53 @@ private struct OptionsMenu: View {
                 .labelsHidden()
             }
             Toggle("Zoom to Fill", isOn: Binding(get: { player.isZoomedToFill }, set: { player.setZoomToFill($0) }))
+            Button("Audio Timing…", systemImage: "timer") { adjustingTiming = .audio }
             Color.clear.frame(height: 0).modifier(MenuPresenceTracker(isOpen: $isOpen))
         } label: {
             Label("Playback options", systemImage: player.speed == 1 ? "gauge.with.dots.needle.33percent" : "gauge.with.dots.needle.67percent")
                 .labelStyle(.iconOnly)
                 .font(.title3)
+                .frame(width: 44, height: 44)
+                .contentShape(.rect)
         }
         .simultaneousGesture(TapGesture().onEnded(onInteract))
+    }
+}
+
+/// Shifts subtitles or sound in tenth-of-a-second steps for files whose timing is off.
+private struct TimingPanel: View {
+    let player: MPVPlayer
+    let kind: MPVPlayer.Track.Kind
+    let onInteract: () -> Void
+    let onDone: () -> Void
+
+    private var delay: Double { kind == .sub ? player.subtitleDelay : player.audioDelay }
+
+    var body: some View {
+        HStack(spacing: 20) {
+            Text(kind == .sub ? "Subtitle Timing" : "Audio Timing")
+                .font(.subheadline.weight(.semibold))
+            Button("Earlier", systemImage: "minus") { shift(by: -0.1) }
+                .accessibilityLabel(kind == .sub ? "Show subtitles earlier" : "Play sound earlier")
+            Text(delay.formatted(.number.precision(.fractionLength(1)).sign(strategy: .always(includingZero: false))) + " s")
+                .font(.subheadline.monospacedDigit())
+                .frame(minWidth: 64)
+            Button("Later", systemImage: "plus") { shift(by: 0.1) }
+                .accessibilityLabel(kind == .sub ? "Show subtitles later" : "Play sound later")
+            Button("Reset") { shift(by: -delay) }
+                .disabled(delay == 0)
+            Button("Done", action: onDone)
+                .font(.subheadline.weight(.semibold))
+        }
+        .labelStyle(.iconOnly)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(.black.opacity(0.6), in: .capsule)
+    }
+
+    private func shift(by seconds: Double) {
+        // Rounded so repeated steps don't drift to values like 0.30000000000000004.
+        player.setDelay(((delay + seconds) * 10).rounded() / 10, for: kind)
+        onInteract()
     }
 }

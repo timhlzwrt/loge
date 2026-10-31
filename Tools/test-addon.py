@@ -3,7 +3,7 @@
 Run with `python3 Tools/test-addon.py`, then install http://127.0.0.1:8765/manifest.json
 in the app (the simulators share the Mac's network).
 
-Serves the same sources for every movie and episode. Binds to 127.0.0.1 only.
+Serves the same sources and subtitles for every movie and episode. Binds to 127.0.0.1 only.
 Logs each request's path and X-Test-Token header so header forwarding can be checked.
 """
 import json
@@ -20,7 +20,7 @@ MANIFEST = {
     "version": "1.0.0",
     "name": "Test Streams",
     "description": "Local test sources for MediaApp",
-    "resources": ["stream"],
+    "resources": ["stream", "subtitles"],
     "types": ["movie", "series"],
     "idPrefixes": ["tt"],
     "catalogs": [],
@@ -28,7 +28,8 @@ MANIFEST = {
 
 STREAMS = [
     {"name": "Test\n1080p", "description": "Big Buck Bunny · MKV H.264\n30 MB", "url": MKV,
-     "behaviorHints": {"bingeGroup": "test|1080p"}},
+     "subtitles": [{"id": "stream-en", "url": f"{BASE}/subs/stream-en.srt", "lang": "eng"}],
+     "behaviorHints": {"bingeGroup": "test|1080p", "filename": "Big_Buck_Bunny_1080_10s_30MB.mkv"}},
     {"name": "Test\nHEVC", "description": "Big Buck Bunny · MP4 HEVC",
      "url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h265/1080/Big_Buck_Bunny_1080_10s_30MB.mp4"},
     {"name": "Test\nTracks", "description": "Apple bipbop · HLS with several audio and subtitle tracks",
@@ -41,6 +42,16 @@ STREAMS = [
     {"name": "Test\nTorrent", "title": "Should be hidden", "infoHash": "0" * 40, "fileIdx": 0},
 ]
 
+# What a subtitle addon such as OpenSubtitles returns; the file says where it came from.
+SUBTITLES = [
+    {"id": "addon-en", "url": f"{BASE}/subs/addon-en.srt", "lang": "eng"},
+    {"id": "addon-de", "url": f"{BASE}/subs/addon-de.srt", "lang": "ger"},
+]
+
+
+def srt(name):
+    return f"1\n00:00:00,500 --> 00:00:09,500\nTest subtitle: {name}\n".encode()
+
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -50,6 +61,15 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(MANIFEST)
         elif self.path.startswith("/stream/"):
             self.send_json({"streams": STREAMS})
+        elif self.path.startswith("/subtitles/"):
+            self.send_json({"subtitles": SUBTITLES})
+        elif self.path.startswith("/subs/") and self.path.endswith(".srt"):
+            data = srt(self.path.removeprefix("/subs/").removesuffix(".srt"))
+            self.send_response(200)
+            self.send_header("Content-Type", "application/x-subrip")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
         elif self.path == "/protected.mkv":
             if token == TOKEN:
                 self.send_response(302)

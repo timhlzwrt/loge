@@ -24,7 +24,7 @@ final class FlowTests: XCTestCase {
 
     @MainActor
     func testSearchFindsTitlesAndRemembersTheQuery() {
-        app.tabBars.buttons["Search"].firstMatch.tap()
+        openTab("Search")
         let field = app.searchFields.firstMatch
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         field.tap()
@@ -126,16 +126,171 @@ final class FlowTests: XCTestCase {
         app.buttons["Close"].tap()
     }
 
+    /// The player's button hands the video to the floating window and closes the player
+    /// screen while playback continues. Needs a simulator with Picture in Picture, such as
+    /// an iPad; iPhone simulators report it as unsupported.
+    @MainActor
+    func testPictureInPicture() throws {
+        installTestAddonIfNeeded()
+        openSeries("Lanterns")
+        let play = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Play' OR label BEGINSWITH 'Resume'")).firstMatch
+        XCTAssertTrue(play.waitForExistence(timeout: 15))
+        play.tap()
+        // Without a remembered source, Play opens the source list. Once playing, the
+        // controls fade out; while they're up, Close is showing.
+        let testSource = app.buttons.matching(NSPredicate(format: "label CONTAINS 'MKV H.264'")).firstMatch
+        let pause = app.buttons["Pause"]
+        for _ in 0..<30 where !pause.exists {
+            if testSource.exists {
+                testSource.tap()
+            } else if !app.buttons["Close"].exists && app.buttons["Picture in Picture"].exists == false {
+                app.tap()
+            }
+            sleep(1)
+        }
+        XCTAssertTrue(pause.exists, "Playback didn't start")
+        // The controls stay up while paused.
+        pause.tap()
+
+        let pip = app.buttons["Picture in Picture"]
+        guard pip.waitForExistence(timeout: 5) else {
+            throw XCTSkip("Picture in Picture isn't available on this simulator")
+        }
+        pip.tap()
+        sleep(3)
+        screenshot("pip-started")
+        XCTAssertFalse(app.buttons["Picture in Picture"].exists, "The player screen stayed open")
+
+        // The floating window belongs to SpringBoard, labelled in the simulator's language.
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        func windowButton(_ labels: String...) -> XCUIElement {
+            springboard.buttons.matching(NSPredicate(format: "label IN %@", labels)).firstMatch
+        }
+        let restore = windowButton("Restore Full Screen", "Vollbildmodus wiederherstellen")
+        XCTAssertTrue(restore.waitForExistence(timeout: 5), "No floating window")
+        windowButton("Play", "Wiedergabe").tap()
+        restore.tap()
+        XCTAssertTrue(app.buttons["Close"].waitForExistence(timeout: 5) || app.buttons["Picture in Picture"].exists,
+                      "Restoring didn't bring the player screen back")
+        screenshot("pip-restored")
+
+        // Going home while playing moves the video into the floating window by itself.
+        XCUIDevice.shared.press(.home)
+        XCTAssertTrue(restore.waitForExistence(timeout: 5), "Going home didn't start Picture in Picture")
+        restore.tap()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 5))
+
+        // Closing the floating window ends playback rather than leaving it running unseen.
+        if !app.buttons["Picture in Picture"].isHittable { app.tap() }
+        app.buttons["Picture in Picture"].tap()
+        let close = windowButton("Close Picture in Picture", "Bild-in-Bild schließen")
+        XCTAssertTrue(close.waitForExistence(timeout: 5))
+        close.tap()
+        sleep(2)
+        XCTAssertFalse(restore.exists, "The floating window stayed")
+        XCTAssertFalse(app.buttons["Picture in Picture"].exists, "The player came back")
+    }
+
+    /// A source that doesn't open hands over to the next one instead of stopping.
+    @MainActor
+    func testBrokenSourceFallsBackToAnother() {
+        installTestAddonIfNeeded()
+        openSeries("Lanterns")
+        // Episode cards open the source list without playing anything first.
+        let episode = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Up Next'")).firstMatch
+        XCTAssertTrue(episode.waitForExistence(timeout: 15))
+        episode.tap()
+        let broken = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Returns 404'")).firstMatch
+        XCTAssertTrue(broken.waitForExistence(timeout: 15), "No broken test source")
+        broken.tap()
+        XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 30), "Didn't fall back to another source")
+        XCTAssertFalse(app.staticTexts["Couldn't play this source"].exists)
+        screenshot("fallback-playing")
+        app.buttons["Close"].tap()
+    }
+
+    /// Subtitles that come with a stream and those from subtitle addons join the file's own.
+    @MainActor
+    func testExternalSubtitles() {
+        installTestAddonIfNeeded()
+        openSeries("Lanterns")
+        let episode = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Up Next'")).firstMatch
+        XCTAssertTrue(episode.waitForExistence(timeout: 15))
+        episode.tap()
+        let source = app.buttons.matching(NSPredicate(format: "label CONTAINS 'MKV H.264'")).firstMatch
+        XCTAssertTrue(source.waitForExistence(timeout: 15))
+        source.tap()
+        let pause = app.buttons["Pause"]
+        XCTAssertTrue(pause.waitForExistence(timeout: 20), "Playback didn't start")
+        pause.tap()
+
+        let menu = app.buttons["Audio and subtitles"]
+        XCTAssertTrue(menu.waitForExistence(timeout: 10), "No subtitle menu")
+        menu.tap()
+        let fromStream = app.buttons.matching(NSPredicate(format: "label CONTAINS '· Stream'")).firstMatch
+        let fromAddon = app.buttons.matching(NSPredicate(format: "label CONTAINS '· Test Streams'")).firstMatch
+        _ = fromStream.waitForExistence(timeout: 5)
+        screenshot("subtitle-menu")
+        XCTAssertTrue(fromStream.exists, "The stream's subtitle is missing")
+        XCTAssertTrue(fromAddon.exists, "The addon's subtitle is missing")
+        fromAddon.tap()
+        sleep(1)
+        screenshot("subtitle-shown-paused")
+        app.buttons["Play"].tap()
+        sleep(1)
+        screenshot("subtitle-shown")
+        app.buttons["Close"].tap()
+    }
+
+    @MainActor
+    func testTraktSettings() {
+        openTab("Settings")
+        let keys = app.textFields["Client ID"]
+        let signedIn = app.staticTexts["Signed in as"]
+        let signIn = app.buttons["Sign In"]
+        for _ in 0..<4 where !(keys.exists || signedIn.exists || signIn.exists) {
+            app.swipeUp()
+        }
+        XCTAssertTrue(keys.exists || signedIn.exists || signIn.exists, "No Trakt section")
+        screenshot("settings-trakt")
+    }
+
     // MARK: Helpers
 
     @MainActor
+    private func openTab(_ name: String) {
+        // iPhone shows a tab bar; iPad shows the tabs as plain buttons at the top.
+        let tab = app.tabBars.buttons[name].firstMatch
+        (tab.exists ? tab : app.buttons[name].firstMatch).tap()
+    }
+
+    @MainActor
+    private func installTestAddonIfNeeded() {
+        openTab("Settings")
+        guard !app.staticTexts["Test Streams"].waitForExistence(timeout: 5) else { return }
+        let field = app.textFields["Manifest URL"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap()
+        field.typeText("http://127.0.0.1:8765/manifest.json\n")
+        XCTAssertTrue(app.staticTexts["Test Streams"].waitForExistence(timeout: 10), "Test addon didn't install")
+    }
+
+    @MainActor
     private func openSeries(_ name: String) {
-        app.tabBars.buttons["Home"].firstMatch.tap()
+        openTab("Home")
         let poster = app.buttons[name].firstMatch
         for _ in 0..<6 where !poster.isHittable {
             app.swipeUp()
         }
-        XCTAssertTrue(poster.waitForExistence(timeout: 15), "\(name) isn't on Home")
+        // Home follows Cinemeta's popular lists, which change; search finds it either way.
+        if !poster.isHittable {
+            openTab("Search")
+            let field = app.searchFields.firstMatch
+            XCTAssertTrue(field.waitForExistence(timeout: 5))
+            field.tap()
+            field.typeText(name)
+        }
+        XCTAssertTrue(poster.waitForExistence(timeout: 15), "\(name) isn't on Home or in search")
         poster.tap()
     }
 

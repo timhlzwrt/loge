@@ -40,6 +40,21 @@ struct AddonClientTests {
             == "https://addon.example/config123/catalog/movie/top/search=the%20office%20%26%20co&skip=100.json")
     }
 
+    @Test func passesTheFilenameToSubtitleAddons() {
+        let url = client.resourceURL("subtitles", type: "movie", id: "tt0111161", extra: [
+            (name: "filename", value: "Example.Movie.2024.1080p.mkv"),
+        ])
+        #expect(url.absoluteString
+            == "https://addon.example/config123/subtitles/movie/tt0111161/filename=Example.Movie.2024.1080p.mkv.json")
+    }
+
+    @Test func decodesSubtitles() throws {
+        let subtitles = try decodeFixture("subtitles", as: SubtitlesResponse.self).subtitles
+
+        #expect(subtitles.map(\.lang) == ["eng", "ger", "pob"])
+        #expect(subtitles[0].url == "https://subs.example/1001.srt")
+    }
+
     @Test func decodesCatalog() throws {
         let response = try decodeFixture("cinemeta-catalog", as: CatalogResponse.self)
 
@@ -65,6 +80,8 @@ struct AddonClientTests {
         #expect(streams[0].url != nil)
         #expect(streams[0].behaviorHints?.proxyHeaders?.request?["User-Agent"] == "Example/1.0")
         #expect(streams[1].url == nil && streams[1].infoHash != nil)
+        #expect(streams[0].subtitles == [Subtitle(id: "s1", url: "https://debrid.example/subs/en.srt", lang: "eng")])
+        #expect(streams[1].subtitles == nil)
     }
 
     @Test func cleansPaddedStreamNames() throws {

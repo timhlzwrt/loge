@@ -19,6 +19,12 @@ targets:
     type: application
     supportedDestinations: [iOS, tvOS, macOS]
     sources: [App]
+    # Merged with the generated Info.plist; holds keys that have no build setting.
+    info:
+      path: App/Info.plist
+      properties:
+        # Picture in Picture keeps playing once the app is in the background.
+        UIBackgroundModes: [audio]
     dependencies:
       - package: MediaCore
       - package: MPVKit

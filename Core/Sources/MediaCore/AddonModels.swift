@@ -99,6 +99,8 @@ public struct StreamSource: Codable, Sendable, Hashable {
     public var infoHash: String?
     public var fileIdx: Int?
     public var externalUrl: String?
+    /// Subtitles that belong to this particular file, offered alongside its own tracks.
+    public var subtitles: [Subtitle]?
     public var behaviorHints: BehaviorHints?
 
     public struct BehaviorHints: Codable, Sendable, Hashable {
@@ -147,6 +149,20 @@ public struct StreamSource: Codable, Sendable, Hashable {
     }
 }
 
+/// An external subtitle file, from a stream or a `subtitles` resource.
+public struct Subtitle: Codable, Sendable, Hashable {
+    public var id: String?
+    public var url: String
+    /// Usually ISO 639-2, e.g. `eng`; OpenSubtitles adds a few of its own, such as `pob`.
+    public var lang: String
+
+    public init(id: String? = nil, url: String, lang: String) {
+        self.id = id
+        self.url = url
+        self.lang = lang
+    }
+}
+
 struct CatalogResponse: Decodable {
     var metas: [MetaPreview]
 }
@@ -157,4 +173,8 @@ struct MetaResponse: Decodable {
 
 struct StreamsResponse: Decodable {
     var streams: [StreamSource]
+}
+
+struct SubtitlesResponse: Decodable {
+    var subtitles: [Subtitle]
 }

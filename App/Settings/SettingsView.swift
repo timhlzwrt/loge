@@ -55,6 +55,8 @@ struct SettingsView: View {
                 }
             }
 
+            TraktSection()
+
             PlaybackSettingsSection()
         }
         #if !os(tvOS)

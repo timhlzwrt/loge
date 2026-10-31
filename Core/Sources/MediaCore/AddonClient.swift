@@ -57,6 +57,13 @@ public struct AddonClient: Sendable {
         return response.streams
     }
 
+    /// - Parameter filename: The video's file name, which addons use to rank matches.
+    public func subtitles(type: String, id: String, filename: String? = nil) async throws -> [Subtitle] {
+        let extra = filename.map { [(name: "filename", value: $0)] } ?? []
+        let response: SubtitlesResponse = try await fetch(resourceURL("subtitles", type: type, id: id, extra: extra))
+        return response.subtitles
+    }
+
     func resourceURL(_ resource: String, type: String, id: String, extra: [(name: String, value: String)] = []) -> URL {
         var path = [resource, Self.encode(type), Self.encode(id)].joined(separator: "/")
         if !extra.isEmpty {

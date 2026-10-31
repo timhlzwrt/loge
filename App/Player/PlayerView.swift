@@ -1,8 +1,8 @@
 import MediaCore
 import SwiftUI
 
-/// Everything needed to start playback. Codable so macOS can open it in its own window.
-struct PlaybackRequest: Codable, Hashable, Identifiable {
+/// Everything needed to start playback.
+struct PlaybackRequest: Hashable {
     var title: String
     var url: URL
     var headers: [String: String] = [:]
@@ -13,49 +13,38 @@ struct PlaybackRequest: Codable, Hashable, Identifiable {
     var providerURL: String?
     /// The addon's grouping of the stream's release and quality, to keep for the next episode.
     var bingeGroup: String?
-
-    var id: URL { url }
+    /// Subtitles the stream comes with, offered next to the file's own.
+    var subtitles: [Subtitle] = []
+    /// The file's name, which subtitle addons use to find matching timings.
+    var filename: String?
 }
 
+/// The player screen: controls and gestures over the session's video.
 struct PlayerView: View {
-    // The request changes when the next episode starts, without leaving the player.
-    @State private var current: PlaybackRequest
+    #if os(macOS)
+    static let windowID = "player"
+    #endif
 
-    // Created on appear rather than as a `@State` default, because SwiftUI evaluates
-    // default values every time the view is re-initialised and each player
-    // starts its own mpv instance.
-    @State private var player: MPVPlayer?
     @State private var controlsVisible = true
     @State private var lastInteraction = Date.now
-    @State private var lastRecordedPosition: Double = 0
     @State private var scrubPosition: Double?
     @State private var isMenuOpen = false
-    @State private var hasRememberedSource = false
-    @State private var episodes: [Video] = []
-    @State private var next: PlaybackRequest?
+    @State private var adjustingTiming: MPVPlayer.Track.Kind?
     @State private var seekFlash: SeekFlash?
 
-    @Environment(LibraryStore.self) private var library
-    @Environment(AddonStore.self) private var addons
-    // Empty means "file default" for audio and "off" for subtitles.
-    @AppStorage(PlaybackPreferences.audioKey) private var audioLanguage = ""
-    @AppStorage(PlaybackPreferences.subtitleKey) private var subtitleLanguage = ""
-    @AppStorage(PlaybackPreferences.subtitleScaleKey) private var subtitleScale = 1.0
+    @Environment(PlaybackSession.self) private var session
     #if os(tvOS)
     @FocusState private var surfaceFocused: Bool
     @State private var scrubStart: Double?
     #endif
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
 
-    init(request: PlaybackRequest) {
-        _current = State(initialValue: request)
-    }
+    private var player: MPVPlayer? { session.player }
 
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            if let player {
+            if let player, let current = session.current {
                 MPVVideoView(player: player).ignoresSafeArea()
                 #if os(tvOS)
                 remoteSurface(player)
@@ -68,6 +57,12 @@ struct PlayerView: View {
                 if player.isWaiting && !transportVisible {
                     ProgressView().controlSize(.large)
                 }
+                if session.isTryingAnotherSource && player.isWaiting {
+                    Text("Trying another source…")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .offset(y: 56)
+                }
                 if case .failed(let message) = player.status {
                     failure(message)
                 } else {
@@ -75,50 +70,32 @@ struct PlayerView: View {
                         PlayerControls(
                             title: current.title,
                             player: player,
+                            pictureInPicture: session.pictureInPicture,
                             scrubPosition: $scrubPosition,
                             isMenuOpen: $isMenuOpen,
-                            onClose: { dismiss() },
+                            adjustingTiming: $adjustingTiming,
+                            onClose: { session.end() },
                             onInteract: showControls
                         )
                         .transition(.opacity)
                     }
-                    if let next, showsNextEpisode(player) {
+                    if let next = session.next, showsNextEpisode(player) {
                         NextEpisodeOverlay(nextTitle: next.title, hasEnded: player.status == .ended) {
-                            play(next)
+                            session.playNext()
+                            showControls()
                         }
                     }
                 }
             }
         }
         .animation(.easeInOut(duration: 0.2), value: controlsVisible)
-        .onAppear(perform: start)
-        .onDisappear(perform: stop)
-        .task(id: current.item?.metaID) { await loadEpisodes() }
-        .task(id: nextLookupKey) { await findNextEpisode() }
-        .onChange(of: player?.position) {
-            // Often enough that a crash or force-quit loses little, rarely enough not to churn storage.
-            if let position = player?.position, abs(position - lastRecordedPosition) >= 10 {
-                recordProgress()
-            }
-        }
-        .onChange(of: player?.status) { _, status in
-            switch status {
-            case .playing: rememberSource()
-            // A remembered source that no longer plays shouldn't be tried again.
-            case .failed:
-                if let item = current.item { library.forgetSource(metaID: item.metaID) }
-            default: break
-            }
-        }
+        .onAppear { session.screenDidAppear() }
+        .onDisappear { session.screenDidDisappear() }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
-            case .background:
-                player?.pause()
-                player?.setVideoEnabled(false)
-            case .active:
-                player?.setVideoEnabled(true)
-            default:
-                break
+            case .background: session.sceneDidEnterBackground()
+            case .active: session.sceneDidBecomeActive()
+            default: break
             }
         }
         // Closing a menu counts as an interaction, so the countdown starts over.
@@ -128,7 +105,7 @@ struct PlayerView: View {
             // during a slow load still hide once the video is running. Cancellation
             // means one of those happened again.
             do { try await Task.sleep(for: .seconds(4)) } catch { return }
-            if player?.status == .playing && scrubPosition == nil && !isMenuOpen {
+            if player?.status == .playing && scrubPosition == nil && !isMenuOpen && adjustingTiming == nil {
                 controlsVisible = false
             }
         }
@@ -228,7 +205,7 @@ struct PlayerView: View {
         })
         .simultaneousGesture(DragGesture(minimumDistance: 40).onEnded { value in
             if value.translation.height > 120 && abs(value.translation.width) < 80 {
-                dismiss()
+                session.end()
             }
         })
         #endif
@@ -268,95 +245,11 @@ struct PlayerView: View {
         lastInteraction = .now
     }
 
-    // MARK: Lifecycle
-
-    private func start() {
-        let player = MPVPlayer()
-        self.player = player
-        load(current, into: player)
-        #if !os(macOS)
-        UIApplication.shared.isIdleTimerDisabled = true
-        #endif
-    }
-
-    private func load(_ request: PlaybackRequest, into player: MPVPlayer) {
-        player.setSubtitleScale(subtitleScale)
-        player.load(
-            request.url,
-            headers: request.headers,
-            startAt: request.startAt,
-            audioLanguage: audioLanguage.isEmpty ? nil : audioLanguage,
-            subtitleLanguage: subtitleLanguage.isEmpty ? nil : subtitleLanguage
-        )
-    }
-
-    private func stop() {
-        recordProgress()
-        player?.shutDown()
-        player = nil
-        #if !os(macOS)
-        UIApplication.shared.isIdleTimerDisabled = false
-        #endif
-    }
-
-    private func recordProgress() {
-        // Live streams have no duration, and nothing is known before the file has loaded.
-        guard let item = current.item, let player, let duration = player.duration, player.position > 0 else { return }
-        library.record(item, position: player.position, duration: duration)
-        lastRecordedPosition = player.position
-    }
-
-    private func rememberSource() {
-        guard !hasRememberedSource, let item = current.item, let providerURL = current.providerURL else { return }
-        hasRememberedSource = true
-        library.rememberSource(
-            RememberedSource(itemID: item.id, providerURL: providerURL, url: current.url,
-                             headers: current.headers, bingeGroup: current.bingeGroup),
-            metaID: item.metaID
-        )
-    }
-
     // MARK: Next episode
-
-    private func loadEpisodes() async {
-        guard let item = current.item, item.type == "series", episodes.isEmpty,
-              let client = addons.addons.metaClient(type: item.type, id: item.metaID)
-        else { return }
-        episodes = (try? await client.meta(type: item.type, id: item.metaID).videos) ?? []
-    }
-
-    /// Changes once the episode nears its end, which is when the lookup starts.
-    private var nextLookupKey: String? {
-        guard let item = current.item, !episodes.isEmpty, let duration = player?.duration,
-              let position = player?.position,
-              position >= NextEpisode.offerTime(duration: duration) - 60 || player?.status == .ended
-        else { return nil }
-        return item.id
-    }
-
-    private func findNextEpisode() async {
-        guard nextLookupKey != nil, next == nil else { return }
-        next = try? await NextEpisode.request(after: current, episodes: episodes)
-    }
 
     private func showsNextEpisode(_ player: MPVPlayer) -> Bool {
         guard let duration = player.duration else { return false }
         return player.status == .ended || player.position >= NextEpisode.offerTime(duration: duration)
-    }
-
-    private func play(_ request: PlaybackRequest) {
-        guard let player else { return }
-        if let item = current.item {
-            recordProgress()
-            // Skipping the credits shouldn't leave the episode looking unfinished.
-            library.markWatched([item])
-        }
-        current = request
-        next = nil
-        hasRememberedSource = false
-        lastRecordedPosition = 0
-        load(request, into: player)
-        showControls()
     }
 
     private func failure(_ message: String) -> some View {
@@ -367,7 +260,7 @@ struct PlayerView: View {
             Text(message.prefix(1).uppercased() + message.dropFirst() + ".")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            Button("Choose another source") { dismiss() }
+            Button("Choose another source") { session.end() }
                 .padding(.top, 8)
         }
         .multilineTextAlignment(.center)
