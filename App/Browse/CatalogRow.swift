@@ -67,7 +67,7 @@ struct CatalogRow: View {
     }
 
     private func row(@ViewBuilder content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: Metrics.rowSpacing) {
+        VStack(alignment: .leading, spacing: Metrics.headerSpacing) {
             Group {
                 #if os(tvOS)
                 // On tvOS the row ends in a "See All" tile instead, which focus reaches naturally.
@@ -129,6 +129,10 @@ struct CatalogRow: View {
         }
         .scrollIndicators(.hidden)
         .scrollClipDisabled()
+        #if os(tvOS)
+        // Home opens on its first row rather than on the sidebar.
+        .defaultFocus($focusedID, isPrimary ? metas.first?.id : nil)
+        #endif
     }
 
     private var placeholders: some View {
