@@ -40,6 +40,24 @@ struct AddonClientTests {
             == "https://addon.example/config123/catalog/movie/top/search=the%20office%20%26%20co&skip=100.json")
     }
 
+    @Test func preservesEncodedConfigurationPaths() throws {
+        let manifestURL = "https://addon.example/config%2Fpart%3Fvalue%25/manifest.json"
+        let client = try AddonClient(manifestURL: manifestURL)
+
+        #expect(client.manifestURL == manifestURL)
+        #expect(client.resourceURL("meta", type: "movie", id: "tt0111161").absoluteString
+            == "https://addon.example/config%2Fpart%3Fvalue%25/meta/movie/tt0111161.json")
+    }
+
+    @Test func keepsQueryAndFragmentAfterResourcePaths() throws {
+        let manifestURL = "https://addon.example/config/manifest.json?token=example%2Fvalue#install"
+        let client = try AddonClient(manifestURL: manifestURL)
+
+        #expect(client.manifestURL == manifestURL)
+        #expect(client.resourceURL("stream", type: "series", id: "tt0903747:1:1").absoluteString
+            == "https://addon.example/config/stream/series/tt0903747%3A1%3A1.json?token=example%2Fvalue#install")
+    }
+
     @Test func passesTheFilenameToSubtitleAddons() {
         let url = client.resourceURL("subtitles", type: "movie", id: "tt0111161", extra: [
             (name: "filename", value: "Example.Movie.2024.1080p.mkv"),

@@ -19,7 +19,7 @@ struct HomeView: View {
             TVHome(sources: sources)
             #else
             ScrollView {
-                VStack(alignment: .leading, spacing: 28) {
+                LazyVStack(alignment: .leading, spacing: 28) {
                     FeaturedCarousel(source: sources[0])
                     ContinueWatchingRow()
                     MyListRow()
@@ -142,6 +142,8 @@ private struct FeaturedCarousel: View {
         .scrollPosition(id: $currentID)
         .scrollIndicators(.hidden)
         .frame(height: height)
+        // Landscape safe areas must not expose the neighboring page's content.
+        .clipped()
         .overlay(alignment: .bottom) {
             if items.count > 1 {
                 pageDots.padding(.bottom, 16)
@@ -260,7 +262,7 @@ private struct FeaturedPage: View {
     }
 
     private var isStarted: Bool {
-        library.continueWatching.contains { $0.item.metaID == meta.id }
+        library.isInProgress(metaID: meta.id)
     }
 
     /// Movies go straight to their sources. A series needs its episodes first, to know which

@@ -50,6 +50,19 @@ struct LibraryStoreTests {
         #expect(store.continueWatching.map(\.item.id) == ["tt9:1:2", "tt1"])
     }
 
+    @Test func inProgressUsesTheLatestEpisodeRatherThanOlderUnfinishedOnes() {
+        let store = LibraryStore(defaults: defaults)
+        #expect(!store.isInProgress(metaID: "tt9"))
+        store.record(episode(1, 1), position: 300, duration: 2000, at: t0)
+        #expect(store.isInProgress(metaID: "tt9"))
+        store.record(episode(1, 2), position: 1990, duration: 2000, at: t0 + 1)
+        #expect(!store.isInProgress(metaID: "tt9"))
+        store.mergeRemote(episode(1, 3), fraction: 0.001, estimatedDuration: 2000, at: t0 + 2)
+        #expect(!store.isInProgress(metaID: "tt9"))
+        store.record(episode(1, 3), position: 300, duration: 2000, at: t0 + 3)
+        #expect(store.isInProgress(metaID: "tt9"))
+    }
+
     @Test func upNextResumesOrAdvances() {
         let store = LibraryStore(defaults: defaults)
         let videos = [video(0, 1), video(2, 1), video(1, 2), video(1, 1)]
@@ -87,6 +100,36 @@ struct LibraryStoreTests {
 
         #expect(store.progress.count == LibraryStore.maximumEntries)
         #expect(store.progress["tt0"] == nil)
+    }
+
+    @Test func ignoresNonFinitePlaybackWithoutBreakingPersistence() {
+        let store = LibraryStore(defaults: defaults)
+        store.record(movie, position: 600, duration: 6000, at: t0)
+        store.record(movie, position: .infinity, duration: 6000, at: t0 + 1)
+        store.record(movie, position: 900, duration: .infinity, at: t0 + 1)
+        store.record(movie, position: .nan, duration: 6000, at: t0 + 1)
+
+        #expect(store.progress[movie.id]?.position == 600)
+        #expect(LibraryStore(defaults: defaults).progress[movie.id]?.position == 600)
+    }
+
+    @Test func markingASeasonAdvancesFromItsLastEpisode() {
+        let store = LibraryStore(defaults: defaults)
+        let videos = (1...12).map { video(1, $0) } + [video(2, 1)]
+        store.markWatched((1...12).reversed().map { episode(1, $0) }, at: t0)
+
+        #expect(store.upNext(metaID: "tt9", videos: videos)?.video == video(2, 1))
+    }
+
+    @Test func markingWatchedAlsoBoundsStoredHistory() {
+        let store = LibraryStore(defaults: defaults)
+        let items = (0...LibraryStore.maximumEntries).map {
+            WatchItem(id: "tt\($0)", type: "movie", metaID: "tt\($0)", title: "")
+        }
+        store.markWatched(items, at: t0)
+
+        #expect(store.progress.count == LibraryStore.maximumEntries)
+        #expect(LibraryStore(defaults: defaults).progress.count == LibraryStore.maximumEntries)
     }
 
     @Test func myListTogglesAndPersistsNewestFirst() {

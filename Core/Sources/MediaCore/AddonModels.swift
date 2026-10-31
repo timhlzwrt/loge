@@ -84,7 +84,9 @@ public struct Video: Codable, Sendable, Hashable, Identifiable {
 
     /// False for announced episodes that haven't aired, which addons have no streams for yet.
     public func isReleased(asOf date: Date = .now) -> Bool {
-        releaseDate.map { $0 <= date } ?? true
+        // Not `<=`: the iOS 27.2 SDK binds it to a Foundation symbol that 27.2 betas lack,
+        // which crashes the details screen there.
+        releaseDate.map { !($0 > date) } ?? true
     }
 }
 

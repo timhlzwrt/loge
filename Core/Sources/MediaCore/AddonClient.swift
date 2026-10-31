@@ -21,11 +21,11 @@ public struct AddonClient: Sendable {
         guard var components = URLComponents(string: string),
               components.scheme == "https" || components.scheme == "http",
               components.host?.isEmpty == false,
-              components.path.hasSuffix("/manifest.json")
+              components.percentEncodedPath.hasSuffix("/manifest.json")
         else {
             throw AddonError.invalidManifestURL(string)
         }
-        components.path.removeLast("/manifest.json".count)
+        components.percentEncodedPath.removeLast("/manifest.json".count)
         guard let baseURL = components.url else {
             throw AddonError.invalidManifestURL(string)
         }
@@ -35,7 +35,7 @@ public struct AddonClient: Sendable {
 
     /// Normalised form of the URL passed to `init`; equal for equivalent inputs.
     public var manifestURL: String {
-        baseURL.absoluteString + "/manifest.json"
+        baseURL.appending(path: "manifest.json").absoluteString
     }
 
     public func manifest() async throws -> AddonManifest {
@@ -69,9 +69,11 @@ public struct AddonClient: Sendable {
         if !extra.isEmpty {
             path += "/" + extra.map { "\(Self.encode($0.name))=\(Self.encode($0.value))" }.joined(separator: "&")
         }
-        // The path is already percent-encoded, so append it to the string form;
-        // `appending(path:)` would encode the `%` signs a second time.
-        return URL(string: baseURL.absoluteString + "/" + path + ".json")!
+        // Preserve encoded configuration paths and keep query parameters after
+        // the resource path; `appending(path:)` would encode `%` a second time.
+        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
+        components.percentEncodedPath += "/" + path + ".json"
+        return components.url!
     }
 
     private func fetch<T: Decodable>(_ url: URL) async throws -> T {

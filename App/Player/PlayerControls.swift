@@ -74,6 +74,10 @@ struct PlayerControls: View {
                     .frame(width: 44, height: 44)
                     .buttonStyle(.glass)
                     .buttonBorderShape(.circle)
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(2)
+                    .padding(.horizontal, 12)
                 Spacer()
                 GlassCapsule {
                     if let pictureInPicture, pictureInPicture.isPossible {
@@ -84,34 +88,37 @@ struct PlayerControls: View {
                         .frame(width: 44, height: 44)
                 }
             }
-            Spacer()
-            transport
-                .frame(maxWidth: .infinity)
-            Spacer()
+            Spacer(minLength: 24)
             if let kind = adjustingTiming {
                 TimingPanel(player: player, kind: kind, onInteract: onInteract) { adjustingTiming = nil }
                     .frame(maxWidth: .infinity)
-                    .padding(.bottom, 12)
-            }
-            HStack(alignment: .center) {
-                Text(title)
-                    .font(.headline)
-                    .lineLimit(1)
-                Spacer()
-                GlassCapsule {
-                    SubtitlesMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen, adjustingTiming: $adjustingTiming)
-                    AudioMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen, adjustingTiming: $adjustingTiming)
-                    if let onChooseSource {
-                        Button("Sources", systemImage: "list.bullet", action: onChooseSource)
-                            .modifier(CapsuleIcon())
+            } else {
+                timeline
+                HStack {
+                    Spacer()
+                    GlassCapsule {
+                        SubtitlesMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen, adjustingTiming: $adjustingTiming)
+                        AudioMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen, adjustingTiming: $adjustingTiming)
+                        if let onChooseSource {
+                            Button("Sources", systemImage: "list.bullet", action: onChooseSource)
+                                .modifier(CapsuleIcon())
+                        }
                     }
                 }
+                .padding(.top, 12)
             }
-            .padding(.bottom, 8)
-            timeline
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay {
+            // Transport stays at the picture's center, independent of bar and panel heights.
+            if adjustingTiming == nil {
+                transport
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .ignoresSafeArea()
+            }
+        }
         .foregroundStyle(.white)
         .buttonStyle(.plain)
         .background { scrims }
@@ -119,11 +126,12 @@ struct PlayerControls: View {
 
     /// Plain symbols, no circles: the picture is the background.
     private var transport: some View {
-        HStack(spacing: 64) {
+        HStack(spacing: 40) {
             Button("Back 10 seconds", systemImage: "gobackward.10") {
                 player.seek(by: -10)
                 onInteract()
             }
+            .frame(width: 56, height: 56)
             Group {
                 if player.isWaiting {
                     ProgressView().controlSize(.large)
@@ -132,11 +140,12 @@ struct PlayerControls: View {
                 }
             }
             .font(.system(size: 44))
-            .frame(width: 56, height: 56)
+            .frame(width: 72, height: 72)
             Button("Forward 10 seconds", systemImage: "goforward.10") {
                 player.seek(by: 10)
                 onInteract()
             }
+            .frame(width: 56, height: 56)
         }
         .labelStyle(.iconOnly)
         .font(.system(size: 30, weight: .medium))
@@ -341,11 +350,12 @@ extension MPVPlayer {
         var byName: [String: Track] = [:]
         var order: [String] = []
         for track in tracks where track.kind == kind {
-            if let existing = byName[track.displayName] {
-                if track.isSelected && !existing.isSelected { byName[track.displayName] = track }
+            let name = track.displayName
+            if let existing = byName[name] {
+                if track.isSelected && !existing.isSelected { byName[name] = track }
             } else {
-                byName[track.displayName] = track
-                order.append(track.displayName)
+                byName[name] = track
+                order.append(name)
             }
         }
         return order.compactMap { byName[$0] }
@@ -452,25 +462,35 @@ private struct TimingPanel: View {
     private var delay: Double { kind == .sub ? player.subtitleDelay : player.audioDelay }
 
     var body: some View {
-        HStack(spacing: 20) {
-            Text(kind == .sub ? "Subtitle Timing" : "Audio Timing")
-                .font(.subheadline.weight(.semibold))
-            Button("Earlier", systemImage: "minus") { shift(by: -0.1) }
-                .accessibilityLabel(kind == .sub ? "Show subtitles earlier" : "Play sound earlier")
-            Text(TimingFormat.delay(delay))
-                .font(.subheadline.monospacedDigit())
-                .frame(minWidth: 64)
-            Button("Later", systemImage: "plus") { shift(by: 0.1) }
-                .accessibilityLabel(kind == .sub ? "Show subtitles later" : "Play sound later")
-            Button("Reset") { shift(by: -delay) }
-                .disabled(delay == 0)
-            Button("Done", action: onDone)
-                .font(.subheadline.weight(.semibold))
+        VStack(spacing: 4) {
+            HStack {
+                Text(kind == .sub ? "Subtitle Timing" : "Audio Timing")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Button("Done", action: onDone)
+                    .frame(minWidth: 44, minHeight: 44)
+            }
+            HStack(spacing: 12) {
+                Button("Earlier", systemImage: "minus") { shift(by: -0.1) }
+                    .accessibilityLabel(kind == .sub ? "Show subtitles earlier" : "Play sound earlier")
+                    .frame(minWidth: 44, minHeight: 44)
+                Text(TimingFormat.delay(delay))
+                    .font(.subheadline.monospacedDigit())
+                    .frame(minWidth: 64)
+                Button("Later", systemImage: "plus") { shift(by: 0.1) }
+                    .accessibilityLabel(kind == .sub ? "Show subtitles later" : "Play sound later")
+                    .frame(minWidth: 44, minHeight: 44)
+                Spacer(minLength: 0)
+                Button("Reset") { shift(by: -delay) }
+                    .frame(minWidth: 44, minHeight: 44)
+                    .disabled(delay == 0)
+            }
         }
         .labelStyle(.iconOnly)
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
-        .glassEffect(in: .capsule)
+        .frame(maxWidth: 460)
+        .glassEffect(in: .rect(cornerRadius: 20))
     }
 
     private func shift(by seconds: Double) {

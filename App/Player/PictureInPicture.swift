@@ -1,11 +1,14 @@
 import AVKit
+import Synchronization
 
 /// Picture in Picture for an `MPVPlayer`'s video layer. The floating window's play, pause
 /// and skip buttons drive mpv, and its progress follows the player's clock.
 @MainActor @Observable
 final class PictureInPicture: NSObject {
     private(set) var isActive = false
+    private(set) var isStarting = false
     private(set) var isPossible = false
+    private(set) var failureMessage: String?
 
     /// The floating window took over; the player screen can close.
     @ObservationIgnored var onStart: () -> Void = {}
@@ -13,16 +16,27 @@ final class PictureInPicture: NSObject {
     @ObservationIgnored var onRestore: (@escaping (Bool) -> Void) -> Void = { $0(false) }
     /// The window was closed rather than expanded, which ends playback.
     @ObservationIgnored var onClose: () -> Void = {}
+    @ObservationIgnored var onFailure: () -> Void = {}
 
     @ObservationIgnored private let player: MPVPlayer
     @ObservationIgnored private var controller: AVPictureInPictureController?
     @ObservationIgnored private var possibleObservation: NSKeyValueObservation?
     @ObservationIgnored private var isRestoring = false
+    @ObservationIgnored private var isStopping = false
     @ObservationIgnored private var playbackObservation: Task<Void, Never>?
+    private struct PlaybackState: Sendable {
+        var timeRange = CMTimeRange.invalid
+        var isPaused = true
+    }
+    // AVKit queries playback synchronously from outside the main actor.
+    @ObservationIgnored nonisolated private let playbackState = Mutex(PlaybackState())
 
     init(player: MPVPlayer) {
         self.player = player
         super.init()
+        playbackState.withLock {
+            $0 = PlaybackState(timeRange: player.playbackTimeRange, isPaused: player.status != .playing)
+        }
         guard AVPictureInPictureController.isPictureInPictureSupported() else { return }
         let controller = AVPictureInPictureController(contentSource: .init(
             sampleBufferDisplayLayer: player.layer, playbackDelegate: self))
@@ -40,8 +54,11 @@ final class PictureInPicture: NSObject {
         // The floating window asks for the time range and paused state only when told
         // they changed: on every play, pause, seek, and once a second as time passes.
         playbackObservation = Task { [weak self, player] in
-            for await _ in Observations({ (player.status, player.position) }) {
-                self?.controller?.invalidatePlaybackState()
+            for await _ in Observations({ (player.status, player.position, player.duration, player.speed) }) {
+                guard let self else { return }
+                let state = PlaybackState(timeRange: player.playbackTimeRange, isPaused: player.status != .playing)
+                playbackState.withLock { $0 = state }
+                self.controller?.invalidatePlaybackState()
             }
         }
     }
@@ -51,13 +68,39 @@ final class PictureInPicture: NSObject {
         playbackObservation?.cancel()
     }
 
-    func start() { controller?.startPictureInPicture() }
-    func stop() { controller?.stopPictureInPicture() }
+    func start() {
+        guard isPossible, !isActive, !isStarting else { return }
+        isStopping = false
+        failureMessage = nil
+        isStarting = true
+        controller?.startPictureInPicture()
+    }
+
+    func stop() {
+        isStopping = true
+        isStarting = false
+        playbackObservation?.cancel()
+        playbackObservation = nil
+        possibleObservation?.invalidate()
+        possibleObservation = nil
+        controller?.stopPictureInPicture()
+    }
+
+    func dismissFailure() { failureMessage = nil }
 }
 
 extension PictureInPicture: AVPictureInPictureControllerDelegate {
     nonisolated func pictureInPictureControllerWillStartPictureInPicture(_ controller: AVPictureInPictureController) {
-        MainActor.assumeIsolated {
+        Task { @MainActor [weak self] in
+            guard let self, !isStopping else { return }
+            isStarting = true
+        }
+    }
+
+    nonisolated func pictureInPictureControllerDidStartPictureInPicture(_ controller: AVPictureInPictureController) {
+        Task { @MainActor [weak self] in
+            guard let self, !isStopping else { return }
+            isStarting = false
             isActive = true
             onStart()
         }
@@ -67,18 +110,21 @@ extension PictureInPicture: AVPictureInPictureControllerDelegate {
         _ controller: AVPictureInPictureController,
         restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completionHandler: @escaping (Bool) -> Void
     ) {
-        // AVKit calls this on the main thread, where the handler is later called too.
+        // Transfer AVKit's completion to the main actor and always answer it there.
         nonisolated(unsafe) let completionHandler = completionHandler
-        MainActor.assumeIsolated {
+        Task { @MainActor [weak self] in
+            guard let self, !isStopping else { completionHandler(false); return }
             isRestoring = true
             onRestore(completionHandler)
         }
     }
 
     nonisolated func pictureInPictureControllerDidStopPictureInPicture(_ controller: AVPictureInPictureController) {
-        MainActor.assumeIsolated {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            isStarting = false
             isActive = false
-            if !isRestoring { onClose() }
+            if !isRestoring && !isStopping { onClose() }
             isRestoring = false
         }
     }
@@ -87,21 +133,32 @@ extension PictureInPicture: AVPictureInPictureControllerDelegate {
         _ controller: AVPictureInPictureController,
         failedToStartPictureInPictureWithError error: Error
     ) {
-        MainActor.assumeIsolated { isActive = false }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            isStarting = false
+            isActive = false
+            if !isStopping {
+                failureMessage = "Picture in Picture couldn't start. Try again while the video is playing."
+                onFailure()
+            }
+        }
     }
 }
 
 extension PictureInPicture: AVPictureInPictureSampleBufferPlaybackDelegate {
     nonisolated func pictureInPictureController(_ controller: AVPictureInPictureController, setPlaying playing: Bool) {
-        MainActor.assumeIsolated { playing ? player.play() : player.pause() }
+        Task { @MainActor [weak self] in
+            guard let self, !isStopping else { return }
+            playing ? player.play() : player.pause()
+        }
     }
 
     nonisolated func pictureInPictureControllerTimeRangeForPlayback(_ controller: AVPictureInPictureController) -> CMTimeRange {
-        MainActor.assumeIsolated { player.playbackTimeRange }
+        playbackState.withLock { $0.timeRange }
     }
 
     nonisolated func pictureInPictureControllerIsPlaybackPaused(_ controller: AVPictureInPictureController) -> Bool {
-        MainActor.assumeIsolated { player.status != .playing }
+        playbackState.withLock { $0.isPaused }
     }
 
     nonisolated func pictureInPictureController(
@@ -114,7 +171,10 @@ extension PictureInPicture: AVPictureInPictureSampleBufferPlaybackDelegate {
         skipByInterval skipInterval: CMTime,
         completion completionHandler: @escaping () -> Void
     ) {
-        MainActor.assumeIsolated { player.seek(by: skipInterval.seconds) }
-        completionHandler()
+        nonisolated(unsafe) let completionHandler = completionHandler
+        Task { @MainActor [weak self] in
+            if let self, !isStopping { player.seek(by: skipInterval.seconds) }
+            completionHandler()
+        }
     }
 }

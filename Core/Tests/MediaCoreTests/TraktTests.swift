@@ -87,6 +87,37 @@ struct RemoteProgressTests {
         #expect(store.estimatedFraction(for: "tt1") == nil)
     }
 
+    @Test func finishedEstimatedItemsReplayFromTheBeginning() {
+        let store = LibraryStore(defaults: defaults)
+        store.mergeRemote(movie, fraction: 0.98, estimatedDuration: 6000, at: t0)
+        #expect(store.estimatedFraction(for: movie.id) == nil)
+        #expect(store.resumePosition(for: movie.id) == nil)
+
+        store.markWatched([movie], at: t0 + 1)
+        #expect(store.estimatedFraction(for: movie.id) == nil)
+    }
+
+    @Test func usesRuntimeAfterAnUnplayedItemWasMarkedWatched() {
+        let store = LibraryStore(defaults: defaults)
+        store.markWatched([movie], at: t0)
+        store.mergeRemote(movie, fraction: 0.5, estimatedDuration: 6000, at: t0 + 60)
+
+        #expect(store.progress[movie.id]?.position == 3000)
+        #expect(store.estimatedFraction(for: movie.id) == 0.5)
+    }
+
+    @Test func rejectsNonFiniteRemoteProgressAndClampsItsRange() {
+        let store = LibraryStore(defaults: defaults)
+        store.mergeRemote(movie, fraction: .nan, estimatedDuration: 6000, at: t0)
+        store.mergeRemote(movie, fraction: 0.5, estimatedDuration: .infinity, at: t0)
+        #expect(store.progress.isEmpty)
+
+        store.mergeRemote(movie, fraction: 2, estimatedDuration: 6000, at: t0)
+        #expect(store.progress[movie.id]?.fraction == 1)
+        store.mergeRemote(movie, fraction: -1, estimatedDuration: 6000, at: t0 + 1)
+        #expect(store.progress[movie.id]?.fraction == 0)
+    }
+
     @Test func keepsNewerLocalProgress() {
         let store = LibraryStore(defaults: defaults)
         store.record(movie, position: 600, duration: 5000, at: t0 + 60)
