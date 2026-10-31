@@ -83,6 +83,9 @@ Phase 1: `vo=avfoundation` video output, Picture in Picture (button, automatic o
 restore, next episode while floating), Now Playing and remote commands, subtitles from
 subtitle addons and streams with timing adjustment, automatic fallback to another source,
 tvOS frame-rate and dynamic-range matching, Trakt sign-in, scrobbling and progress sync.
+Phase 2: sources list read into quality, HDR, codec, audio and size (`StreamDetails`) with a
+best-quality order, retry for unreachable addons, director and cast on details, the Mac's
+Playback menu, VoiceOver labels in the player.
 
 Decisions: MPVKit player (vendored with an AVFoundation video output); addons added as manual
 manifest URLs; cross-device sync via Trakt (not iCloud), with the user's own Trakt app keys
@@ -92,11 +95,9 @@ Picture is required; downloads are out of scope; UI is English only for now.
 
 Next, in plan order:
 
-1. Phase 2, polish across iOS, iPadOS, tvOS and macOS: readable sources list (parse quality,
-   size and codec, sorting); tvOS Top Shelf with Continue Watching (check App Groups work with a
-   free account), swipe-to-scrub, focus pass; Mac menu commands and shortcuts, screens beyond
-   Home; consistent loading, empty and error states with retry; VoiceOver and Dynamic Type;
-   cast and director on details.
+1. Phase 2 leftovers: tvOS Top Shelf with Continue Watching needs an App Group shared with an
+   extension, which free (personal team) signing likely doesn't allow; confirm before building.
+   tvOS swipe-to-scrub and Mac screens beyond Home need checking by hand.
 2. Phase 3: watch history screen.
 3. Phase 4, onto devices: fix the iPhone Release orientation warning, then sideload.
 

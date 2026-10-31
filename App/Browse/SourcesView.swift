@@ -14,9 +14,14 @@ struct SourcesRoute: Hashable {
     var id: String { item.id }
 }
 
-/// Every playable source from the user's stream addons, grouped by addon in their order.
+/// Every playable source from the user's stream addons, grouped by addon in their order
+/// or as one list with the best quality first.
 struct SourcesView: View {
     let route: SourcesRoute
+
+    enum Order: String {
+        case addons, quality
+    }
 
     @Environment(AddonStore.self) private var store
     @Environment(LibraryStore.self) private var library
@@ -25,6 +30,7 @@ struct SourcesView: View {
     @State private var hasAutoplayed = false
     @State private var playedAutomatically = false
     @Environment(PlaybackSession.self) private var playback
+    @AppStorage("sourcesOrder") private var order = Order.addons
 
     var body: some View {
         let providers = store.addons.streamProviders(type: route.type, id: route.id)
@@ -65,18 +71,29 @@ struct SourcesView: View {
                 Label("Starting with your last source…", systemImage: "play.circle")
                     .foregroundStyle(.secondary)
             }
-            ForEach(providers) { provider in
-                Section(provider.name) {
-                    switch results[provider.id] {
-                    case nil:
-                        ProgressView()
-                    case .failure:
-                        Text("Couldn't reach \(provider.name).")
-                            .foregroundStyle(.secondary)
-                    case .success(let streams):
-                        section(for: streams, from: provider)
+            Picker("Order", selection: $order) {
+                Text("Addon Order").tag(Order.addons)
+                Text("Best Quality").tag(Order.quality)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .listRowBackground(Color.clear)
+            switch order {
+            case .addons:
+                ForEach(providers) { provider in
+                    Section(provider.name) {
+                        switch results[provider.id] {
+                        case nil:
+                            ProgressView()
+                        case .failure:
+                            unreachable(provider)
+                        case .success(let streams):
+                            section(for: streams, from: provider)
+                        }
                     }
                 }
+            case .quality:
+                bestFirst(providers)
             }
         }
         #if !os(tvOS)
@@ -88,14 +105,7 @@ struct SourcesView: View {
     private func section(for streams: [StreamSource], from provider: StreamProvider) -> some View {
         let playable = streams.filter { $0.playbackURL != nil }
         ForEach(Array(playable.enumerated()), id: \.offset) { _, stream in
-            Button {
-                play(stream, from: provider)
-            } label: {
-                StreamRow(stream: stream, fallbackName: provider.name)
-            }
-            #if !os(tvOS)
-            .buttonStyle(.plain)
-            #endif
+            row(stream, from: provider, showsProvider: false)
         }
         if playable.isEmpty && streams.isEmpty {
             Text("No sources found.")
@@ -107,6 +117,62 @@ struct SourcesView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    /// Every addon's sources in one list, best first; ties keep the user's addon order.
+    @ViewBuilder
+    private func bestFirst(_ providers: [StreamProvider]) -> some View {
+        let ranked = providers.enumerated()
+            .flatMap { index, provider -> [(Int, StreamProvider, StreamSource, StreamDetails)] in
+                guard case .success(let streams) = results[provider.id] else { return [] }
+                return streams.filter { $0.playbackURL != nil }.map { (index, provider, $0, StreamDetails($0)) }
+            }
+            .enumerated()
+            .sorted { lhs, rhs in
+                let (a, b) = (lhs.element.3, rhs.element.3)
+                if StreamDetails.bestFirst(a, b) { return true }
+                if StreamDetails.bestFirst(b, a) { return false }
+                return lhs.offset < rhs.offset
+            }
+            .map(\.element)
+        Section {
+            ForEach(Array(ranked.enumerated()), id: \.offset) { _, entry in
+                row(entry.2, from: entry.1, showsProvider: providers.count > 1)
+            }
+            if providers.contains(where: { results[$0.id] == nil }) {
+                ProgressView()
+            }
+            ForEach(providers.filter { if case .failure = results[$0.id] { true } else { false } }) { provider in
+                unreachable(provider)
+            }
+            if ranked.isEmpty && providers.allSatisfy({ results[$0.id] != nil }) {
+                Text("No sources found.")
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func unreachable(_ provider: StreamProvider) -> some View {
+        HStack {
+            Text("Couldn't reach \(provider.name).")
+                .foregroundStyle(.secondary)
+            Spacer()
+            Button("Retry") {
+                results[provider.id] = nil
+                Task { await load([provider]) }
+            }
+        }
+    }
+
+    private func row(_ stream: StreamSource, from provider: StreamProvider, showsProvider: Bool) -> some View {
+        Button {
+            play(stream, from: provider)
+        } label: {
+            StreamRow(stream: stream, providerName: provider.name, showsProvider: showsProvider)
+        }
+        #if !os(tvOS)
+        .buttonStyle(.plain)
+        #endif
     }
 
     private func load(_ providers: [StreamProvider]) async {
@@ -189,29 +255,37 @@ struct SourcesView: View {
     }
 }
 
-/// Addons put the quality in `name` ("Debrid\n1080p") and file details in
-/// `description` or the older `title`, so they're laid out side by side like Stremio.
+/// One source: what the picture will look like first, then the file, then the addon's own
+/// text, which can mention things the tags don't, such as languages or the release group.
 private struct StreamRow: View {
     let stream: StreamSource
-    let fallbackName: String
+    let providerName: String
+    /// In the best-first list, rows from several addons sit together.
+    let showsProvider: Bool
 
     var body: some View {
-        HStack(alignment: .top, spacing: 16) {
-            Text(stream.cleanName ?? fallbackName)
+        let details = StreamDetails(stream)
+        let fileLine = [details.file, details.isCached == false ? "Not cached" : nil, showsProvider ? providerName : nil]
+            .compactMap { $0 }
+            .joined(separator: " · ")
+        VStack(alignment: .leading, spacing: 3) {
+            // Without recognisable tags, the addon's name line is the best summary.
+            Text(details.picture ?? stream.cleanName?.components(separatedBy: .newlines).joined(separator: " ") ?? providerName)
                 .font(.subheadline.weight(.semibold))
-                .frame(width: nameWidth, alignment: .leading)
-            Text(stream.description ?? stream.title ?? stream.behaviorHints?.filename ?? "")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            if !fileLine.isEmpty {
+                Text(fileLine)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            if let text = stream.description ?? stream.title ?? stream.behaviorHints?.filename {
+                Text(text)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 4)
         .contentShape(.rect)
     }
-
-    #if os(tvOS)
-    private let nameWidth: CGFloat = 240
-    #else
-    private let nameWidth: CGFloat = 96
-    #endif
 }

@@ -133,11 +133,14 @@ struct PlayerControls: View {
                         onInteract()
                     }
                 )
+                .accessibilityLabel("Playback position")
+                .accessibilityValue(format(scrubPosition ?? player.position, longForm: duration >= 3600))
                 #endif
                 HStack {
                     #if os(tvOS)
                     // tvOS has no on-screen play button, so this is the only sign playback is paused.
                     Image(systemName: player.status == .paused ? "pause.fill" : "play.fill")
+                        .accessibilityLabel(player.status == .paused ? "Paused" : "Playing")
                     #endif
                     Text(format(scrubPosition ?? player.position, longForm: duration >= 3600))
                     Spacer()
