@@ -22,6 +22,7 @@ accent, system font, no cards/gradients/badges.
   controls and menus, `PictureInPicture`, `NowPlaying`, next-episode countdown, tvOS remote
   swipe reader.
 - `App/Settings/` — addons (install/reorder/remove) and playback language preferences.
+- `Tools/run-device.sh` — Debug build onto the connected iPhone/iPad with the free Personal Team.
 - `Tools/test-addon.py` — local stream addon at `http://127.0.0.1:8765/manifest.json` with
   test streams (MKV, HEVC, multi-track HLS, header-protected, broken, torrent).
 - `Tools/render-icons.swift` — regenerates `App/Assets.xcassets` (icons, top shelf, accent);
@@ -40,7 +41,12 @@ xcodegen generate                                   # after adding/removing file
 xcodebuild -project MediaApp.xcodeproj -scheme MediaApp -destination 'generic/platform=iOS Simulator' -derivedDataPath .build/xcode build
 # also: 'generic/platform=tvOS Simulator' and 'platform=macOS'
 Tools/build-ipa.sh                                  # unsigned .ipa files in .build/ipa
+Tools/run-device.sh [--console]                     # build, install, launch on the USB iPhone/iPad
 ```
+
+`run-device.sh` signs with the free Personal Team signed in to Xcode (Settings > Accounts);
+the phone needs Developer Mode on (Settings > Privacy & Security) and the developer trusted
+once (Settings > General > VPN & Device Management). Free installs expire after 7 days.
 
 Devices are installed without a paid account: Sideloadly (iPhone/iPad) and atvloadly
 (Apple TV) sign the `.ipa` files with a free Apple ID and refresh them before the 7 days run out.
