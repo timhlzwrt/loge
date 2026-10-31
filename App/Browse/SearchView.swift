@@ -40,7 +40,11 @@ struct SearchView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.canvas)
+        #if os(iOS)
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Movies and series")
+        #else
         .searchable(text: $query, prompt: "Movies and series")
+        #endif
         .onSubmit(of: .search) { remember(query) }
         // Opening a result also leaves this screen, which is when a search proved useful.
         .onDisappear { remember(submittedQuery) }

@@ -17,6 +17,7 @@ final class NowPlaying {
     private var request: PlaybackRequest?
     private var artwork: MPMediaItemArtwork?
     private var tasks: [Task<Void, Never>] = []
+    private var artworkTask: Task<Void, Never>?
     private var commandTargets: [(MPRemoteCommand, Any)] = []
 
     init(player: MPVPlayer) {
@@ -24,25 +25,27 @@ final class NowPlaying {
         registerCommands()
         tasks.append(Task { [weak self, player] in
             // Elapsed time is extrapolated from the rate, so whole-second updates are enough.
-            for await _ in Observations({ (player.status, player.position, player.duration) }) {
+            for await _ in Observations({ (player.status, player.position, player.duration, player.speed) }) {
                 self?.update()
             }
         })
     }
 
     func show(_ request: PlaybackRequest) {
+        artworkTask?.cancel()
         self.request = request
         artwork = nil
         update()
         guard let url = request.item.flatMap({ $0.thumbnail ?? $0.background ?? $0.poster }).flatMap(URL.init(string:)) else { return }
-        tasks.append(Task { [weak self] in
+        artworkTask = Task { [weak self] in
             guard let (data, _) = try? await URLSession.shared.data(from: url),
+                  !Task.isCancelled,
                   let image = PlatformImage(data: data),
                   self?.request == request
             else { return }
             self?.artwork = Self.artwork(image)
             self?.update()
-        })
+        }
     }
 
     /// MediaPlayer asks for the image on its own queue, so the closure mustn't belong to the main actor.
@@ -51,6 +54,10 @@ final class NowPlaying {
     }
 
     func clear() {
+        request = nil
+        artwork = nil
+        artworkTask?.cancel()
+        artworkTask = nil
         tasks.forEach { $0.cancel() }
         tasks = []
         for (command, target) in commandTargets {

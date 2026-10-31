@@ -44,3 +44,9 @@ them with a free Apple ID and refresh them before the seven days run out.
 | `Tools/`        | Test addon, icon renderer, `.ipa` builder                           |
 
 mpv comes through MPVKit's LGPL build.
+
+## Implementation notes
+
+See [the app overview](docs/APP_OVERVIEW.md) for ownership, data flow,
+platform behavior, persistence, review fixes and follow-up work, and
+[review validation](docs/REVIEW_VALIDATION.md) for checks actually performed.
