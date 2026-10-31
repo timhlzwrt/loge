@@ -118,7 +118,7 @@ struct SourcesView: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 10) {
                 Text(route.item.title)
-                    .font(.system(size: 76, weight: .light))
+                    .font(.system(size: 76, weight: .bold))
                     .lineLimit(2)
                     .minimumScaleFactor(0.6)
                 if let subtitle = [route.item.episodeCode, route.item.episodeTitle].compactMap({ $0 }).joined(separator: " · ").nilIfEmpty {
