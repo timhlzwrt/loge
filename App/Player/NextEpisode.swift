@@ -30,7 +30,7 @@ enum NextEpisode {
 
     /// When the "Next Episode" button appears: where the credits usually start.
     static func offerTime(duration: Double) -> Double {
-        duration - min(max(duration * 0.04, 30), 150)
+        max(duration * 0.9, duration - min(max(duration * 0.04, 30), 150))
     }
 }
 

@@ -44,6 +44,7 @@ final class MPVPlayer {
     /// Seconds the subtitles or the sound are shifted; positive shows or plays them later.
     private(set) var subtitleDelay = 0.0
     private(set) var audioDelay = 0.0
+    private(set) var trackError: String?
 
     struct VideoFormat: Equatable, Sendable {
         enum DynamicRange: Sendable { case sdr, hdr10, hlg, dolbyVision }
@@ -122,6 +123,16 @@ final class MPVPlayer {
 
     @ObservationIgnored private let handle: OpaquePointer
     @ObservationIgnored private var isShutDown = false
+    @ObservationIgnored private var defaultUserAgent = ""
+    private struct TrackOperation {
+        var arguments: [String]
+        let kind: Track.Kind?
+    }
+    @ObservationIgnored private var trackOperations: [TrackOperation] = []
+    @ObservationIgnored private var activeTrackOperation: (id: UInt64, operation: TrackOperation, preempted: Bool)?
+    @ObservationIgnored private var nextCommandID: UInt64 = 0
+    @ObservationIgnored private var pendingLoad: (() -> Void)?
+    @ObservationIgnored private var hasSelectedSubtitles = false
 
     init() {
         // mpv_create only fails when allocation fails.
@@ -157,13 +168,18 @@ final class MPVPlayer {
             return
         }
 
+        if let value = mpv_get_property_string(handle, "user-agent") {
+            defaultUserAgent = String(cString: value)
+            mpv_free(value)
+        }
+
         mpv_observe_property(handle, 0, "pause", MPV_FORMAT_FLAG)
         mpv_observe_property(handle, 0, "paused-for-cache", MPV_FORMAT_FLAG)
         mpv_observe_property(handle, 0, "eof-reached", MPV_FORMAT_FLAG)
         mpv_observe_property(handle, 0, "time-pos", MPV_FORMAT_DOUBLE)
         mpv_observe_property(handle, 0, "duration", MPV_FORMAT_DOUBLE)
-        // Observed only as change signals; the values are read through their sub-properties.
-        mpv_observe_property(handle, 0, "track-list", MPV_FORMAT_NONE)
+        mpv_observe_property(handle, 0, "track-list", MPV_FORMAT_NODE)
+        // Video format is read through its sub-properties when it changes.
         mpv_observe_property(handle, 0, "video-params", MPV_FORMAT_NONE)
 
         startEventThread()
@@ -186,16 +202,31 @@ final class MPVPlayer {
         subtitleLanguage: String? = nil
     ) {
         guard !isShutDown else { return }
+        trackOperations = []
+        trackError = nil
         loadState = .loading
         position = 0
         duration = nil
         tracks = []
+        if let activeTrackOperation {
+            // Finish or abort the old file's subtitle load before issuing the next loadfile.
+            pendingLoad = { [weak self] in
+                self?.load(url, headers: headers, startAt: startAt,
+                           audioLanguage: audioLanguage, subtitleLanguage: subtitleLanguage)
+            }
+            mpv_abort_async_command(handle, activeTrackOperation.id)
+            return
+        }
+        pendingLoad = nil
+        hasSelectedSubtitles = false
         // mpv sends User-Agent from its own option, so a header field would be ignored.
         var fields = headers
+        var userAgent = defaultUserAgent
         if let key = fields.keys.first(where: { $0.caseInsensitiveCompare("User-Agent") == .orderedSame }),
-           let userAgent = fields.removeValue(forKey: key) {
-            setProperty("user-agent", userAgent)
+           let value = fields.removeValue(forKey: key) {
+            userAgent = value
         }
+        setProperty("user-agent", userAgent)
         // Built item by item: the single-string form splits on commas, which header values may contain.
         command(["change-list", "http-header-fields", "clr", ""])
         for (name, value) in fields.sorted(by: { $0.key < $1.key }) {
@@ -271,13 +302,28 @@ final class MPVPlayer {
 
     /// Adds a subtitle file as a track; `select` also switches to it.
     func addSubtitle(url: String, title: String, language: String, select: Bool) {
-        command(["sub-add", url, select ? "select" : "auto", title, language])
+        enqueueTrackOperation(TrackOperation(
+            arguments: ["sub-add", url, select && !hasSelectedSubtitles ? "select" : "auto", title, language], kind: nil))
     }
 
     /// Pass nil to turn subtitles off.
     func select(_ track: Track?, kind: Track.Kind) {
-        setProperty(kind == .audio ? "aid" : "sid", track.map { String($0.id) } ?? "no")
+        trackError = nil
+        if kind == .sub {
+            hasSelectedSubtitles = true
+            // A subtitle still downloading must not override the user's explicit choice.
+            for index in trackOperations.indices where trackOperations[index].arguments.first == "sub-add" {
+                trackOperations[index].arguments[2] = "auto"
+            }
+        }
+        let operation = TrackOperation(
+            arguments: ["set", kind == .audio ? "aid" : "sid", track.map { String($0.id) } ?? "no"], kind: kind)
+        trackOperations.removeAll { $0.kind == kind }
+        if activeTrackOperation?.operation.arguments == operation.arguments { return }
+        enqueueTrackOperation(operation)
     }
+
+    func dismissTrackError() { trackError = nil }
 
     /// Detaches video while the app is in the background without Picture in Picture;
     /// the system stops a hidden video layer, and reattaching starts it afresh.
@@ -289,12 +335,16 @@ final class MPVPlayer {
     func shutDown() {
         guard !isShutDown else { return }
         isShutDown = true
-        command(["quit"], ignoringShutdown: true)
+        trackOperations = []
+        pendingLoad = nil
+        activeTrackOperation = nil
+        command(["quit"], ignoringShutdown: true, replyID: 0)
     }
 
     // MARK: - Events
 
     private enum Event: Sendable {
+        case trackCommandReply(UInt64, Int32)
         case fileLoaded
         case failed(String)
         case flag(String, Bool)
@@ -331,6 +381,8 @@ final class MPVPlayer {
 
     private nonisolated static func parse(_ event: mpv_event, handle: OpaquePointer) -> Event? {
         switch event.event_id {
+        case MPV_EVENT_COMMAND_REPLY:
+            return .trackCommandReply(event.reply_userdata, event.error)
         case MPV_EVENT_FILE_LOADED:
             return .fileLoaded
         case MPV_EVENT_END_FILE:
@@ -342,7 +394,8 @@ final class MPVPlayer {
             guard let property = event.data?.load(as: mpv_event_property.self) else { return nil }
             let name = String(cString: property.name)
             if name == "track-list" {
-                return .tracks(readTracks(handle))
+                guard property.format == MPV_FORMAT_NODE, let data = property.data else { return .tracks([]) }
+                return .tracks(readTracks(data.load(as: mpv_node.self)))
             }
             if name == "video-params" {
                 return .videoFormat(readVideoFormat(handle))
@@ -385,34 +438,49 @@ final class MPVPlayer {
                            dynamicRange: dynamicRange)
     }
 
-    private nonisolated static func readTracks(_ handle: OpaquePointer) -> [Track] {
-        func string(_ name: String) -> String? {
-            guard let value = mpv_get_property_string(handle, name) else { return nil }
-            defer { mpv_free(value) }
-            return String(cString: value)
-        }
-        let count = string("track-list/count").flatMap(Int.init) ?? 0
-        return (0..<count).compactMap { index in
-            let prefix = "track-list/\(index)/"
-            guard let kind = string(prefix + "type").flatMap(Track.Kind.init(rawValue:)),
-                  let id = string(prefix + "id").flatMap(Int.init)
+    private nonisolated static func readTracks(_ node: mpv_node) -> [Track] {
+        guard node.format == MPV_FORMAT_NODE_ARRAY, let list = node.u.list?.pointee,
+              list.num > 0, let values = list.values else { return [] }
+        return (0..<Int(list.num)).compactMap { index in
+            let entry = values[index]
+            guard entry.format == MPV_FORMAT_NODE_MAP, let fields = entry.u.list?.pointee,
+                  fields.num > 0, let keys = fields.keys, let values = fields.values else { return nil }
+            var properties: [String: mpv_node] = [:]
+            for index in 0..<Int(fields.num) {
+                if let key = keys[index] { properties[String(cString: key)] = values[index] }
+            }
+            func string(_ name: String) -> String? {
+                guard let value = properties[name] else { return nil }
+                switch value.format {
+                case MPV_FORMAT_STRING: return value.u.string.map { String(cString: $0) }
+                case MPV_FORMAT_INT64: return String(value.u.int64)
+                case MPV_FORMAT_DOUBLE: return String(value.u.double_)
+                case MPV_FORMAT_FLAG: return value.u.flag == 0 ? "no" : "yes"
+                default: return nil
+                }
+            }
+            guard let kind = string("type").flatMap(Track.Kind.init(rawValue:)),
+                  let id = string("id").flatMap(Int.init)
             else { return nil } // Video tracks aren't selectable here.
             return Track(
                 id: id,
                 kind: kind,
-                title: string(prefix + "title"),
-                language: string(prefix + "lang"),
-                codec: string(prefix + "codec"),
-                channelCount: string(prefix + "demux-channel-count").flatMap(Int.init),
-                isForced: string(prefix + "forced") == "yes",
-                isHearingImpaired: string(prefix + "hearing-impaired") == "yes",
-                isSelected: string(prefix + "selected") == "yes"
+                title: string("title"),
+                language: string("lang"),
+                codec: string("codec"),
+                channelCount: string("demux-channel-count").flatMap(Int.init),
+                isForced: string("forced") == "yes",
+                isHearingImpaired: string("hearing-impaired") == "yes",
+                isSelected: string("selected") == "yes"
             )
         }
     }
 
     private func apply(_ event: Event) {
         switch event {
+        case .trackCommandReply(let id, let status):
+            completeTrackOperation(id: id, status: status)
+            return
         case .fileLoaded:
             loadState = .loaded
         case .failed(let message):
@@ -431,10 +499,12 @@ final class MPVPlayer {
             if seconds != position {
                 position = seconds
             }
+            // The clock extrapolates elapsed time; its rate changes only with state or speed.
+            return
         case .double("duration", let value):
             duration = value
         case .tracks(let value):
-            tracks = value
+            if value != tracks { tracks = value }
         case .videoFormat(let value):
             if value != videoFormat { videoFormat = value }
         case .flag, .double:
@@ -468,16 +538,71 @@ final class MPVPlayer {
 
     // MARK: - Commands
 
-    private func command(_ args: [String], ignoringShutdown: Bool = false) {
+    private func enqueueTrackOperation(_ operation: TrackOperation) {
+        guard !isShutDown else { return }
+        if operation.kind != nil {
+            trackOperations.insert(operation, at: 0)
+            if let active = activeTrackOperation, active.operation.arguments.first == "sub-add", !active.preempted {
+                activeTrackOperation?.preempted = true
+                mpv_abort_async_command(handle, active.id)
+            }
+        } else {
+            trackOperations.append(operation)
+        }
+        runNextTrackOperation()
+    }
+
+    private func runNextTrackOperation() {
+        guard !isShutDown, activeTrackOperation == nil else { return }
+        if let load = pendingLoad {
+            pendingLoad = nil
+            load()
+            return
+        }
+        guard !trackOperations.isEmpty else { return }
+        let operation = trackOperations.removeFirst()
+        nextCommandID &+= 1
+        if nextCommandID == 0 { nextCommandID = 1 }
+        activeTrackOperation = (nextCommandID, operation, false)
+        // libmpv may reorder async requests, so submit the next only after its reply.
+        command(operation.arguments, replyID: nextCommandID)
+    }
+
+    private func completeTrackOperation(id: UInt64, status: Int32) {
+        guard let active = activeTrackOperation, active.id == id else { return }
+        activeTrackOperation = nil
+        if status < 0, active.preempted, pendingLoad == nil, !isShutDown {
+            var retry = active.operation
+            if hasSelectedSubtitles { retry.arguments[2] = "auto" }
+            trackOperations.append(retry)
+        }
+        if status < 0, !active.preempted, pendingLoad == nil {
+            check(status, active.operation.arguments[0])
+            if let kind = active.operation.kind, !trackOperations.contains(where: { $0.kind == kind }) {
+                trackError = "Couldn't switch \(kind == .audio ? "audio" : "subtitles"). \(String(cString: mpv_error_string(status)))."
+            }
+        }
+        runNextTrackOperation()
+    }
+
+    private func command(_ args: [String], ignoringShutdown: Bool = false, replyID: UInt64? = nil) {
         guard !isShutDown || ignoringShutdown else { return }
         var cArgs: [UnsafeMutablePointer<CChar>?] = args.map { strdup($0) } + [nil]
         defer { cArgs.forEach { free($0) } }
         let status = cArgs.withUnsafeMutableBufferPointer { buffer in
             buffer.baseAddress!.withMemoryRebound(to: UnsafePointer<CChar>?.self, capacity: buffer.count) {
-                mpv_command(handle, $0)
+                if let replyID {
+                    mpv_command_async(handle, replyID, $0)
+                } else {
+                    mpv_command(handle, $0)
+                }
             }
         }
-        check(status, args[0])
+        if let replyID, replyID != 0 {
+            if status < 0 { completeTrackOperation(id: replyID, status: status) }
+        } else {
+            check(status, args[0])
+        }
     }
 
     private func setProperty(_ name: String, _ value: String) {

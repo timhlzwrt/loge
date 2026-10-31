@@ -50,6 +50,7 @@ struct PlayerView: View {
             Color.black.ignoresSafeArea()
             if let player, let current = session.current {
                 MPVVideoView(player: player).ignoresSafeArea()
+                    .id(ObjectIdentifier(player))
                 #if os(tvOS)
                 remoteSurface(player)
                 #else
@@ -111,6 +112,14 @@ struct PlayerView: View {
         }
         // Closing a menu counts as an interaction, so the countdown starts over.
         .onChange(of: isMenuOpen) { _, open in if !open { showControls() } }
+        .alert(player?.trackError != nil ? "Couldn't change track" : "Couldn't start Picture in Picture", isPresented: Binding(
+            get: { player?.trackError != nil || session.pictureInPicture?.failureMessage != nil },
+            set: { if !$0 { player?.dismissTrackError(); session.pictureInPicture?.dismissFailure() } }
+        )) {
+            Button("OK") { player?.dismissTrackError(); session.pictureInPicture?.dismissFailure() }
+        } message: {
+            Text(player?.trackError ?? session.pictureInPicture?.failureMessage ?? "")
+        }
         #if os(iOS)
         .sheet(item: $choosingSource) { SourcesView(route: $0, isChoosing: true) }
         .onChange(of: choosingSource == nil) { _, closed in isMenuOpen = !closed }
@@ -293,7 +302,11 @@ struct PlayerView: View {
             Text(message.prefix(1).uppercased() + message.dropFirst() + ".")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            Button("Choose another source") { session.end() }
+            if let current = session.current, let choose = chooseSource(for: current) {
+                Button("Choose another source", action: choose)
+                    .padding(.top, 8)
+            }
+            Button("Close") { session.end() }
                 .padding(.top, 8)
         }
         .multilineTextAlignment(.center)

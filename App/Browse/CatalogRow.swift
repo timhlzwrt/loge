@@ -40,6 +40,7 @@ struct CatalogRow: View {
             guard items == nil else { return }
             do {
                 let metas = try await source.items(search: search)
+                try Task.checkCancellation()
                 items = .success(metas)
                 onLoaded(metas.count)
                 if isPrimary, let first = metas.first {
@@ -48,6 +49,7 @@ struct CatalogRow: View {
             } catch is CancellationError {
                 // Scrolled away or the query changed; the next task reloads.
             } catch {
+                guard !Task.isCancelled else { return }
                 items = .failure(error)
                 onLoaded(0)
             }
