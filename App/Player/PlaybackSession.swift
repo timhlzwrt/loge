@@ -314,15 +314,16 @@ final class PlaybackSession {
             // Back in the user's addon order.
             return results.sorted { $0.0 < $1.0 }
         }
-        for (_, provider, subtitles) in results {
+        // Numbered per language so the track menu tells them apart; addon names aren't shown.
+        var counts: [String: Int] = [:]
+        for (_, _, subtitles) in results {
             // Addons list their best matches first.
             let byLanguage = Dictionary(grouping: subtitles) { LanguageCodes.alpha2(for: $0.lang) ?? "" }
             for language in wanted {
-                let kept = (byLanguage[language] ?? []).prefix(3)
-                for (number, subtitle) in kept.enumerated() {
-                    // Numbered so the track menu tells them apart.
-                    let title = kept.count > 1 ? "\(provider.name) \(number + 1)" : provider.name
-                    found.append(external(subtitle, title: title))
+                for subtitle in (byLanguage[language] ?? []).prefix(3) {
+                    let number = (counts[language] ?? 0) + 1
+                    counts[language] = number
+                    found.append(external(subtitle, title: "Addon \(number)"))
                 }
             }
         }

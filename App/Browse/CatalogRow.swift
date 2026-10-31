@@ -68,25 +68,28 @@ struct CatalogRow: View {
 
     private func row(@ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: Metrics.rowSpacing) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(source.title)
-                    .font(.headline)
-                Spacer()
-                #if !os(tvOS)
+            Group {
+                #if os(tvOS)
                 // On tvOS the row ends in a "See All" tile instead, which focus reaches naturally.
+                Text(source.title)
+                #else
                 if search == nil {
                     NavigationLink(value: source) {
                         HStack(spacing: 4) {
-                            Text("See All")
-                            Image(systemName: "chevron.right").imageScale(.small)
+                            Text(source.title)
+                            Image(systemName: "chevron.right")
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(.secondary)
                         }
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityHint("Shows the whole catalog")
+                } else {
+                    Text(source.title)
                 }
                 #endif
             }
+            .font(.sectionTitle)
             .padding(.horizontal, Metrics.gutter)
             content()
         }
@@ -131,7 +134,7 @@ struct CatalogRow: View {
     private var placeholders: some View {
         HStack(spacing: Metrics.rowSpacing) {
             ForEach(0..<8, id: \.self) { _ in
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: Metrics.posterRadius)
                     .fill(.white.opacity(0.06))
                     .frame(width: Metrics.posterWidth, height: Metrics.posterWidth * 1.5)
             }
@@ -214,7 +217,7 @@ struct PosterTile: View {
         }
         .frame(width: width, height: width.map { $0 * 1.5 })
         .aspectRatio(2 / 3, contentMode: .fit)
-        .clipShape(.rect(cornerRadius: 8))
+        .clipShape(.rect(cornerRadius: Metrics.posterRadius))
         .accessibilityElement()
         .accessibilityLabel(meta.name)
     }

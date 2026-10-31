@@ -23,9 +23,10 @@ public struct StreamDetails: Sendable, Equatable {
     /// "Dolby Vision", "HDR10+", "HDR10" or "HLG", best first; a file can carry several.
     public var dynamicRange: [String] = []
     public var codec: String?
-    /// The format, then the channel layout: "Atmos", "TrueHD", "7.1".
+    /// The format, then Atmos, then the channel layout: "TrueHD", "Atmos", "7.1".
     public var audio: [String] = []
-    public var source: String?
+    /// Where the release came from: "Remux", "BluRay", "WEB-DL", "WEB" or "HDTV".
+    public var releaseType: String?
     public var size: Measurement<UnitInformationStorage>?
     /// Debrid services mark files they already hold; others have to be fetched first and
     /// often stall. Nil when the addon doesn't say.
@@ -64,27 +65,29 @@ public struct StreamDetails: Sendable, Equatable {
             else if has(/\b(avc|[xh][ .]?264)\b/) { "AVC" }
             else { nil }
 
-        if has(/\batmos\b/) { audio.append("Atmos") }
         if has(/\btrue[ -]?hd\b/) {
             audio.append("TrueHD")
         } else if has(/\bdts[ -]?(hd|x|ma)\b/) {
             audio.append("DTS-HD")
-        } else if has(/\bdts\b/) {
+        } else if has(/\bdts(?![a-z])/) {
             audio.append("DTS")
         } else if has(/\b(ddp|dd\+|e-?ac-?3)/) {
-            audio.append("Dolby Digital Plus")
-        } else if has(/\b(dd|ac-?3)\b/) {
-            audio.append("Dolby Digital")
+            audio.append("DD+")
+        } else if has(/\b(dd|ac-?3)(?![a-z])/) {
+            audio.append("DD")
+        } else if has(/\baac(?![a-z])/) {
+            audio.append("AAC")
         }
+        if has(/\batmos\b/) { audio.append("Atmos") }
         // Written after the format ("DDP5.1"), and not to be confused with a size ("25.1 GB").
         if let channels = text.firstMatch(of: /(?:^|[^\d.,])([257])\.([01])(?!\d|\s*[GMT]i?B)/) {
             audio.append("\(channels.1).\(channels.2)")
         }
 
-        source = if has(/\bremux\b/) { "Remux" }
-            else if has(/\b(blu-?ray|bdrip|brrip)\b/) { "Blu-ray" }
+        releaseType = if has(/\bremux\b/) { "Remux" }
+            else if has(/\b(blu-?ray|bdrip|brrip)\b/) { "BluRay" }
             else if has(/\bweb[ .-]?dl\b/) { "WEB-DL" }
-            else if has(/\bweb[ .-]?rip\b/) { "WEBRip" }
+            else if has(/\bweb([ .-]?rip)?\b/) { "WEB" }
             else if has(/\bhdtv\b/) { "HDTV" }
             else { nil }
 
@@ -107,30 +110,25 @@ public struct StreamDetails: Sendable, Equatable {
         }
     }
 
-    /// "4K · Dolby Vision · HEVC": what decides how the picture looks.
-    public var picture: String? {
-        let parts = [resolution?.label] + dynamicRange.map(Optional.some) + [codec]
-        let kept = parts.compactMap { $0 }
-        return kept.isEmpty ? nil : kept.joined(separator: " · ")
-    }
-
-    /// "Remux · Atmos 7.1 · 58.2 GB": the rest of what tells two files apart.
-    public var file: String? {
+    /// "HEVC · Dolby Vision · TrueHD Atmos 7.1": how the file will look and sound. Only the
+    /// best dynamic range is named, since the others are its fallbacks.
+    public var summary: String? {
         let audio = audio.isEmpty ? nil : audio.joined(separator: " ")
-        let size = size.map { $0.formatted(.byteCount(style: .file)) }
-        let kept = [source, audio, size].compactMap { $0 }
+        let kept = [codec, dynamicRange.first, audio].compactMap { $0 }
         return kept.isEmpty ? nil : kept.joined(separator: " · ")
     }
 
-    /// Best first: higher resolution, then files the debrid service already holds, then
-    /// larger files, which at the same resolution usually means a better encode.
-    public static func bestFirst(_ lhs: StreamDetails, _ rhs: StreamDetails) -> Bool {
-        if lhs.resolution != rhs.resolution {
-            return (lhs.resolution?.rawValue ?? 0) > (rhs.resolution?.rawValue ?? 0)
-        }
-        if lhs.isCached != rhs.isCached {
-            return lhs.isCached == true || rhs.isCached == false
-        }
-        return (lhs.size?.converted(to: .bytes).value ?? 0) > (rhs.size?.converted(to: .bytes).value ?? 0)
+    /// "58.2 GB".
+    public var sizeLabel: String? {
+        size.map { $0.formatted(.byteCount(style: .file)) }
+    }
+
+    /// The headings the sources list groups by, best first; anything else, SD included,
+    /// is listed under "Other".
+    public static let listedResolutions: [Resolution] = [.ultraHD, .fullHD, .hd]
+
+    /// Within one resolution, the larger file usually means the better encode.
+    public static func largerFirst(_ lhs: StreamDetails, _ rhs: StreamDetails) -> Bool {
+        (lhs.size?.converted(to: .bytes).value ?? 0) > (rhs.size?.converted(to: .bytes).value ?? 0)
     }
 }

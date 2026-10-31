@@ -19,7 +19,7 @@ struct HomeView: View {
             TVHome(sources: sources)
             #else
             ScrollView {
-                VStack(alignment: .leading, spacing: 32) {
+                VStack(alignment: .leading, spacing: 28) {
                     FeaturedCarousel(source: sources[0])
                     ContinueWatchingRow()
                     MyListRow()
@@ -32,7 +32,16 @@ struct HomeView: View {
                 await store.refreshManifests()
                 refreshID = UUID()
             }
+            // The hero starts at the top edge of the screen, under the status bar or toolbar.
+            .ignoresSafeArea(edges: .top)
             .background(Color.canvas)
+            #if os(iOS)
+            .toolbar(.hidden, for: .navigationBar)
+            #elseif os(macOS)
+            // The hero names what's on screen; the window needs no title over it.
+            .toolbar(removing: .title)
+            .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+            #endif
             #endif
         }
     }
@@ -51,7 +60,7 @@ private struct TVHome: View {
                 .ignoresSafeArea()
                 .overlay {
                     // Darken the left and bottom, where the text and rows sit.
-                    LinearGradient(colors: [.canvas, .canvas.opacity(0)], startPoint: .leading, endPoint: .center)
+                    LinearGradient(colors: [.canvas.opacity(0.85), .canvas.opacity(0)], startPoint: .leading, endPoint: .center)
                         .ignoresSafeArea()
                     BackdropFade().ignoresSafeArea()
                 }
@@ -63,7 +72,7 @@ private struct TVHome: View {
                 header
                     .frame(height: 400, alignment: .bottomLeading)
                     .padding(.horizontal, Metrics.gutter)
-                    .padding(.bottom, 24)
+                    .padding(.bottom, 40)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
                         ContinueWatchingRow { focused = $0 }
@@ -90,47 +99,49 @@ private struct TVHome: View {
     }
 
     private func details(_ focused: MetaPreview) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 14) {
             TitleLogo(logo: focused.logo, name: focused.name, maxHeight: 140)
                 .frame(maxWidth: 600, alignment: .leading)
                 .id(focused.id)
             focused.infoLine
             if let description = focused.description {
                 Text(description)
-                    .font(.callout)
-                    .lineLimit(3)
-                    .frame(maxWidth: 1000, alignment: .leading)
+                    .font(.synopsis)
+                    .foregroundStyle(.white.opacity(0.88))
+                    .lineLimit(2)
+                    .frame(maxWidth: 840, alignment: .leading)
             }
         }
     }
 }
 #else
-/// Swipeable highlights from the first catalog, with page dots underneath.
+/// Swipeable highlights from the first catalog, edge to edge, with page dots underneath.
 private struct FeaturedCarousel: View {
     let source: CatalogSource
     @State private var items: [MetaPreview] = []
     @State private var currentID: MetaPreview.ID?
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    #endif
 
     var body: some View {
-        VStack(spacing: 12) {
-            ScrollView(.horizontal) {
-                LazyHStack(spacing: 0) {
-                    ForEach(items) { meta in
-                        NavigationLink(value: meta) {
-                            FeaturedCard(meta: meta)
-                        }
-                        .buttonStyle(.plain)
+        ScrollView(.horizontal) {
+            LazyHStack(spacing: 0) {
+                ForEach(items) { meta in
+                    FeaturedPage(meta: meta, isCentred: isCentred, bottomInset: items.count > 1 ? 38 : 18)
                         .containerRelativeFrame(.horizontal)
-                    }
                 }
-                .scrollTargetLayout()
             }
-            .scrollTargetBehavior(.paging)
-            .scrollPosition(id: $currentID)
-            .scrollIndicators(.hidden)
-
+            .scrollTargetLayout()
+        }
+        .scrollTargetBehavior(.paging)
+        .scrollPosition(id: $currentID)
+        .scrollIndicators(.hidden)
+        .frame(height: height)
+        .overlay(alignment: .bottom) {
             if items.count > 1 {
-                pageDots
+                pageDots.padding(.bottom, 16)
             }
         }
         .task {
@@ -142,61 +153,126 @@ private struct FeaturedCarousel: View {
     }
 
     private var pageDots: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 7) {
             ForEach(items) { meta in
                 Circle()
-                    .fill(meta.id == (currentID ?? items.first?.id) ? Color.primary : Color.secondary.opacity(0.4))
-                    .frame(width: 6, height: 6)
+                    .fill(meta.id == (currentID ?? items.first?.id) ? Color.white : Color.white.opacity(0.35))
+                    .frame(width: 7, height: 7)
             }
         }
         .accessibilityHidden(true)
     }
+
+    #if os(iOS)
+    /// Centred on a portrait phone; left-aligned where there's width to spare.
+    private var isCentred: Bool { horizontalSizeClass == .compact && verticalSizeClass != .compact }
+    private var height: CGFloat {
+        verticalSizeClass == .compact ? 340 : 560
+    }
+    #else
+    private let isCentred = false
+    private let height: CGFloat = 480
+    #endif
 }
 
-private struct FeaturedCard: View {
+/// One title in the carousel: its backdrop, logo, meta line and buttons.
+private struct FeaturedPage: View {
     let meta: MetaPreview
-    #if os(iOS)
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
-    #endif
+    let isCentred: Bool
+    /// Room for the page dots.
+    let bottomInset: CGFloat
+
+    @Environment(AddonStore.self) private var store
+    @Environment(LibraryStore.self) private var library
+    /// Set once a series' episodes are known, which opens its sources.
+    @State private var playing: SourcesRoute?
+    /// Set when a series' episodes couldn't be loaded; its details say why.
+    @State private var opening: MetaPreview?
 
     var body: some View {
-        Artwork(url: meta.background)
-            .overlay { BackdropFade() }
-            .overlay(alignment: .bottomLeading) {
-                VStack(alignment: .leading, spacing: 8) {
-                    TitleLogo(logo: meta.logo, name: meta.name, maxHeight: 72)
-                        .frame(maxWidth: 280, alignment: .leading)
-                    meta.infoLine
-                    if let description = meta.description {
-                        Text(description)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
+        ZStack(alignment: isCentred ? .bottom : .bottomLeading) {
+            NavigationLink(value: meta) {
+                Artwork(url: meta.background)
+                    .overlay { scrims }
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(meta.name)
+            #if os(macOS)
+            // Lets the backdrop run on under the floating sidebar.
+            .backgroundExtensionEffect()
+            #endif
+
+            VStack(alignment: isCentred ? .center : .leading, spacing: 12) {
+                NavigationLink(value: meta) {
+                    VStack(alignment: isCentred ? .center : .leading, spacing: 12) {
+                        TitleLogo(logo: meta.logo, name: meta.name, maxHeight: isCentred ? 72 : 96)
+                            .frame(maxWidth: isCentred ? 280 : 360, alignment: isCentred ? .center : .leading)
+                        meta.infoLine
+                            .multilineTextAlignment(isCentred ? .center : .leading)
+                        if !isCentred, let description = meta.description {
+                            Text(description)
+                                .font(.synopsis)
+                                .foregroundStyle(.white.opacity(0.88))
+                                .lineLimit(2)
+                                .frame(maxWidth: 520, alignment: .leading)
+                        }
                     }
                 }
-                // Long lines across a wide card are hard to read.
-                .frame(maxWidth: 620, alignment: .leading)
-                .padding(Metrics.gutter)
+                .buttonStyle(.plain)
+                buttons
+                    .padding(.top, 4)
             }
-            #if os(macOS)
-            .aspectRatio(2.4, contentMode: .fit)
-            #else
-            .aspectRatio(aspectRatio, contentMode: .fit)
-            .clipShape(.rect(cornerRadius: 16))
             .padding(.horizontal, Metrics.gutter)
-            #endif
-            .clipped()
-            .contentShape(.rect)
+            .padding(.bottom, bottomInset + (isCentred ? 0 : 60))
+        }
+        .navigationDestination(item: $playing) { SourcesView(route: $0) }
+        .navigationDestination(item: $opening) { MetaDetailView(preview: $0) }
     }
 
-    #if os(iOS)
-    /// Tall on a portrait phone, a wide banner on iPad, and wider still in phone
-    /// landscape, where the screen is short.
-    private var aspectRatio: CGFloat {
-        if verticalSizeClass == .compact { return 3 }
-        return horizontalSizeClass == .regular ? 2.2 : 0.8
+    private var scrims: some View {
+        ZStack {
+            BackdropFade()
+            if !isCentred {
+                LinearGradient(colors: [.canvas.opacity(0.8), .canvas.opacity(0)], startPoint: .leading, endPoint: .center)
+            }
+        }
     }
-    #endif
+
+    private var buttons: some View {
+        HStack(spacing: 12) {
+            Button {
+                Task { await play() }
+            } label: {
+                Label(isStarted ? "Resume" : "Play", systemImage: "play.fill")
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            Button(library.isSaved(meta.id) ? "Remove from My List" : "Add to My List",
+                   systemImage: library.isSaved(meta.id) ? "checkmark" : "plus") {
+                library.toggleSaved(meta)
+            }
+            .buttonStyle(GlassIconButtonStyle())
+            .contentTransition(.symbolEffect(.replace))
+        }
+    }
+
+    private var isStarted: Bool {
+        library.continueWatching.contains { $0.item.metaID == meta.id }
+    }
+
+    /// Movies go straight to their sources. A series needs its episodes first, to know which
+    /// one is up next; without them it opens the details instead.
+    private func play() async {
+        if meta.type != "series" {
+            playing = PlayAction(preview: meta, meta: nil, library: library)?.route
+            return
+        }
+        let details = try? await store.addons.metaClient(type: meta.type, id: meta.id)?.meta(type: meta.type, id: meta.id)
+        if let route = PlayAction(preview: meta, meta: details, library: library)?.route {
+            playing = route
+        } else {
+            opening = meta
+        }
+    }
 }
 #endif
