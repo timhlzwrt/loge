@@ -157,4 +157,15 @@ extension Meta {
     var infoLine: InfoLine {
         InfoLine(releaseInfo: releaseInfo, genres: genres, runtime: runtime, rating: imdbRating)
     }
+
+    /// "Directed by Vince Gilligan · Starring Bryan Cranston, Aaron Paul and Anna Gunn".
+    var credits: String? {
+        let directors = (director ?? []).prefix(2)
+        let actors = (cast ?? []).prefix(4)
+        let parts = [
+            directors.isEmpty ? nil : "Directed by \(directors.formatted(.list(type: .and)))",
+            actors.isEmpty ? nil : "Starring \(actors.formatted(.list(type: .and)))",
+        ].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
 }

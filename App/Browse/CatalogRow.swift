@@ -151,6 +151,7 @@ private struct TitleCard: View {
             Image(systemName: "film")
                 .font(.title3)
                 .foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
             let readable = Self.readable(name)
             Text(readable.title)
                 .font(.footnote.weight(.medium))

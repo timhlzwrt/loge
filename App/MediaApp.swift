@@ -45,6 +45,7 @@ struct MediaApp: App {
         #if os(macOS)
         // Room for the hero and a couple of rows; the system remembers any size the user picks.
         .defaultSize(width: 1280, height: 820)
+        .commands { PlaybackCommands(playback: playback) }
         #endif
         #if os(macOS)
         // A window of its own, so playback can go full screen and sit beside the browser.

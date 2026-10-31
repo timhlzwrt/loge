@@ -193,11 +193,11 @@ struct MetaDetailView: View {
                 ExpandableText(text: description)
                     .frame(maxWidth: 900, alignment: .leading)
             }
-            if let cast = loaded?.cast, !cast.isEmpty {
-                Text("Starring \(cast.prefix(4).formatted(.list(type: .and)))")
+            if let credits = loaded?.credits {
+                Text(credits)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .lineLimit(2)
                     .frame(maxWidth: 900, alignment: .leading)
             }
             HStack(spacing: 16) {

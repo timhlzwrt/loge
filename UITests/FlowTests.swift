@@ -48,11 +48,9 @@ final class FlowTests: XCTestCase {
     @MainActor
     func testMarkingAnEpisodeWatchedAndUnwatched() {
         openSeries("Lanterns")
-        // The row opens scrolled to Up Next, which is always on screen. Marking it changes
-        // what's Up Next, so the card is then found by its episode number.
-        let upNext = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Up Next'")).firstMatch
-        XCTAssertTrue(upNext.waitForExistence(timeout: 15))
-        let number = upNext.label.firstMatch(of: #/Episode (\d+)/#)?.1 ?? ""
+        // Marking the card changes what's Up Next, so it's then found by its episode number.
+        let card = episodeCard()
+        let number = card.label.firstMatch(of: #/Episode (\d+)/#)?.1 ?? "1"
         let episode = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Episode \(number),")).firstMatch
         episode.press(forDuration: 2.5)
         screenshot("episode-menu")
@@ -104,22 +102,18 @@ final class FlowTests: XCTestCase {
     /// The picture should fill the new size after each turn; check the screenshots.
     @MainActor
     func testRotatingDuringPlayback() {
-        openSeries("Lanterns")
-        let play = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Play' OR label BEGINSWITH 'Resume'")).firstMatch
-        XCTAssertTrue(play.waitForExistence(timeout: 15))
-        play.tap()
+        startPlayback()
         let pause = app.buttons["Pause"]
-        XCTAssertTrue(pause.waitForExistence(timeout: 20), "Playback didn't start")
 
         // The test clips are 10 seconds long, so both turns happen well before the end.
         XCUIDevice.shared.orientation = .landscapeLeft
         sleep(1)
         screenshot("rotated-while-playing")
 
-        // A tap toggles the controls, so only tap when they're hidden.
-        if !pause.isHittable { app.tap() }
-        XCTAssertTrue(pause.waitForExistence(timeout: 3), "Player closed when rotated")
-        pause.tap()
+        // A tap toggles the controls; aim above the middle, where the play button sits.
+        if !app.buttons["Close"].exists { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap() }
+        XCTAssertTrue(app.buttons["Close"].waitForExistence(timeout: 3), "Player closed when rotated")
+        if pause.exists { pause.tap() }
         XCUIDevice.shared.orientation = .portrait
         sleep(2)
         screenshot("rotated-while-paused")
@@ -131,26 +125,9 @@ final class FlowTests: XCTestCase {
     /// an iPad; iPhone simulators report it as unsupported.
     @MainActor
     func testPictureInPicture() throws {
-        installTestAddonIfNeeded()
-        openSeries("Lanterns")
-        let play = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Play' OR label BEGINSWITH 'Resume'")).firstMatch
-        XCTAssertTrue(play.waitForExistence(timeout: 15))
-        play.tap()
-        // Without a remembered source, Play opens the source list. Once playing, the
-        // controls fade out; while they're up, Close is showing.
-        let testSource = app.buttons.matching(NSPredicate(format: "label CONTAINS 'MKV H.264'")).firstMatch
-        let pause = app.buttons["Pause"]
-        for _ in 0..<30 where !pause.exists {
-            if testSource.exists {
-                testSource.tap()
-            } else if !app.buttons["Close"].exists && app.buttons["Picture in Picture"].exists == false {
-                app.tap()
-            }
-            sleep(1)
-        }
-        XCTAssertTrue(pause.exists, "Playback didn't start")
+        startPlayback()
         // The controls stay up while paused.
-        pause.tap()
+        app.buttons["Pause"].tap()
 
         let pip = app.buttons["Picture in Picture"]
         guard pip.waitForExistence(timeout: 5) else {
@@ -197,11 +174,10 @@ final class FlowTests: XCTestCase {
         installTestAddonIfNeeded()
         openSeries("Lanterns")
         // Episode cards open the source list without playing anything first.
-        let episode = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Up Next'")).firstMatch
-        XCTAssertTrue(episode.waitForExistence(timeout: 15))
-        episode.tap()
+        episodeCard().tap()
         let broken = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Returns 404'")).firstMatch
         XCTAssertTrue(broken.waitForExistence(timeout: 15), "No broken test source")
+        screenshot("sources")
         broken.tap()
         XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 30), "Didn't fall back to another source")
         XCTAssertFalse(app.staticTexts["Couldn't play this source"].exists)
@@ -214,9 +190,7 @@ final class FlowTests: XCTestCase {
     func testExternalSubtitles() {
         installTestAddonIfNeeded()
         openSeries("Lanterns")
-        let episode = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Up Next'")).firstMatch
-        XCTAssertTrue(episode.waitForExistence(timeout: 15))
-        episode.tap()
+        episodeCard().tap()
         let source = app.buttons.matching(NSPredicate(format: "label CONTAINS 'MKV H.264'")).firstMatch
         XCTAssertTrue(source.waitForExistence(timeout: 15))
         source.tap()
@@ -256,6 +230,38 @@ final class FlowTests: XCTestCase {
     }
 
     // MARK: Helpers
+
+    /// Plays Lanterns with the local test addon, whether Play starts a remembered source
+    /// straight away or opens the source list first. Leaves the controls showing.
+    @MainActor
+    private func startPlayback() {
+        installTestAddonIfNeeded()
+        openSeries("Lanterns")
+        let play = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Play' OR label BEGINSWITH 'Resume'")).firstMatch
+        XCTAssertTrue(play.waitForExistence(timeout: 15))
+        play.tap()
+        // Once playing, the controls fade out; while they're up, Close is showing.
+        let testSource = app.buttons.matching(NSPredicate(format: "label CONTAINS 'MKV H.264'")).firstMatch
+        let pause = app.buttons["Pause"]
+        for _ in 0..<30 where !pause.exists {
+            if testSource.exists {
+                testSource.tap()
+            } else if !app.buttons["Close"].exists {
+                app.tap()
+            }
+            sleep(1)
+        }
+        XCTAssertTrue(pause.exists, "Playback didn't start")
+    }
+
+    /// Up Next once something has been watched; on a fresh simulator, the first episode.
+    @MainActor
+    private func episodeCard() -> XCUIElement {
+        let upNext = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Up Next'")).firstMatch
+        let first = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Episode 1,'")).firstMatch
+        XCTAssertTrue(upNext.waitForExistence(timeout: 15) || first.exists, "No episode cards")
+        return upNext.exists ? upNext : first
+    }
 
     @MainActor
     private func openTab(_ name: String) {
