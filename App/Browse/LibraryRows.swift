@@ -12,7 +12,7 @@ struct ContinueWatchingRow: View {
     var body: some View {
         let entries = library.continueWatching
         if !entries.isEmpty {
-            VStack(alignment: .leading, spacing: Metrics.rowSpacing) {
+            VStack(alignment: .leading, spacing: Metrics.headerSpacing) {
                 Text("Continue Watching")
                     .font(.sectionTitle)
                     .padding(.horizontal, Metrics.gutter)
@@ -39,6 +39,10 @@ struct ContinueWatchingRow: View {
                 }
                 .scrollIndicators(.hidden)
                 .scrollClipDisabled()
+                #if os(tvOS)
+                // Home opens on what's being watched rather than on the sidebar.
+                .defaultFocus($focusedID, entries.first?.item.id)
+                #endif
             }
             .onChange(of: focusedID) {
                 if let item = entries.first(where: { $0.item.id == focusedID })?.item {
@@ -114,7 +118,7 @@ struct MyListRow: View {
 
     var body: some View {
         if !library.saved.isEmpty {
-            VStack(alignment: .leading, spacing: Metrics.rowSpacing) {
+            VStack(alignment: .leading, spacing: Metrics.headerSpacing) {
                 Text("My List")
                     .font(.sectionTitle)
                     .padding(.horizontal, Metrics.gutter)

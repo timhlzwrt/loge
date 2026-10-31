@@ -16,6 +16,8 @@ enum Metrics {
     // tvOS already insets content by its own safe area margins.
     static let gutter: CGFloat = 0
     static let rowSpacing: CGFloat = 40
+    /// Between a row's title and its artwork, which the focus lift already pushes apart.
+    static let headerSpacing: CGFloat = 16
     static let cardRadius: CGFloat = 24
     static let posterRadius: CGFloat = 21
     #elseif os(macOS)
@@ -24,6 +26,7 @@ enum Metrics {
     static let episodeWidth: CGFloat = 232
     static let gutter: CGFloat = 32
     static let rowSpacing: CGFloat = 16
+    static let headerSpacing: CGFloat = 16
     static let cardRadius: CGFloat = 12
     static let posterRadius: CGFloat = 10
     #else
@@ -34,6 +37,7 @@ enum Metrics {
     static let episodeWidth: CGFloat = isPad ? 320 : 240
     static let gutter: CGFloat = isPad ? 32 : 20
     static let rowSpacing: CGFloat = 12
+    static let headerSpacing: CGFloat = 12
     static let cardRadius: CGFloat = 14
     static let posterRadius: CGFloat = 12
     #endif
@@ -111,32 +115,50 @@ struct PrimaryButtonStyle: ButtonStyle {
 }
 
 /// Round, icon-only Liquid Glass buttons beside the primary one: My List, Choose a Source.
-struct GlassIconButtonStyle: PrimitiveButtonStyle {
+/// Drawn rather than using the `.glass` button style, which pads the circle beyond the
+/// primary button's height.
+struct GlassIconButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        Button(role: configuration.role, action: configuration.trigger) {
+        StyledLabel(configuration: configuration)
+    }
+
+    private struct StyledLabel: View {
+        let configuration: Configuration
+        #if os(tvOS)
+        @Environment(\.isFocused) private var isFocused
+        #endif
+
+        var body: some View {
             configuration.label
                 .labelStyle(.iconOnly)
                 .font(font)
                 .frame(width: size, height: size)
+                .contentShape(.circle)
+                #if os(tvOS)
+                // Focus turns the circle white, as the system's glass buttons do.
+                .foregroundStyle(isFocused ? .black : .white)
+                .background(.white.opacity(isFocused ? 1 : 0), in: .circle)
+                .glassEffect(.regular, in: .circle)
+                .scaleEffect(isFocused ? 1.06 : 1)
+                .shadow(color: .black.opacity(isFocused ? 0.5 : 0), radius: 24, y: 14)
+                .animation(.easeOut(duration: 0.15), value: isFocused)
+                #else
+                .foregroundStyle(.white)
+                .glassEffect(.regular.interactive(), in: .circle)
+                #endif
         }
-        .buttonStyle(.glass)
-        .buttonBorderShape(.circle)
-        #if os(macOS)
-        // The Mac fills glass buttons with the tint, which is white app-wide.
-        .tint(.clear)
+
+        #if os(tvOS)
+        private let size: CGFloat = 78
+        private let font = Font.system(size: 27, weight: .semibold)
+        #elseif os(macOS)
+        private let size: CGFloat = 36
+        private let font = Font.system(size: 14, weight: .semibold)
+        #else
+        private let size: CGFloat = 50
+        private let font = Font.title3.weight(.semibold)
         #endif
     }
-
-    #if os(tvOS)
-    private let size: CGFloat = 78
-    private let font = Font.system(size: 27, weight: .semibold)
-    #elseif os(macOS)
-    private let size: CGFloat = 36
-    private let font = Font.system(size: 14, weight: .semibold)
-    #else
-    private let size: CGFloat = 50
-    private let font = Font.title3.weight(.semibold)
-    #endif
 }
 
 /// Remote artwork that fills whatever frame it's given, cropping rather than
