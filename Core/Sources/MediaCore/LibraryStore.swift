@@ -60,6 +60,9 @@ public struct WatchProgress: Codable, Sendable, Equatable {
     public var position: Double
     public var duration: Double
     public var updatedAt: Date
+    /// From another device, which only reports a percentage: `duration` is the title's
+    /// runtime until the file is played here. Nil rather than false in older saved data.
+    public var isEstimated: Bool?
 
     public var fraction: Double {
         duration > 0 ? min(position / duration, 1) : 0
@@ -137,6 +140,27 @@ public final class LibraryStore {
             oldest.forEach { progress[$0.item.id] = nil }
         }
         save(progress, forKey: Self.progressKey)
+    }
+
+    /// Progress reported by another device, as a fraction. Newer local progress wins.
+    /// Without a duration known here, `estimatedDuration` (the runtime) stands in.
+    public func mergeRemote(_ item: WatchItem, fraction: Double, estimatedDuration: Double, at date: Date) {
+        let local = progress[item.id]
+        guard local.map({ $0.updatedAt < date }) ?? true else { return }
+        let knownDuration = local.flatMap { $0.isEstimated == true ? nil : $0.duration }
+        let duration = knownDuration ?? estimatedDuration
+        guard duration > 0 else { return }
+        progress[item.id] = WatchProgress(
+            item: local?.item ?? item, position: fraction * duration, duration: duration,
+            updatedAt: date, isEstimated: knownDuration == nil ? true : nil)
+        save(progress, forKey: Self.progressKey)
+    }
+
+    /// For progress from another device that hasn't been played here: how far in it is,
+    /// so playback can seek once the real duration is known.
+    public func estimatedFraction(for id: String) -> Double? {
+        guard let entry = progress[id], entry.isEstimated == true else { return nil }
+        return entry.fraction
     }
 
     /// Where to start this item, or nil to start from the beginning.

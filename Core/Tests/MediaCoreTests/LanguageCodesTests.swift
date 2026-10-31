@@ -7,4 +7,14 @@ struct LanguageCodesTests {
         #expect(LanguageCodes.trackTags(for: "en") == "en,eng")
         #expect(LanguageCodes.trackTags(for: "ja") == "ja,jpn")
     }
+
+    @Test func normalisesSubtitleAddonCodes() {
+        #expect(LanguageCodes.alpha2(for: "eng") == "en")
+        #expect(LanguageCodes.alpha2(for: "ger") == "de")
+        #expect(LanguageCodes.alpha2(for: "deu") == "de")
+        #expect(LanguageCodes.alpha2(for: "pob") == "pt")
+        #expect(LanguageCodes.alpha2(for: "fr") == "fr")
+        #expect(LanguageCodes.alpha2(for: "und") == nil)
+        #expect(LanguageCodes.alpha2(for: "xyz") == nil)
+    }
 }

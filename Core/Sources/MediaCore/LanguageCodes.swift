@@ -15,6 +15,20 @@ public enum LanguageCodes {
         "mk": "mac", "ms": "may", "my": "bur", "sq": "alb", "eu": "baq", "cy": "wel",
     ]
 
+    /// Codes OpenSubtitles uses for regional variants that ISO 639-2 doesn't have.
+    private static let openSubtitles = ["pob": "pt", "spn": "es", "zht": "zh", "zhe": "zh", "scc": "sr"]
+
+    /// The ISO 639-1 code for a language tag in any form tracks and subtitle addons use,
+    /// `en`, `eng` or `ger`, or nil when it isn't a language.
+    public static func alpha2(for tag: String) -> String? {
+        let tag = tag.lowercased()
+        if let code = openSubtitles[tag] ?? bibliographic.first(where: { $0.value == tag })?.key {
+            return code
+        }
+        // Codes without a two-letter form, such as `und` (undetermined), aren't usable here.
+        return Locale.LanguageCode(tag).identifier(.alpha2).flatMap { $0.count == 2 ? $0 : nil }
+    }
+
     /// Every tag a track in `language` might carry, for mpv's `alang`/`slang`:
     /// `de` gives `de,deu,ger`.
     public static func trackTags(for language: String) -> String {

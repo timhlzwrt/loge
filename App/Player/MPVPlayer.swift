@@ -1,13 +1,12 @@
-import Foundation
+import AVFoundation
 import Libmpv
 import MediaCore
 import Observation
-import QuartzCore
 import os
 
 private let log = Logger(subsystem: "li.tjh.MediaApp", category: "mpv")
 
-/// Owns one mpv instance and the Metal layer it renders into.
+/// Owns one mpv instance and the system video layer it shows frames in.
 ///
 /// mpv runs its own threads; a dedicated thread waits on mpv's event queue and
 /// forwards events here on the main actor. Shutting down sends `quit`, and that
@@ -40,6 +39,20 @@ final class MPVPlayer {
     private(set) var tracks: [Track] = []
     private(set) var speed = 1.0
     private(set) var isZoomedToFill = false
+    /// The playing video's frame rate and dynamic range, for Apple TV to switch the display to.
+    private(set) var videoFormat: VideoFormat?
+    /// Seconds the subtitles or the sound are shifted; positive shows or plays them later.
+    private(set) var subtitleDelay = 0.0
+    private(set) var audioDelay = 0.0
+
+    struct VideoFormat: Equatable, Sendable {
+        enum DynamicRange: Sendable { case sdr, hdr10, hlg, dolbyVision }
+
+        let width: Int
+        let height: Int
+        let frameRate: Double?
+        let dynamicRange: DynamicRange
+    }
 
     struct Track: Identifiable, Equatable, Sendable {
         enum Kind: String, Sendable { case audio, sub }
@@ -95,7 +108,11 @@ final class MPVPlayer {
         }
     }
 
-    @ObservationIgnored let layer = MPVMetalLayer()
+    /// mpv's avfoundation output hands it each frame as it's due, already decoded by
+    /// VideoToolbox and with subtitles drawn in, which is what Picture in Picture shows.
+    @ObservationIgnored let layer = AVSampleBufferDisplayLayer()
+    /// The exact `time-pos`; `position` is rounded for the UI.
+    @ObservationIgnored private var exactPosition: Double = 0
 
     private enum LoadState { case idle, loading, loaded, failed(String) }
     private var loadState = LoadState.idle
@@ -111,23 +128,22 @@ final class MPVPlayer {
         guard let handle = mpv_create() else { fatalError("mpv_create failed") }
         self.handle = handle
 
-        // Between a resize and mpv's first frame at the new size, show the last frame
-        // unscaled rather than stretched to the new shape.
-        layer.contentsGravity = .center
+        layer.videoGravity = .resizeAspect
+        // Frames are shown as soon as they arrive, so the layer's clock doesn't time them.
+        // It runs only while playing, which Picture in Picture reads as progress.
+        var timebase: CMTimebase?
+        CMTimebaseCreateWithSourceClock(allocator: kCFAllocatorDefault, sourceClock: CMClockGetHostTimeClock(), timebaseOut: &timebase)
+        layer.controlTimebase = timebase
+
         var wid = Int64(Int(bitPattern: Unmanaged.passUnretained(layer).toOpaque()))
         check(mpv_set_option(handle, "wid", MPV_FORMAT_INT64, &wid), "wid")
         for (name, value) in [
-            ("vo", "gpu-next"),
-            ("gpu-api", "vulkan"),
-            ("gpu-context", "moltenvk"),
+            ("vo", "avfoundation"),
+            // Draw subtitles into the frames, so they're also in Picture in Picture.
+            ("avfoundation-composite-osd", "yes"),
             ("hwdec", "videotoolbox"),
             // Stay on the last frame at the end instead of unloading the file.
             ("keep-open", "yes"),
-            // Keep text subtitles inside the picture; mpv otherwise places them in the
-            // letterbox bars, which on a phone in portrait is where the controls are.
-            ("sub-use-margins", "no"),
-            // Size them to the picture rather than the window, which in portrait is far taller.
-            ("sub-scale-by-window", "no"),
         ] {
             check(mpv_set_option_string(handle, name, value), name)
         }
@@ -146,8 +162,9 @@ final class MPVPlayer {
         mpv_observe_property(handle, 0, "eof-reached", MPV_FORMAT_FLAG)
         mpv_observe_property(handle, 0, "time-pos", MPV_FORMAT_DOUBLE)
         mpv_observe_property(handle, 0, "duration", MPV_FORMAT_DOUBLE)
-        // Observed only as a change signal; the list itself is read through its sub-properties.
+        // Observed only as change signals; the values are read through their sub-properties.
         mpv_observe_property(handle, 0, "track-list", MPV_FORMAT_NONE)
+        mpv_observe_property(handle, 0, "video-params", MPV_FORMAT_NONE)
 
         startEventThread()
     }
@@ -194,6 +211,9 @@ final class MPVPlayer {
             // Otherwise mpv shows any track the file marks as default.
             setProperty("sid", "no")
         }
+        // A shift fixes one file's timing, so it shouldn't carry over to the next.
+        setDelay(0, for: .sub)
+        setDelay(0, for: .audio)
         // mpv pauses at the end of a file and keeps that for the next one, which
         // would leave the next episode waiting on its first frame.
         setProperty("pause", "no")
@@ -224,6 +244,7 @@ final class MPVPlayer {
     func setSpeed(_ speed: Double) {
         self.speed = speed
         setProperty("speed", String(speed))
+        updateClock()
     }
 
     /// Multiplies the subtitle font size; 1 is mpv's default.
@@ -234,7 +255,23 @@ final class MPVPlayer {
     /// Crops the picture to fill the screen instead of letterboxing it.
     func setZoomToFill(_ fill: Bool) {
         isZoomedToFill = fill
-        setProperty("panscan", fill ? "1.0" : "0.0")
+        layer.videoGravity = fill ? .resizeAspectFill : .resizeAspect
+    }
+
+    func setDelay(_ seconds: Double, for kind: Track.Kind) {
+        switch kind {
+        case .sub:
+            subtitleDelay = seconds
+            setProperty("sub-delay", String(seconds))
+        case .audio:
+            audioDelay = seconds
+            setProperty("audio-delay", String(seconds))
+        }
+    }
+
+    /// Adds a subtitle file as a track; `select` also switches to it.
+    func addSubtitle(url: String, title: String, language: String, select: Bool) {
+        command(["sub-add", url, select ? "select" : "auto", title, language])
     }
 
     /// Pass nil to turn subtitles off.
@@ -242,8 +279,8 @@ final class MPVPlayer {
         setProperty(kind == .audio ? "aid" : "sid", track.map { String($0.id) } ?? "no")
     }
 
-    /// Detaches video while the app is in the background; rendering into a
-    /// hidden layer leaves it black when the app returns.
+    /// Detaches video while the app is in the background without Picture in Picture;
+    /// the system stops a hidden video layer, and reattaching starts it afresh.
     func setVideoEnabled(_ isEnabled: Bool) {
         setProperty("vid", isEnabled ? "auto" : "no")
     }
@@ -263,14 +300,15 @@ final class MPVPlayer {
         case flag(String, Bool)
         case double(String, Double?)
         case tracks([Track])
+        case videoFormat(VideoFormat?)
     }
 
     private func startEventThread() {
         let (events, continuation) = AsyncStream.makeStream(of: Event.self)
 
         // The handle is safe to share: libmpv's client API is thread-safe. The
-        // layer is captured so it outlives mpv's render thread, which draws into it
-        // until mpv_terminate_destroy returns.
+        // layer is captured so it outlives mpv's video output, which enqueues frames
+        // into it until mpv_terminate_destroy returns.
         nonisolated(unsafe) let handle = handle
         nonisolated(unsafe) let layer = layer
         Thread.detachNewThread {
@@ -306,6 +344,9 @@ final class MPVPlayer {
             if name == "track-list" {
                 return .tracks(readTracks(handle))
             }
+            if name == "video-params" {
+                return .videoFormat(readVideoFormat(handle))
+            }
             switch property.format {
             case MPV_FORMAT_FLAG:
                 return .flag(name, property.data.load(as: Int32.self) != 0)
@@ -323,6 +364,25 @@ final class MPVPlayer {
         default:
             return nil
         }
+    }
+
+    private nonisolated static func readVideoFormat(_ handle: OpaquePointer) -> VideoFormat? {
+        func string(_ name: String) -> String? {
+            guard let value = mpv_get_property_string(handle, name) else { return nil }
+            defer { mpv_free(value) }
+            return String(cString: value)
+        }
+        guard let width = string("video-params/w").flatMap(Int.init),
+              let height = string("video-params/h").flatMap(Int.init)
+        else { return nil }
+        let dynamicRange: VideoFormat.DynamicRange = switch string("video-params/gamma") {
+        case "pq": string("current-tracks/video/dolby-vision-profile") != nil ? .dolbyVision : .hdr10
+        case "hlg": .hlg
+        default: .sdr
+        }
+        return VideoFormat(width: width, height: height,
+                           frameRate: string("container-fps").flatMap(Double.init),
+                           dynamicRange: dynamicRange)
     }
 
     private nonisolated static func readTracks(_ handle: OpaquePointer) -> [Track] {
@@ -366,7 +426,8 @@ final class MPVPlayer {
         case .double("time-pos", let value):
             // mpv reports every frame; whole seconds are enough for the UI and
             // avoid redrawing the controls 24+ times a second.
-            let seconds = (value ?? 0).rounded(.down)
+            exactPosition = value ?? 0
+            let seconds = exactPosition.rounded(.down)
             if seconds != position {
                 position = seconds
             }
@@ -374,9 +435,35 @@ final class MPVPlayer {
             duration = value
         case .tracks(let value):
             tracks = value
+        case .videoFormat(let value):
+            if value != videoFormat { videoFormat = value }
         case .flag, .double:
             break
         }
+        updateClock()
+    }
+
+    // MARK: - Picture in Picture
+
+    private func updateClock() {
+        guard let timebase = layer.controlTimebase else { return }
+        let rate = status == .playing ? speed : 0
+        if CMTimebaseGetRate(timebase) != rate {
+            CMTimebaseSetRate(timebase, rate: rate)
+        }
+    }
+
+    /// The file's span on the video layer's clock, which is what Picture in Picture
+    /// measures progress against. The clock only runs while playing, so the span is
+    /// shifted by however far it is from the playback position.
+    var playbackTimeRange: CMTimeRange {
+        guard let duration, let timebase = layer.controlTimebase else {
+            // Live streams have no duration.
+            return CMTimeRange(start: .negativeInfinity, duration: .positiveInfinity)
+        }
+        let start = CMTimebaseGetTime(timebase).seconds - exactPosition
+        return CMTimeRange(start: CMTime(seconds: start, preferredTimescale: 600),
+                           duration: CMTime(seconds: duration, preferredTimescale: 600))
     }
 
     // MARK: - Commands
@@ -401,20 +488,6 @@ final class MPVPlayer {
     private func check(_ status: Int32, _ context: String) {
         if status < 0 {
             log.error("\(context): \(String(cString: mpv_error_string(status)))")
-        }
-    }
-}
-
-/// MoltenVK briefly sets the drawable to 1×1 to force a presentation, which
-/// causes flicker and can leave it stuck at that size.
-/// https://github.com/mpv-player/mpv/pull/13651
-final class MPVMetalLayer: CAMetalLayer {
-    override var drawableSize: CGSize {
-        get { super.drawableSize }
-        set {
-            if newValue.width > 1 && newValue.height > 1 {
-                super.drawableSize = newValue
-            }
         }
     }
 }

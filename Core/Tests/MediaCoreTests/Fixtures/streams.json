@@ -4,6 +4,7 @@
       "name": "Debrid\n1080p",
       "title": "Example.Movie.2024.1080p.mkv\n4.2 GB",
       "url": "https://debrid.example/dl/abc123/Example.Movie.2024.1080p.mkv",
+      "subtitles": [{ "id": "s1", "url": "https://debrid.example/subs/en.srt", "lang": "eng" }],
       "behaviorHints": {
         "bingeGroup": "debrid|1080p",
         "filename": "Example.Movie.2024.1080p.mkv",

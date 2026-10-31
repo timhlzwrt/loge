@@ -11,6 +11,10 @@ struct AddonRoutingTests {
         manifestURL: "https://streams.example/manifest.json",
         manifest: try! decodeFixture("stream-addon-manifest", as: AddonManifest.self)
     )
+    let subtitles = InstalledAddon(
+        manifestURL: "https://subtitles.example/manifest.json",
+        manifest: try! decodeFixture("subtitle-addon-manifest", as: AddonManifest.self)
+    )
     let notLoaded = InstalledAddon(manifestURL: "https://pending.example/manifest.json", manifest: nil)
 
     @Test func homeSkipsCatalogsThatNeedInput() {
@@ -47,5 +51,12 @@ struct AddonRoutingTests {
         let providers = [cinemeta, streams, notLoaded].streamProviders(type: "series", id: "tt0903747:1:1")
         #expect(providers.map(\.name) == ["Example Streams"])
         #expect([cinemeta, streams].streamProviders(type: "channel", id: "tt1").isEmpty)
+    }
+
+    @Test func subtitleProvidersFollowUserOrderAndCapabilities() {
+        let addons = [streams, subtitles, cinemeta, notLoaded]
+        #expect(addons.subtitleProviders(type: "movie", id: "tt0111161").map(\.manifestURL)
+            == ["https://subtitles.example/manifest.json"])
+        #expect(addons.subtitleProviders(type: "movie", id: "kitsu:1").isEmpty)
     }
 }

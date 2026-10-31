@@ -22,7 +22,9 @@ enum NextEpisode {
             headers: stream.requestHeaders,
             item: next,
             providerURL: providerURL,
-            bingeGroup: stream.behaviorHints?.bingeGroup
+            bingeGroup: stream.behaviorHints?.bingeGroup,
+            subtitles: stream.subtitles ?? [],
+            filename: stream.behaviorHints?.filename
         )
     }
 

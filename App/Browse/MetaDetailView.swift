@@ -2,6 +2,7 @@ import MediaCore
 import SwiftUI
 
 struct MetaDetailView: View {
+    @Environment(TraktAccount.self) private var trakt
     let preview: MetaPreview
 
     @Environment(AddonStore.self) private var store
@@ -111,9 +112,15 @@ struct MetaDetailView: View {
                 }
                 if preview.type != "series" {
                     if library.isWatched(preview.id) {
-                        Button("Mark as Unwatched", systemImage: "eye.slash") { library.markUnwatched([preview.id]) }
+                        Button("Mark as Unwatched", systemImage: "eye.slash") {
+                            library.markUnwatched([preview.id])
+                            trakt.markUnwatched([play.route.item])
+                        }
                     } else {
-                        Button("Mark as Watched", systemImage: "checkmark.circle") { library.markWatched([play.route.item]) }
+                        Button("Mark as Watched", systemImage: "checkmark.circle") {
+                            library.markWatched([play.route.item])
+                            trakt.markWatched([play.route.item])
+                        }
                     }
                 }
             } label: {
@@ -310,6 +317,7 @@ private struct MyListButton: View {
 }
 
 private struct EpisodesSection: View {
+    @Environment(TraktAccount.self) private var trakt
     let videos: [Video]
     let upNextID: String?
     let route: (Video) -> SourcesRoute
@@ -337,10 +345,13 @@ private struct EpisodesSection: View {
                 .fixedSize()
                 Menu {
                     Button("Mark Season as Watched", systemImage: "checkmark.circle") {
-                        library.markWatched(episodes.filter { $0.isReleased() }.map { route($0).item })
+                        let items = episodes.filter { $0.isReleased() }.map { route($0).item }
+                        library.markWatched(items)
+                        trakt.markWatched(items)
                     }
                     Button("Mark Season as Unwatched", systemImage: "eye.slash") {
                         library.markUnwatched(episodes.map(\.id))
+                        trakt.markUnwatched(episodes.map { route($0).item })
                     }
                 } label: {
                     Label("Season options", systemImage: "ellipsis.circle")
@@ -385,9 +396,15 @@ private struct EpisodesSection: View {
     @ViewBuilder
     private func watchedActions(for video: Video) -> some View {
         if library.isWatched(video.id) {
-            Button("Mark as Unwatched", systemImage: "eye.slash") { library.markUnwatched([video.id]) }
+            Button("Mark as Unwatched", systemImage: "eye.slash") {
+                library.markUnwatched([video.id])
+                trakt.markUnwatched([route(video).item])
+            }
         } else {
-            Button("Mark as Watched", systemImage: "checkmark.circle") { library.markWatched([route(video).item]) }
+            Button("Mark as Watched", systemImage: "checkmark.circle") {
+                library.markWatched([route(video).item])
+                trakt.markWatched([route(video).item])
+            }
         }
     }
 

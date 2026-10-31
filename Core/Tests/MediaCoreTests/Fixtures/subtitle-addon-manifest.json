@@ -1,0 +1,9 @@
+{
+  "id": "org.example.subtitles",
+  "version": "1.0.0",
+  "name": "Example Subtitles",
+  "resources": ["subtitles"],
+  "types": ["movie", "series"],
+  "idPrefixes": ["tt"],
+  "catalogs": []
+}

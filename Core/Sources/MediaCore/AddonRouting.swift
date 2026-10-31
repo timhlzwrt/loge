@@ -45,6 +45,18 @@ public struct StreamProvider: Sendable, Identifiable {
     }
 }
 
+/// An installed addon that serves subtitles for a particular item.
+public struct SubtitleProvider: Sendable, Identifiable {
+    public let manifestURL: String
+    public let name: String
+
+    public var id: String { manifestURL }
+
+    public func subtitles(type: String, id: String, filename: String?) async throws -> [Subtitle] {
+        try await AddonClient(manifestURL: manifestURL).subtitles(type: type, id: id, filename: filename)
+    }
+}
+
 // Addon order is the user's priority order, so every lookup walks the list front to back.
 extension [InstalledAddon] {
     /// Catalogs that can be shown as rows without user input.
@@ -67,6 +79,14 @@ extension [InstalledAddon] {
         compactMap { addon in
             guard addon.manifest?.provides("stream", type: type, id: id) == true else { return nil }
             return StreamProvider(manifestURL: addon.manifestURL, name: addon.displayName)
+        }
+    }
+
+    /// Addons that serve subtitles for this item, in the user's order.
+    public func subtitleProviders(type: String, id: String) -> [SubtitleProvider] {
+        compactMap { addon in
+            guard addon.manifest?.provides("subtitles", type: type, id: id) == true else { return nil }
+            return SubtitleProvider(manifestURL: addon.manifestURL, name: addon.displayName)
         }
     }
 

@@ -17,16 +17,19 @@ accent, system font, no cards/gradients/badges.
 - `App/Browse/` — Home (featured carousel on iOS/Mac, focus-driven backdrop header on tvOS),
   catalog rows and See All grid, details (seasons, episodes, Up Next, watched marking),
   sources list (autoplays the remembered or same-binge-group stream), search.
-- `App/Player/` — `MPVPlayer` (libmpv via MPVKit, Metal layer), `PlayerView`, controls and
-  menus, next-episode countdown, tvOS remote swipe reader.
+- `App/Player/` — `PlaybackSession` (owns the playback in progress, outliving the player
+  screen for Picture in Picture), `MPVPlayer` (libmpv, AVFoundation video layer), `PlayerView`,
+  controls and menus, `PictureInPicture`, `NowPlaying`, next-episode countdown, tvOS remote
+  swipe reader.
 - `App/Settings/` — addons (install/reorder/remove) and playback language preferences.
 - `Tools/test-addon.py` — local stream addon at `http://127.0.0.1:8765/manifest.json` with
   test streams (MKV, HEVC, multi-track HLS, header-protected, broken, torrent).
 - `Tools/render-icons.swift` — regenerates `App/Assets.xcassets` (icons, top shelf, accent);
   the mark is a white "l" with a turned foot on the charcoal canvas.
   It deletes and rewrites the catalog, so change the script rather than the assets.
-- `Vendor/MPVKit/` — MPVKit's LGPL product with a patched `Libmpv.xcframework.zip` so mpv
-  follows layer resizes (rotation, window resize). Rebuild with `rebuild-libmpv.sh`; see its README.
+- `Vendor/MPVKit/` — MPVKit's LGPL product with a patched `Libmpv.xcframework.zip` that adds
+  `vo=avfoundation` (an `AVSampleBufferDisplayLayer`, for Picture in Picture and HDR). Rebuild
+  with `rebuild-libmpv.sh`; see its README.
 - `.github/workflows/ci.yml` — Core tests and warning-free builds for iOS, tvOS and macOS.
 
 ## Commands
@@ -36,7 +39,11 @@ xcodegen generate                                   # after adding/removing file
 (cd Core && swift test)                             # Core unit tests
 xcodebuild -project MediaApp.xcodeproj -scheme MediaApp -destination 'generic/platform=iOS Simulator' -derivedDataPath .build/xcode build
 # also: 'generic/platform=tvOS Simulator' and 'platform=macOS'
+Tools/build-ipa.sh                                  # unsigned .ipa files in .build/ipa
 ```
+
+Devices are installed without a paid account: Sideloadly (iPhone/iPad) and atvloadly
+(Apple TV) sign the `.ipa` files with a free Apple ID and refresh them before the 7 days run out.
 
 On-demand UI tests (need network and installed addons; skipped otherwise):
 
@@ -66,10 +73,27 @@ shows or logs an addon's host.
 Done: addon client, settings, browse UI, sources and player, tvOS polish, library
 (resume, Continue Watching, My List, watched marking, Up Next), autoplay and next-episode,
 See All grid with genres, search with recents, app icons, iPad/landscape/Mac layouts.
+Phase 1: `vo=avfoundation` video output, Picture in Picture (button, automatic on Home,
+restore, next episode while floating), Now Playing and remote commands, subtitles from
+subtitle addons and streams with timing adjustment, automatic fallback to another source,
+tvOS frame-rate and dynamic-range matching, Trakt sign-in, scrobbling and progress sync.
 
-Decisions: MPVKit player (vendored with a resize patch); addons added as manual manifest URLs; cross-device sync via Trakt
-(not iCloud); no paid Apple developer account yet, so device installs expire after 7 days.
+Decisions: MPVKit player (vendored with an AVFoundation video output); addons added as manual
+manifest URLs; cross-device sync via Trakt (not iCloud), with the user's own Trakt app keys
+entered in Settings; no paid Apple developer account, devices are sideloaded (see Commands).
+iPhone/iPad and Apple TV are equal main devices, so no platform gets priority. Picture in
+Picture is required; downloads are out of scope; UI is English only for now.
 
-Next, in plan order: Trakt sync (device-code login, scrobbling, pull playback progress; the
-user must register a Trakt API app and supply its Client ID), then installing on real devices.
-Untested so far: tvOS swipe-to-scrub, subtitle size during playback, Mac screens beyond Home.
+Next, in plan order:
+
+1. Phase 2, polish across iOS, iPadOS, tvOS and macOS: readable sources list (parse quality,
+   size and codec, sorting); tvOS Top Shelf with Continue Watching (check App Groups work with a
+   free account), swipe-to-scrub, focus pass; Mac menu commands and shortcuts, screens beyond
+   Home; consistent loading, empty and error states with retry; VoiceOver and Dynamic Type;
+   cast and director on details.
+2. Phase 3: watch history screen.
+3. Phase 4, onto devices: fix the iPhone Release orientation warning, then sideload.
+
+Untested so far: playback and Picture in Picture on tvOS and macOS, HDR output and tvOS display
+matching (need real hardware), Trakt against the live API, tvOS swipe-to-scrub, Mac screens
+beyond Home. iPhone simulators report Picture in Picture as unsupported; use an iPad simulator.

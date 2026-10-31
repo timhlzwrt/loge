@@ -22,12 +22,9 @@ struct SourcesView: View {
     @Environment(LibraryStore.self) private var library
     @Environment(\.dismiss) private var dismiss
     @State private var results: [StreamProvider.ID: Result<[StreamSource], Error>] = [:]
-    @State private var playing: PlaybackRequest?
     @State private var hasAutoplayed = false
     @State private var playedAutomatically = false
-    #if os(macOS)
-    @Environment(\.openWindow) private var openWindow
-    #endif
+    @Environment(PlaybackSession.self) private var playback
 
     var body: some View {
         let providers = store.addons.streamProviders(type: route.type, id: route.id)
@@ -48,17 +45,18 @@ struct SourcesView: View {
         .task {
             playRememberedSourceIfPossible()
             await load(providers)
+            if playedAutomatically, let current = playback.current, current.item?.id == route.id {
+                playback.offerFallbacks(fallbacks(for: current), for: current)
+            }
             playContinuingSourceIfPossible()
             // Either way the attempt is over; without a match the list is the way forward.
             hasAutoplayed = true
         }
-        #if !os(macOS)
-        .fullScreenCover(item: $playing, onDismiss: {
+        .onChange(of: playback.current == nil) { _, ended in
             // Playback started straight from Play or Continue Watching passed through
-            // this list; closing the player goes back to where that tap came from.
-            if route.autoplay && playedAutomatically { dismiss() }
-        }) { PlayerView(request: $0) }
-        #endif
+            // this list; ending it goes back to where that tap came from.
+            if ended && route.autoplay && playedAutomatically { dismiss() }
+        }
     }
 
     private func list(_ providers: [StreamProvider]) -> some View {
@@ -136,7 +134,7 @@ struct SourcesView: View {
         else { return }
         hasAutoplayed = true
         playedAutomatically = true
-        present(PlaybackRequest(
+        playback.start(PlaybackRequest(
             title: route.title, url: remembered.url, headers: remembered.headers, item: route.item,
             startAt: library.resumePosition(for: route.id),
             providerURL: remembered.providerURL, bingeGroup: remembered.bingeGroup
@@ -157,24 +155,37 @@ struct SourcesView: View {
     }
 
     private func play(_ stream: StreamSource, from provider: StreamProvider) {
-        guard let url = stream.playbackURL else { return }
-        present(PlaybackRequest(
+        guard let request = request(for: stream, from: provider) else { return }
+        playback.start(request, fallbacks: fallbacks(for: request))
+    }
+
+    private func request(for stream: StreamSource, from provider: StreamProvider) -> PlaybackRequest? {
+        guard let url = stream.playbackURL else { return nil }
+        return PlaybackRequest(
             title: route.title,
             url: url,
             headers: stream.requestHeaders,
             item: route.item,
             startAt: library.resumePosition(for: route.id),
             providerURL: provider.manifestURL,
-            bingeGroup: stream.behaviorHints?.bingeGroup
-        ))
+            bingeGroup: stream.behaviorHints?.bingeGroup,
+            subtitles: stream.subtitles ?? [],
+            filename: stream.behaviorHints?.filename
+        )
     }
 
-    private func present(_ request: PlaybackRequest) {
-        #if os(macOS)
-        openWindow(value: request)
-        #else
-        playing = request
-        #endif
+    /// What to try if `request` doesn't open: the same release and quality first, then
+    /// the rest in the user's addon order. Only a few, so a dead account doesn't spend
+    /// minutes working through every link.
+    private func fallbacks(for request: PlaybackRequest) -> [PlaybackRequest] {
+        let all = store.addons.streamProviders(type: route.type, id: route.id).flatMap { provider in
+            guard case .success(let streams) = results[provider.id] else { return [PlaybackRequest]() }
+            return streams.compactMap { self.request(for: $0, from: provider) }
+        }
+        let others = all.filter { $0.url != request.url }
+        let sameGroup = others.filter { request.bingeGroup != nil && $0.bingeGroup == request.bingeGroup }
+        let rest = others.filter { request.bingeGroup == nil || $0.bingeGroup != request.bingeGroup }
+        return Array((sameGroup + rest).prefix(3))
     }
 }
 
