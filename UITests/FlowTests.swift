@@ -76,7 +76,7 @@ final class FlowTests: XCTestCase {
         let close = app.buttons["Close"]
         XCTAssertTrue(close.waitForExistence(timeout: 20), "Player didn't open")
         close.tap()
-        XCTAssertTrue(app.buttons["Season options"].waitForExistence(timeout: 5),
+        XCTAssertTrue(app.buttons["Season"].waitForExistence(timeout: 5),
                       "Closing the player didn't return to the details screen")
         screenshot("after-close")
     }
@@ -92,7 +92,7 @@ final class FlowTests: XCTestCase {
         screenshot("landscape-home")
         XCUIDevice.shared.orientation = .portrait
         openSeries("Lanterns")
-        XCTAssertTrue(app.buttons["Season options"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["Season"].waitForExistence(timeout: 15))
         XCUIDevice.shared.orientation = .landscapeLeft
         sleep(3)
         screenshot("landscape-details")
@@ -175,7 +175,7 @@ final class FlowTests: XCTestCase {
         openSeries("Lanterns")
         // Episode cards open the source list without playing anything first.
         episodeCard().tap()
-        let broken = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Returns 404'")).firstMatch
+        let broken = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Test Broken'")).firstMatch
         XCTAssertTrue(broken.waitForExistence(timeout: 15), "No broken test source")
         screenshot("sources")
         broken.tap()
@@ -191,18 +191,18 @@ final class FlowTests: XCTestCase {
         installTestAddonIfNeeded()
         openSeries("Lanterns")
         episodeCard().tap()
-        let source = app.buttons.matching(NSPredicate(format: "label CONTAINS 'MKV H.264'")).firstMatch
+        let source = app.buttons.matching(NSPredicate(format: "label CONTAINS 'DTS 5.1'")).firstMatch
         XCTAssertTrue(source.waitForExistence(timeout: 15))
         source.tap()
         let pause = app.buttons["Pause"]
         XCTAssertTrue(pause.waitForExistence(timeout: 20), "Playback didn't start")
         pause.tap()
 
-        let menu = app.buttons["Audio and subtitles"]
+        let menu = app.buttons["Subtitles"]
         XCTAssertTrue(menu.waitForExistence(timeout: 10), "No subtitle menu")
         menu.tap()
         let fromStream = app.buttons.matching(NSPredicate(format: "label CONTAINS '· Stream'")).firstMatch
-        let fromAddon = app.buttons.matching(NSPredicate(format: "label CONTAINS '· Test Streams'")).firstMatch
+        let fromAddon = app.buttons.matching(NSPredicate(format: "label CONTAINS '· Addon'")).firstMatch
         _ = fromStream.waitForExistence(timeout: 5)
         screenshot("subtitle-menu")
         XCTAssertTrue(fromStream.exists, "The stream's subtitle is missing")
@@ -213,6 +213,45 @@ final class FlowTests: XCTestCase {
         app.buttons["Play"].tap()
         sleep(1)
         screenshot("subtitle-shown")
+        app.buttons["Close"].tap()
+    }
+
+    /// Screenshots of each redesigned screen, to compare with `Design/mockups`.
+    @MainActor
+    func testScreenTour() {
+        installTestAddonIfNeeded()
+        openTab("Home")
+        sleep(3)
+        screenshot("tour-home")
+        app.swipeUp()
+        sleep(1)
+        screenshot("tour-home-rows")
+
+        openSeries("Lanterns")
+        XCTAssertTrue(app.buttons["Season"].waitForExistence(timeout: 15))
+        sleep(2)
+        screenshot("tour-details")
+        app.buttons["Choose a Source"].tap()
+        let source = app.buttons.matching(NSPredicate(format: "label CONTAINS 'DTS 5.1'")).firstMatch
+        XCTAssertTrue(source.waitForExistence(timeout: 15), "No test sources")
+        screenshot("tour-sources")
+        source.tap()
+
+        let pause = app.buttons["Pause"]
+        XCTAssertTrue(pause.waitForExistence(timeout: 30), "Playback didn't start")
+        pause.tap()
+        XCUIDevice.shared.orientation = .landscapeLeft
+        sleep(2)
+        if !app.buttons["Close"].exists { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap() }
+        screenshot("tour-player")
+        app.buttons["Sources"].tap()
+        sleep(2)
+        screenshot("tour-player-sources")
+        // The sheet's Close is the later of the two.
+        app.buttons.matching(identifier: "Close").allElementsBoundByIndex.last?.tap()
+        XCUIDevice.shared.orientation = .portrait
+        sleep(1)
+        if !app.buttons["Close"].exists { app.tap() }
         app.buttons["Close"].tap()
     }
 
@@ -241,7 +280,7 @@ final class FlowTests: XCTestCase {
         XCTAssertTrue(play.waitForExistence(timeout: 15))
         play.tap()
         // Once playing, the controls fade out; while they're up, Close is showing.
-        let testSource = app.buttons.matching(NSPredicate(format: "label CONTAINS 'MKV H.264'")).firstMatch
+        let testSource = app.buttons.matching(NSPredicate(format: "label CONTAINS 'DTS 5.1'")).firstMatch
         let pause = app.buttons["Pause"]
         for _ in 0..<30 where !pause.exists {
             if testSource.exists {
@@ -254,13 +293,12 @@ final class FlowTests: XCTestCase {
         XCTAssertTrue(pause.exists, "Playback didn't start")
     }
 
-    /// Up Next once something has been watched; on a fresh simulator, the first episode.
+    /// The first episode card in view: the row starts at the one up next.
     @MainActor
     private func episodeCard() -> XCUIElement {
-        let upNext = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Up Next'")).firstMatch
-        let first = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Episode 1,'")).firstMatch
-        XCTAssertTrue(upNext.waitForExistence(timeout: 15) || first.exists, "No episode cards")
-        return upNext.exists ? upNext : first
+        let card = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Episode '")).firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 15), "No episode cards")
+        return card
     }
 
     @MainActor

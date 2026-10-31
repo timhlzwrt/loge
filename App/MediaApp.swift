@@ -64,6 +64,11 @@ struct MediaApp: App {
 struct RootView: View {
     @Environment(PlaybackSession.self) private var playback
     #if os(macOS)
+    @Environment(AddonStore.self) private var addonStore
+    #elseif os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
+    #if os(macOS)
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismissWindow) private var dismissWindow
     #endif
@@ -86,17 +91,57 @@ struct RootView: View {
 
     private var tabs: some View {
         TabView {
-            Tab("Home", systemImage: "house") {
+            tab("Home", systemImage: "house") {
                 BrowseStack { HomeView() }
             }
-            Tab("Search", systemImage: "magnifyingglass", role: .search) {
+            #if os(macOS)
+            // The sidebar reads top to bottom, so Search sits with the other places to go.
+            tab("Search", systemImage: "magnifyingglass", role: .search) {
                 BrowseStack { SearchView() }
             }
-            Tab("Settings", systemImage: "gearshape") {
+            #endif
+            tab("My List", systemImage: "plus") {
+                BrowseStack { MyListView() }
+            }
+            #if os(macOS)
+            TabSection("Catalogs") {
+                ForEach(addonStore.addons.homeCatalogs) { source in
+                    Tab(source.title, systemImage: source.catalog.type == "series" ? "tv" : "rectangle.portrait") {
+                        BrowseStack { CatalogGridView(source: source) }
+                    }
+                }
+            }
+            #endif
+            tab("Settings", systemImage: "gearshape") {
                 NavigationStack { SettingsView() }
             }
+            #if !os(macOS)
+            tab("Search", systemImage: "magnifyingglass", role: .search) {
+                BrowseStack { SearchView() }
+            }
+            #endif
         }
         .tabViewStyle(.sidebarAdaptable)
+    }
+
+    /// A tab that shows only its icon in the phone's tab bar, where the four symbols are
+    /// familiar enough, and its name in a sidebar.
+    private func tab(
+        _ title: String, systemImage: String, role: TabRole? = nil, @ViewBuilder content: () -> some View
+    ) -> some TabContent<Never> {
+        Tab(role: role) {
+            content()
+        } label: {
+            #if os(iOS)
+            if horizontalSizeClass == .compact {
+                Image(systemName: systemImage).accessibilityLabel(title)
+            } else {
+                Label(title, systemImage: systemImage)
+            }
+            #else
+            Label(title, systemImage: systemImage)
+            #endif
+        }
     }
 }
 

@@ -2,7 +2,7 @@ import MediaCore
 import SwiftUI
 
 /// A movie or episode whose sources should be listed.
-struct SourcesRoute: Hashable {
+struct SourcesRoute: Hashable, Identifiable {
     let item: WatchItem
     /// "Lanterns · S1 E2", shown as the screen and player title.
     let title: String
@@ -14,14 +14,14 @@ struct SourcesRoute: Hashable {
     var id: String { item.id }
 }
 
-/// Every playable source from the user's stream addons, grouped by addon in their order
-/// or as one list with the best quality first.
+/// Every playable source from the user's stream addons, grouped by resolution and largest
+/// first. Rows describe the file (release, codec, HDR, audio, size) and never name the addon
+/// or the file, whose names can carry account details.
 struct SourcesView: View {
     let route: SourcesRoute
-
-    enum Order: String {
-        case addons, quality
-    }
+    /// Shown over the details screen to pick a source, rather than pushed by Play as the
+    /// fallback underneath autoplay.
+    var isChoosing = false
 
     @Environment(AddonStore.self) private var store
     @Environment(LibraryStore.self) private var library
@@ -29,8 +29,12 @@ struct SourcesView: View {
     @State private var results: [StreamProvider.ID: Result<[StreamSource], Error>] = [:]
     @State private var hasAutoplayed = false
     @State private var playedAutomatically = false
+    #if os(macOS)
+    @State private var selectedID: Entry.ID?
+    #endif
+    /// Chosen in the sheet, to play once it has closed.
+    @State private var pendingPlay: Entry?
     @Environment(PlaybackSession.self) private var playback
-    @AppStorage("sourcesOrder") private var order = Order.addons
 
     var body: some View {
         let providers = store.addons.streamProviders(type: route.type, id: route.id)
@@ -42,12 +46,14 @@ struct SourcesView: View {
                     description: Text("Install an addon that provides streams in Settings.")
                 )
             } else {
-                list(providers)
+                content(providers)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.canvas)
+        #if !os(tvOS)
         .navigationTitle(route.title)
+        #endif
         .task {
             playRememberedSourceIfPossible()
             await load(providers)
@@ -58,6 +64,9 @@ struct SourcesView: View {
             // Either way the attempt is over; without a match the list is the way forward.
             hasAutoplayed = true
         }
+        .onDisappear {
+            if let entry = pendingPlay { play(entry.stream, from: entry.provider) }
+        }
         .onChange(of: playback.current == nil) { _, ended in
             // Playback started straight from Play or Continue Watching passed through
             // this list; ending it goes back to where that tap came from.
@@ -65,114 +74,271 @@ struct SourcesView: View {
         }
     }
 
-    private func list(_ providers: [StreamProvider]) -> some View {
-        List {
-            if route.autoplay && !hasAutoplayed && library.sources[route.item.metaID] != nil {
-                Label("Starting with your last source…", systemImage: "play.circle")
-                    .foregroundStyle(.secondary)
-            }
-            Picker("Order", selection: $order) {
-                Text("Addon Order").tag(Order.addons)
-                Text("Best Quality").tag(Order.quality)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .listRowBackground(Color.clear)
-            switch order {
-            case .addons:
-                ForEach(providers) { provider in
-                    Section(provider.name) {
-                        switch results[provider.id] {
-                        case nil:
-                            ProgressView()
-                        case .failure:
-                            unreachable(provider)
-                        case .success(let streams):
-                            section(for: streams, from: provider)
-                        }
-                    }
-                }
-            case .quality:
-                bestFirst(providers)
-            }
+    // MARK: Layouts
+
+    @ViewBuilder
+    private func content(_ providers: [StreamProvider]) -> some View {
+        let groups = groups(providers)
+        #if os(tvOS)
+        tvLayout(groups, providers: providers)
+        #elseif os(macOS)
+        if isChoosing {
+            macSheet(groups, providers: providers)
+        } else {
+            ScrollView { list(groups, providers: providers).padding(Metrics.gutter) }
         }
-        #if !os(tvOS)
-        .scrollContentBackground(.hidden)
+        #else
+        if isChoosing {
+            phoneSheet(groups, providers: providers)
+        } else {
+            ScrollView { list(groups, providers: providers).padding(.horizontal, 16).padding(.vertical, 8) }
+        }
         #endif
     }
 
-    @ViewBuilder
-    private func section(for streams: [StreamSource], from provider: StreamProvider) -> some View {
-        let playable = streams.filter { $0.playbackURL != nil }
-        ForEach(Array(playable.enumerated()), id: \.offset) { _, stream in
-            row(stream, from: provider, showsProvider: false)
-        }
-        if playable.isEmpty && streams.isEmpty {
-            Text("No sources found.")
-                .foregroundStyle(.secondary)
-        }
-        let unsupported = streams.count - playable.count
-        if unsupported > 0 {
-            Text("\(unsupported) torrent or external \(unsupported == 1 ? "source isn't" : "sources aren't") supported yet.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-        }
+    /// "5 sources", once something has loaded.
+    private func count(_ groups: [SourceGroup]) -> String? {
+        let count = groups.reduce(0) { $0 + $1.entries.count }
+        return count == 0 ? nil : "\(count) \(count == 1 ? "source" : "sources")"
     }
 
-    /// Every addon's sources in one list, best first; ties keep the user's addon order.
+    #if os(tvOS)
+    /// The title over its dimmed backdrop on the left, the list on the right.
+    private func tvLayout(_ groups: [SourceGroup], providers: [StreamProvider]) -> some View {
+        ZStack(alignment: .bottomLeading) {
+            Artwork(url: route.item.background)
+                .overlay(Color.black.opacity(0.55))
+                .overlay {
+                    LinearGradient(
+                        stops: [.init(color: .canvas.opacity(0), location: 0.2), .init(color: .canvas, location: 0.6)],
+                        startPoint: .leading, endPoint: .trailing
+                    )
+                }
+                .ignoresSafeArea()
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 10) {
+                Text(route.item.title)
+                    .font(.system(size: 76, weight: .light))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.6)
+                if let subtitle = [route.item.episodeCode, route.item.episodeTitle].compactMap({ $0 }).joined(separator: " · ").nilIfEmpty {
+                    Text(subtitle)
+                        .font(.metaLine)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: 760, alignment: .leading)
+            List {
+                list(groups, providers: providers)
+            }
+            .frame(width: 860)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+    }
+    #endif
+
+    #if os(iOS)
+    private func phoneSheet(_ groups: [SourceGroup], providers: [StreamProvider]) -> some View {
+        VStack(spacing: 0) {
+            ZStack(alignment: .trailing) {
+                VStack(spacing: 1) {
+                    Text(route.title)
+                        .font(.headline)
+                        .lineLimit(1)
+                    if let count = count(groups) {
+                        Text(count)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 64)
+                Button("Close", systemImage: "xmark") { dismiss() }
+                    .labelStyle(.iconOnly)
+                    .font(.body.weight(.semibold))
+                    .frame(width: 44, height: 44)
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .padding(.trailing, 16)
+            }
+            .padding(.top, 20)
+            .padding(.bottom, 12)
+            ScrollView {
+                list(groups, providers: providers)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+            }
+        }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+    }
+    #endif
+
+    #if os(macOS)
+    private func macSheet(_ groups: [SourceGroup], providers: [StreamProvider]) -> some View {
+        let selected = selectedID ?? lastPlayedID(in: groups) ?? groups.first?.entries.first?.id
+        let entry = groups.lazy.flatMap(\.entries).first { $0.id == selected }
+        return VStack(spacing: 14) {
+            VStack(spacing: 2) {
+                Text("Choose a Source")
+                    .font(.headline)
+                Text([route.title, count(groups)].compactMap { $0 }.joined(separator: " · "))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.top, 20)
+            ScrollView {
+                list(groups, providers: providers, selectedID: selected)
+                    .padding(.horizontal, 20)
+            }
+            HStack(spacing: 10) {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                    .buttonStyle(.glass)
+                    // The Mac fills glass buttons with the tint, which is white app-wide.
+                    .tint(.clear)
+                Button("Play") {
+                    if let entry { choose(entry) }
+                }
+                .keyboardShortcut(.defaultAction)
+                .buttonStyle(.glassProminent)
+                .foregroundStyle(.black)
+                .disabled(entry == nil)
+            }
+            .controlSize(.large)
+            .padding([.horizontal, .bottom], 20)
+        }
+        .frame(width: 520, height: 600)
+        .background(Color.canvas)
+    }
+    #endif
+
+    // MARK: List
+
+    /// The groups and the loading, failure and empty states around them.
     @ViewBuilder
-    private func bestFirst(_ providers: [StreamProvider]) -> some View {
-        let ranked = providers.enumerated()
-            .flatMap { index, provider -> [(Int, StreamProvider, StreamSource, StreamDetails)] in
-                guard case .success(let streams) = results[provider.id] else { return [] }
-                return streams.filter { $0.playbackURL != nil }.map { (index, provider, $0, StreamDetails($0)) }
+    private func list(_ groups: [SourceGroup], providers: [StreamProvider], selectedID: Entry.ID? = nil) -> some View {
+        let lastPlayed = lastPlayedID(in: groups)
+        let failed = providers.filter { if case .failure = results[$0.id] { true } else { false } }
+        let isLoading = providers.contains { results[$0.id] == nil }
+        ListContainer {
+            if route.autoplay && !hasAutoplayed && library.sources[route.item.metaID] != nil {
+                Text("Starting with your last source…")
+                    .foregroundStyle(.secondary)
             }
-            .enumerated()
-            .sorted { lhs, rhs in
-                let (a, b) = (lhs.element.3, rhs.element.3)
-                if StreamDetails.bestFirst(a, b) { return true }
-                if StreamDetails.bestFirst(b, a) { return false }
-                return lhs.offset < rhs.offset
+            ForEach(groups) { group in
+                SourceGroupView(title: group.title) {
+                    ForEach(group.entries) { entry in
+                        row(entry, isLastPlayed: entry.id == lastPlayed, isSelected: entry.id == selectedID)
+                    }
+                }
             }
-            .map(\.element)
-        Section {
-            ForEach(Array(ranked.enumerated()), id: \.offset) { _, entry in
-                row(entry.2, from: entry.1, showsProvider: providers.count > 1)
-            }
-            if providers.contains(where: { results[$0.id] == nil }) {
+            if isLoading {
                 ProgressView()
+                    .frame(maxWidth: .infinity)
             }
-            ForEach(providers.filter { if case .failure = results[$0.id] { true } else { false } }) { provider in
-                unreachable(provider)
+            if !failed.isEmpty {
+                HStack {
+                    Text(groups.isEmpty ? "Couldn't load sources." : "Some sources couldn't be loaded.")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Retry") {
+                        for provider in failed { results[provider.id] = nil }
+                        Task { await load(failed) }
+                    }
+                }
             }
-            if ranked.isEmpty && providers.allSatisfy({ results[$0.id] != nil }) {
+            if groups.isEmpty && !isLoading && failed.isEmpty {
                 Text("No sources found.")
                     .foregroundStyle(.secondary)
             }
         }
     }
 
-    private func unreachable(_ provider: StreamProvider) -> some View {
-        HStack {
-            Text("Couldn't reach \(provider.name).")
-                .foregroundStyle(.secondary)
-            Spacer()
-            Button("Retry") {
-                results[provider.id] = nil
-                Task { await load([provider]) }
+    @ViewBuilder
+    private func row(_ entry: Entry, isLastPlayed: Bool, isSelected: Bool) -> some View {
+        let label = StreamRow(entry: entry, isLastPlayed: isLastPlayed)
+        #if os(macOS)
+        if isChoosing {
+            // Click selects and double-click plays, as in a Mac list; Play plays the selection.
+            label
+                .background(isSelected ? Color.white.opacity(0.12) : .clear)
+                .contentShape(.rect)
+                .onTapGesture(count: 2) { choose(entry) }
+                .onTapGesture { selectedID = entry.id }
+                .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+                .accessibilityAction { choose(entry) }
+        } else {
+            Button { choose(entry) } label: { label }
+                .buttonStyle(.plain)
+        }
+        #else
+        Button { choose(entry) } label: { label }
+            #if !os(tvOS)
+            .buttonStyle(.plain)
+            #endif
+        #endif
+    }
+
+    private func choose(_ entry: Entry) {
+        guard isChoosing else {
+            play(entry.stream, from: entry.provider)
+            return
+        }
+        // The sheet has done its job. The player is presented from the root, which can't
+        // happen while this sheet is still going away, so playback waits for it to close.
+        pendingPlay = entry
+        dismiss()
+    }
+
+    // MARK: Data
+
+    fileprivate struct Entry: Identifiable {
+        let id: String
+        let stream: StreamSource
+        let provider: StreamProvider
+        let details: StreamDetails
+    }
+
+    fileprivate struct SourceGroup: Identifiable {
+        let title: String
+        let entries: [Entry]
+        var id: String { title }
+    }
+
+    /// 4K, 1080p and 720p, then everything else; largest first within each, ties in addon order.
+    private func groups(_ providers: [StreamProvider]) -> [SourceGroup] {
+        let entries = providers.flatMap { provider -> [Entry] in
+            guard case .success(let streams) = results[provider.id] else { return [] }
+            return streams.enumerated()
+                .filter { $0.element.playbackURL != nil }
+                .map { Entry(id: "\(provider.id)#\($0.offset)", stream: $0.element, provider: provider, details: StreamDetails($0.element)) }
+        }
+        let listed = StreamDetails.listedResolutions
+        let buckets = listed.map { resolution in
+            SourceGroup(title: resolution.label, entries: entries.filter { $0.details.resolution == resolution })
+        } + [SourceGroup(title: "Other", entries: entries.filter { entry in !listed.contains { $0 == entry.details.resolution } })]
+        return buckets.filter { !$0.entries.isEmpty }.map { group in
+            let sorted = group.entries.enumerated().sorted { lhs, rhs in
+                if StreamDetails.largerFirst(lhs.element.details, rhs.element.details) { return true }
+                if StreamDetails.largerFirst(rhs.element.details, lhs.element.details) { return false }
+                return lhs.offset < rhs.offset
             }
+            return SourceGroup(title: group.title, entries: sorted.map(\.element))
         }
     }
 
-    private func row(_ stream: StreamSource, from provider: StreamProvider, showsProvider: Bool) -> some View {
-        Button {
-            play(stream, from: provider)
-        } label: {
-            StreamRow(stream: stream, providerName: provider.name, showsProvider: showsProvider)
+    /// The remembered source: the same file, or for another episode the same release.
+    private func lastPlayedID(in groups: [SourceGroup]) -> Entry.ID? {
+        guard let remembered = library.sources[route.item.metaID] else { return nil }
+        let entries = groups.flatMap(\.entries)
+        let sameFile = entries.first { $0.stream.playbackURL == remembered.url }
+        let sameRelease = entries.first {
+            remembered.bingeGroup != nil && $0.provider.id == remembered.providerURL
+                && $0.stream.behaviorHints?.bingeGroup == remembered.bingeGroup
         }
-        #if !os(tvOS)
-        .buttonStyle(.plain)
-        #endif
+        return (sameFile ?? sameRelease)?.id
     }
 
     private func load(_ providers: [StreamProvider]) async {
@@ -255,37 +421,132 @@ struct SourcesView: View {
     }
 }
 
-/// One source: what the picture will look like first, then the file, then the addon's own
-/// text, which can mention things the tags don't, such as languages or the release group.
-private struct StreamRow: View {
-    let stream: StreamSource
-    let providerName: String
-    /// In the best-first list, rows from several addons sit together.
-    let showsProvider: Bool
+/// A resolution's heading and its rows, on a rounded panel except on tvOS, where the
+/// rows are focus targets of their own.
+private struct SourceGroupView<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: Content
 
     var body: some View {
-        let details = StreamDetails(stream)
-        let fileLine = [details.file, details.isCached == false ? "Not cached" : nil, showsProvider ? providerName : nil]
-            .compactMap { $0 }
-            .joined(separator: " · ")
-        VStack(alignment: .leading, spacing: 3) {
-            // Without recognisable tags, the addon's name line is the best summary.
-            Text(details.picture ?? stream.cleanName?.components(separatedBy: .newlines).joined(separator: " ") ?? providerName)
-                .font(.subheadline.weight(.semibold))
-            if !fileLine.isEmpty {
-                Text(fileLine)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            if let text = stream.description ?? stream.title ?? stream.behaviorHints?.filename {
-                Text(text)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
+        #if os(tvOS)
+        Section {
+            content
+        } header: {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 4)
-        .contentShape(.rect)
+        #else
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.leading, 16)
+            VStack(spacing: 0) {
+                Group(subviews: content) { rows in
+                    ForEach(rows.indices, id: \.self) { index in
+                        if index > 0 {
+                            Divider().padding(.leading, 16)
+                        }
+                        rows[index]
+                    }
+                }
+            }
+            .background(.white.opacity(0.07), in: .rect(cornerRadius: Self.radius))
+            .clipShape(.rect(cornerRadius: Self.radius))
+        }
+        #endif
     }
+
+    #if os(macOS)
+    private static var radius: CGFloat { 12 }
+    #else
+    private static var radius: CGFloat { 20 }
+    #endif
+}
+
+/// One source: the release type, then codec, HDR and audio, with the size on the right.
+/// Files the debrid service doesn't hold yet are dimmed, since they usually stall.
+private struct StreamRow: View {
+    let entry: SourcesView.Entry
+    let isLastPlayed: Bool
+
+    var body: some View {
+        let details = entry.details
+        let isCold = details.isCached == false
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(titleFont)
+                    .lineLimit(1)
+                if let summary = [details.summary, isCold ? "not cached" : nil].compactMap({ $0 }).joined(separator: " · ").nilIfEmpty {
+                    Text(summary)
+                        .font(summaryFont)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
+            Spacer(minLength: 8)
+            if let size = details.sizeLabel {
+                Text(size)
+                    .font(sizeFont.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            Image(systemName: "checkmark")
+                .font(sizeFont.weight(.semibold))
+                .frame(width: 18)
+                .opacity(isLastPlayed ? 1 : 0)
+                .accessibilityLabel("Last played")
+                .accessibilityHidden(!isLastPlayed)
+        }
+        .opacity(isCold ? 0.45 : 1)
+        #if !os(tvOS)
+        .padding(.horizontal, 16)
+        .frame(minHeight: rowHeight)
+        #endif
+        .contentShape(.rect)
+        .accessibilityElement(children: .combine)
+    }
+
+    /// The release type, the resolution when that's all an addon says, or the addon's own
+    /// name line for streams none of the tags fit.
+    private var title: String {
+        let details = entry.details
+        return details.releaseType ?? (details.summary != nil ? details.resolution?.label : nil)
+            ?? entry.stream.cleanName?.components(separatedBy: .newlines).joined(separator: " ")
+            ?? "Source"
+    }
+
+    #if os(tvOS)
+    private let titleFont = Font.headline
+    private let summaryFont = Font.caption
+    private let sizeFont = Font.callout
+    #elseif os(macOS)
+    private let titleFont = Font.body.weight(.semibold)
+    private let summaryFont = Font.subheadline
+    private let sizeFont = Font.body
+    private let rowHeight: CGFloat = 50
+    #else
+    private let titleFont = Font.callout.weight(.semibold)
+    private let summaryFont = Font.footnote
+    private let sizeFont = Font.subheadline
+    private let rowHeight: CGFloat = 60
+    #endif
+}
+
+/// Stacks the groups on a phone or Mac; on tvOS they are already inside a `List`.
+private struct ListContainer<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        #if os(tvOS)
+        content
+        #else
+        VStack(alignment: .leading, spacing: 24) { content }
+        #endif
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

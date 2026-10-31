@@ -12,7 +12,7 @@ struct MetaDetailView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     #endif
-    /// Set by "Choose Source", which bypasses the remembered source.
+    /// Set by "Choose a Source" and by picking an episode, which bypass the remembered source.
     @State private var choosingSource: SourcesRoute?
 
     private enum LoadState {
@@ -31,7 +31,8 @@ struct MetaDetailView: View {
                         EpisodesSection(
                             videos: videos,
                             upNextID: library.upNext(metaID: preview.id, videos: videos)?.video.id,
-                            route: route(for:)
+                            route: route(for:),
+                            choose: { choosingSource = route(for: $0) }
                         )
                     }
                 case .failed(let message):
@@ -58,8 +59,15 @@ struct MetaDetailView: View {
         .background(Color.canvas)
         #if os(iOS)
         .toolbarBackground(.hidden, for: .navigationBar)
+        #elseif os(macOS)
+        // The backdrop runs up under the toolbar, which keeps only the back button.
+        .ignoresSafeArea(edges: .top)
         #endif
-        .navigationDestination(item: $choosingSource) { SourcesView(route: $0) }
+        #if os(tvOS)
+        .fullScreenCover(item: $choosingSource) { SourcesView(route: $0, isChoosing: true) }
+        #else
+        .sheet(item: $choosingSource) { SourcesView(route: $0, isChoosing: true) }
+        #endif
         .task(id: isLoading) {
             guard isLoading else { return }
             guard let client = store.addons.metaClient(type: preview.type, id: preview.id) else {
@@ -85,210 +93,171 @@ struct MetaDetailView: View {
         if case .loaded(let meta) = state { meta } else { nil }
     }
 
-    /// Movies play or resume themselves. Series continue where the viewer left off:
-    /// the unfinished episode, else the one after the last finished, else the first.
-    private var playRoute: (label: String, route: SourcesRoute)? {
-        guard preview.type == "series" else {
-            let label = library.resumePosition(for: preview.id) == nil ? "Play" : "Resume"
-            return (label, autoplaying(route(for: nil)))
-        }
-        guard let videos = loaded?.videos else { return nil }
-        if let next = library.upNext(metaID: preview.id, videos: videos) {
-            let code = EpisodesSection.code(for: next.video)
-            return ("\(next.resumeAt == nil ? "Play" : "Resume") \(code)", autoplaying(route(for: next.video)))
-        }
-        guard let first = EpisodesSection.firstEpisode(in: videos) else { return nil }
-        return ("Play \(EpisodesSection.code(for: first))", autoplaying(route(for: first)))
+    private var playAction: PlayAction? {
+        PlayAction(preview: preview, meta: loaded, library: library)
     }
 
-    @ViewBuilder
-    private var moreMenu: some View {
-        if let play = playRoute {
-            Menu {
-                Button("Choose Source", systemImage: "list.bullet") {
-                    var route = play.route
-                    route.autoplay = false
-                    choosingSource = route
-                }
-                if preview.type != "series" {
-                    if library.isWatched(preview.id) {
-                        Button("Mark as Unwatched", systemImage: "eye.slash") {
-                            library.markUnwatched([preview.id])
-                            trakt.markUnwatched([play.route.item])
-                        }
-                    } else {
-                        Button("Mark as Watched", systemImage: "checkmark.circle") {
-                            library.markWatched([play.route.item])
-                            trakt.markWatched([play.route.item])
-                        }
-                    }
-                }
-            } label: {
-                Label("More", systemImage: "ellipsis")
-                    #if !os(tvOS)
-                    .labelStyle(.iconOnly)
-                    .font(.headline)
-                    .frame(width: 46, height: 46)
-                    .background(.white.opacity(0.15), in: .circle)
-                    #endif
-            }
-            #if os(tvOS)
-            .labelStyle(.iconOnly)
-            #else
-            .buttonStyle(.plain)
-            #endif
-        }
-    }
-
-    /// The sources route for the movie itself, or for one of the series' episodes.
     private func route(for video: Video?) -> SourcesRoute {
-        let name = loaded?.name ?? preview.name
-        let item = WatchItem(
-            id: video?.id ?? preview.id,
-            type: preview.type,
-            metaID: preview.id,
-            title: name,
-            season: video?.season,
-            episode: video?.episode,
-            episodeTitle: video?.displayTitle,
-            poster: loaded?.poster ?? preview.poster,
-            background: loaded?.background ?? preview.background,
-            thumbnail: video?.thumbnail
-        )
-        let title = video.map { "\(name) · \(EpisodesSection.code(for: $0))" } ?? name
-        return SourcesRoute(item: item, title: title)
-    }
-
-    /// The Play button's route, which goes straight to playback when a source is remembered.
-    private func autoplaying(_ route: SourcesRoute) -> SourcesRoute {
-        var route = route
-        route.autoplay = true
-        return route
+        PlayAction.route(for: video, preview: preview, meta: loaded)
     }
 
     private var backdrop: some View {
         Artwork(url: loaded?.background ?? preview.background)
             .overlay { BackdropFade() }
-            #if os(tvOS)
+            #if !os(iOS)
             .overlay {
-                LinearGradient(colors: [.canvas, .canvas.opacity(0)], startPoint: .leading, endPoint: .center)
+                LinearGradient(colors: [.canvas.opacity(0.8), .canvas.opacity(0)], startPoint: .leading, endPoint: .center)
             }
+            #endif
+            #if os(tvOS)
             .ignoresSafeArea()
             #else
             // Extends under the status bar while the text stays below it; the extra height
             // makes up for the part that moves up there.
             .frame(height: heroHeight + 100)
             .clipped()
+            #if os(macOS)
+            .backgroundExtensionEffect()
+            #endif
             .ignoresSafeArea(edges: .top)
             #endif
             .accessibilityHidden(true)
     }
 
+    private var description: String? {
+        loaded?.description ?? preview.description
+    }
+
     private var hero: some View {
-        VStack(alignment: heroAlignment, spacing: 14) {
+        VStack(alignment: heroAlignment, spacing: 12) {
             TitleLogo(logo: loaded?.logo ?? preview.logo, name: preview.name, maxHeight: logoHeight)
                 .frame(maxWidth: logoWidth, alignment: Alignment(horizontal: heroAlignment, vertical: .center))
             (loaded?.infoLine ?? preview.infoLine)
-            if let description = loaded?.description ?? preview.description {
+                .multilineTextAlignment(heroAlignment == .center ? .center : .leading)
+            if !synopsisUnderButtons, let description {
+                Text(description)
+                    .font(.synopsis)
+                    .foregroundStyle(.white.opacity(0.88))
+                    .lineLimit(3)
+                    .frame(maxWidth: synopsisWidth, alignment: .leading)
+            }
+            buttons
+                .padding(.top, 6)
+            if synopsisUnderButtons, let description {
                 ExpandableText(text: description)
-                    .frame(maxWidth: 900, alignment: .leading)
+                    .padding(.top, 6)
             }
-            if let credits = loaded?.credits {
-                Text(credits)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .frame(maxWidth: 900, alignment: .leading)
-            }
-            HStack(spacing: 16) {
-                if let play = playRoute {
-                    PlayButton(label: play.label, route: play.route)
-                }
-                MyListButton(isSaved: library.isSaved(preview.id)) {
-                    library.toggleSaved(preview)
-                }
-                moreMenu
-            }
-            .padding(.top, 6)
         }
         .frame(maxWidth: .infinity, alignment: Alignment(horizontal: heroAlignment, vertical: .bottom))
         .frame(minHeight: heroHeight, alignment: .bottom)
         .padding(.horizontal, Metrics.gutter)
     }
 
+    private var buttons: some View {
+        HStack(spacing: 12) {
+            if let play = playAction {
+                NavigationLink(value: play.route) {
+                    Label(play.label, systemImage: "play.fill")
+                        .frame(maxWidth: synopsisUnderButtons ? .infinity : nil)
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .contextMenu { watchedActions(play.route.item) }
+            }
+            // No merging distance: the circles stay apart, as separate buttons.
+            GlassEffectContainer(spacing: 0) {
+                HStack(spacing: 12) {
+                    MyListButton(isSaved: library.isSaved(preview.id)) {
+                        library.toggleSaved(preview)
+                    }
+                    if let play = playAction {
+                        Button("Choose a Source", systemImage: "list.bullet") {
+                            var route = play.route
+                            route.autoplay = false
+                            choosingSource = route
+                        }
+                        .buttonStyle(GlassIconButtonStyle())
+                    }
+                }
+            }
+        }
+    }
+
+    /// Movies only: a series is marked by season or episode.
+    @ViewBuilder
+    private func watchedActions(_ item: WatchItem) -> some View {
+        if preview.type != "series" {
+            if library.isWatched(preview.id) {
+                Button("Mark as Unwatched", systemImage: "eye.slash") {
+                    library.markUnwatched([preview.id])
+                    trakt.markUnwatched([item])
+                }
+            } else {
+                Button("Mark as Watched", systemImage: "checkmark.circle") {
+                    library.markWatched([item])
+                    trakt.markWatched([item])
+                }
+            }
+        }
+    }
+
     #if os(tvOS)
     private let heroAlignment = HorizontalAlignment.leading
-    private let heroHeight: CGFloat = 640
+    private let heroHeight: CGFloat = 560
     private let logoHeight: CGFloat = 160
     private let logoWidth: CGFloat = 560
+    private let synopsisWidth: CGFloat = 900
+    private let synopsisUnderButtons = false
     #elseif os(macOS)
     private let heroAlignment = HorizontalAlignment.leading
     private let heroHeight: CGFloat = 420
     private let logoHeight: CGFloat = 110
     private let logoWidth: CGFloat = 360
+    private let synopsisWidth: CGFloat = 540
+    private let synopsisUnderButtons = false
     #else
     // A centred stack suits a portrait phone; wider screens read better left-aligned,
     // and a short landscape screen needs a shorter hero.
     private var isWide: Bool { horizontalSizeClass == .regular || verticalSizeClass == .compact }
     private var heroAlignment: HorizontalAlignment { isWide ? .leading : .center }
     private var heroHeight: CGFloat {
-        verticalSizeClass == .compact ? 300 : horizontalSizeClass == .regular ? 500 : 460
+        verticalSizeClass == .compact ? 300 : horizontalSizeClass == .regular ? 500 : 400
     }
     private var logoHeight: CGFloat { isWide ? 100 : 80 }
-    private var logoWidth: CGFloat { isWide ? 360 : 240 }
+    private var logoWidth: CGFloat { isWide ? 360 : 260 }
+    private let synopsisWidth: CGFloat = 620
+    /// On a phone the buttons come first, so the synopsis doesn't push them down.
+    private var synopsisUnderButtons: Bool { !isWide }
     #endif
 }
 
-/// A description clamped to a few lines, with a "more" control when it overflows.
+/// A description clamped to two lines, with "more" at the end when it overflows.
 private struct ExpandableText: View {
     let text: String
     @State private var isExpanded = false
 
     var body: some View {
-        #if os(tvOS)
-        // A focusable "More" would take initial focus from Play, which matters more on a TV.
-        Text(text)
-            .font(.callout)
-            .foregroundStyle(.white.opacity(0.8))
-            .lineLimit(4)
-        #else
-        VStack(alignment: .leading, spacing: 4) {
+        Button {
+            isExpanded.toggle()
+        } label: {
             Text(text)
-                .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.8))
-                .lineLimit(isExpanded ? nil : 3)
-            if !isExpanded {
-                Button("More") { isExpanded = true }
-                    .font(.footnote.weight(.semibold))
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-            }
+                .font(.synopsis)
+                .foregroundStyle(.white.opacity(0.88))
+                .lineLimit(isExpanded ? nil : 2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay(alignment: .bottomTrailing) {
+                    if !isExpanded {
+                        Text("more")
+                            .font(.synopsis.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .padding(.leading, 24)
+                            .background(alignment: .trailing) {
+                                LinearGradient(colors: [.canvas.opacity(0), .canvas], startPoint: .leading, endPoint: .init(x: 0.4, y: 0.5))
+                            }
+                    }
+                }
         }
-        #endif
-    }
-}
-
-private struct PlayButton: View {
-    let label: String
-    let route: SourcesRoute
-
-    var body: some View {
-        NavigationLink(value: route) {
-            Label(label, systemImage: "play.fill")
-                .font(.headline)
-                #if !os(tvOS)
-                .padding(.horizontal, 28)
-                .padding(.vertical, 12)
-                .background(.white, in: .capsule)
-                .foregroundStyle(.black)
-                #endif
-        }
-        #if os(tvOS)
-        // The system style supplies the focus highlight a custom background would lose.
-        .buttonStyle(.bordered)
-        #else
         .buttonStyle(.plain)
-        #endif
+        .accessibilityHint(isExpanded ? "" : "Shows the whole description")
     }
 }
 
@@ -298,21 +267,10 @@ private struct MyListButton: View {
 
     var body: some View {
         Button(action: toggle) {
-            Label("My List", systemImage: isSaved ? "checkmark" : "plus")
+            Label(isSaved ? "Remove from My List" : "Add to My List", systemImage: isSaved ? "checkmark" : "plus")
                 .contentTransition(.symbolEffect(.replace))
-                #if !os(tvOS)
-                .labelStyle(.iconOnly)
-                .font(.headline)
-                .frame(width: 46, height: 46)
-                .background(.white.opacity(0.15), in: .circle)
-                #endif
         }
-        #if os(tvOS)
-        .buttonStyle(.bordered)
-        #else
-        .buttonStyle(.plain)
-        .accessibilityValue(isSaved ? "Added" : "Not added")
-        #endif
+        .buttonStyle(GlassIconButtonStyle())
     }
 }
 
@@ -321,13 +279,16 @@ private struct EpisodesSection: View {
     let videos: [Video]
     let upNextID: String?
     let route: (Video) -> SourcesRoute
+    /// Opens the sources for an episode.
+    let choose: (Video) -> Void
     @State private var season: Int
     @Environment(LibraryStore.self) private var library
 
-    init(videos: [Video], upNextID: String?, route: @escaping (Video) -> SourcesRoute) {
+    init(videos: [Video], upNextID: String?, route: @escaping (Video) -> SourcesRoute, choose: @escaping (Video) -> Void) {
         self.videos = videos
         self.upNextID = upNextID
         self.route = route
+        self.choose = choose
         // Open on the season being watched, otherwise the first real one rather than specials (season 0).
         let upNextSeason = videos.first { $0.id == upNextID }?.season
         _season = State(initialValue: upNextSeason ?? Self.seasons(in: videos).first ?? 0)
@@ -335,50 +296,22 @@ private struct EpisodesSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.rowSpacing) {
-            HStack(spacing: 12) {
-                Picker("Season", selection: $season) {
-                    ForEach(Self.seasons(in: videos), id: \.self) { number in
-                        Text(number == 0 ? "Specials" : "Season \(number)").tag(number)
-                    }
-                }
-                .pickerStyle(.menu)
-                .fixedSize()
-                Menu {
-                    Button("Mark Season as Watched", systemImage: "checkmark.circle") {
-                        let items = episodes.filter { $0.isReleased() }.map { route($0).item }
-                        library.markWatched(items)
-                        trakt.markWatched(items)
-                    }
-                    Button("Mark Season as Unwatched", systemImage: "eye.slash") {
-                        library.markUnwatched(episodes.map(\.id))
-                        trakt.markUnwatched(episodes.map { route($0).item })
-                    }
-                } label: {
-                    Label("Season options", systemImage: "ellipsis.circle")
-                        .labelStyle(.iconOnly)
-                }
-                #if !os(tvOS)
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                #endif
+            seasonMenu
+                .padding(.horizontal, Metrics.gutter)
+            #if os(macOS)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 18, alignment: .top), count: 4),
+                      alignment: .leading, spacing: 28) {
+                ForEach(episodes) { episodeButton($0) }
             }
             .padding(.horizontal, Metrics.gutter)
-
+            #else
             ScrollViewReader { proxy in
                 ScrollView(.horizontal) {
                     LazyHStack(alignment: .top, spacing: Metrics.rowSpacing) {
                         ForEach(episodes) { video in
-                            NavigationLink(value: route(video)) {
-                                EpisodeCard(video: video, isUpNext: video.id == upNextID)
-                            }
-                            #if os(tvOS)
-                            // Lifts just the thumbnail on focus, with the text below it, like the TV app.
-                            .buttonStyle(.borderless)
-                            #else
-                            .buttonStyle(.plain)
-                            #endif
-                            .contextMenu { watchedActions(for: video) }
-                            .id(video.id)
+                            episodeButton(video)
+                                .frame(width: Metrics.episodeWidth)
+                                .id(video.id)
                         }
                     }
                 }
@@ -390,7 +323,63 @@ private struct EpisodesSection: View {
                     if let upNextID { proxy.scrollTo(upNextID, anchor: .leading) }
                 }
             }
+            #endif
         }
+    }
+
+    private func episodeButton(_ video: Video) -> some View {
+        Button {
+            choose(video)
+        } label: {
+            EpisodeCard(video: video)
+        }
+        #if os(tvOS)
+        // Lifts just the still on focus, with the text below it, like the TV app.
+        .buttonStyle(.borderless)
+        #else
+        .buttonStyle(.plain)
+        #endif
+        .contextMenu { watchedActions(for: video) }
+    }
+
+    /// "Season 1 ⌄": the title doubles as the season picker, with the season's marking actions.
+    private var seasonMenu: some View {
+        Menu {
+            Picker("Season", selection: $season) {
+                ForEach(Self.seasons(in: videos), id: \.self) { number in
+                    Text(Self.seasonName(number)).tag(number)
+                }
+            }
+            .pickerStyle(.inline)
+            Section {
+                Button("Mark Season as Watched", systemImage: "checkmark.circle") {
+                    let items = episodes.filter { $0.isReleased() }.map { route($0).item }
+                    library.markWatched(items)
+                    trakt.markWatched(items)
+                }
+                Button("Mark Season as Unwatched", systemImage: "eye.slash") {
+                    library.markUnwatched(episodes.map(\.id))
+                    trakt.markUnwatched(episodes.map { route($0).item })
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(Self.seasonName(season))
+                    .font(.sectionTitle)
+                Image(systemName: "chevron.down")
+                    .font(.footnote.weight(.bold))
+                    .foregroundStyle(.secondary)
+            }
+            .foregroundStyle(.white)
+        }
+        #if os(tvOS)
+        .buttonStyle(.borderless)
+        #else
+        .buttonStyle(.plain)
+        #endif
+        .fixedSize()
+        .accessibilityLabel("Season")
+        .accessibilityValue(Self.seasonName(season))
     }
 
     @ViewBuilder
@@ -410,6 +399,10 @@ private struct EpisodesSection: View {
 
     private var episodes: [Video] {
         videos.filter { $0.season == season }.sorted { ($0.episode ?? 0) < ($1.episode ?? 0) }
+    }
+
+    private static func seasonName(_ number: Int) -> String {
+        number == 0 ? "Specials" : "Season \(number)"
     }
 
     /// "S1 E2", or just the season or title when an addon omits numbering.
@@ -436,51 +429,120 @@ private struct EpisodesSection: View {
 
 private struct EpisodeCard: View {
     let video: Video
-    let isUpNext: Bool
     @Environment(LibraryStore.self) private var library
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let progress = library.progress[video.id]
+        VStack(alignment: .leading, spacing: 3) {
             Artwork(url: video.thumbnail)
-                .overlay(alignment: .bottom) {
-                    if let progress = library.progress[video.id] {
+                .overlay {
+                    if let progress {
                         WatchProgressBar(progress: progress)
                     }
                 }
-                .frame(width: Metrics.episodeWidth, height: Metrics.episodeWidth * 9 / 16)
-                .clipShape(.rect(cornerRadius: 8))
+                .aspectRatio(16 / 9, contentMode: .fit)
+                .clipShape(.rect(cornerRadius: Metrics.cardRadius))
                 .opacity(video.isReleased() ? 1 : 0.5)
                 #if os(tvOS)
                 .hoverEffect(.highlight)
                 #endif
-            HStack(spacing: 6) {
-                if isUpNext {
-                    Text("Up Next")
-                        .foregroundStyle(.primary)
-                        .fontWeight(.semibold)
-                }
-                if let number = video.episode {
-                    Text("Episode \(number)")
-                        .foregroundStyle(.secondary)
-                }
+                .padding(.bottom, 9)
+            if let caption = caption(progress) {
+                Text(caption)
+                    .font(Self.captionFont)
+                    .textCase(.uppercase)
+                    .tracking(0.6)
+                    .foregroundStyle(.secondary)
             }
-            .font(.caption)
             Text(video.displayTitle ?? "Untitled")
-                .font(.subheadline)
+                .font(Self.titleFont)
                 .lineLimit(2)
+            #if !os(tvOS)
             if let overview = video.overview, !overview.isEmpty {
                 Text(overview)
-                    .font(.caption)
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
-                    .lineLimit(3)
+                    .lineLimit(2)
             }
-            if let date = video.releaseDate {
-                // Upcoming episodes say when they air rather than looking playable.
-                Text(video.isReleased() ? date.formatted(.dateTime.day().month().year()) : "Airs \(date.formatted(.dateTime.day().month()))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            #endif
         }
-        .frame(width: Metrics.episodeWidth, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(.rect)
+    }
+
+    #if os(tvOS)
+    private static let captionFont = Font.system(size: 17, weight: .semibold)
+    private static let titleFont = Font.system(size: 21, weight: .semibold)
+    #else
+    private static let captionFont = Font.caption.weight(.semibold)
+    private static let titleFont = Font.headline
+    #endif
+
+    /// "Episode 6 · 17 min left", or when an upcoming episode airs.
+    private func caption(_ progress: WatchProgress?) -> String? {
+        var parts = [video.episode.map { "Episode \($0)" }]
+        if !video.isReleased(), let date = video.releaseDate {
+            parts.append("Airs \(date.formatted(.dateTime.day().month()))")
+        } else if let progress, !progress.isFinished {
+            parts.append("\(max(Int((progress.duration - progress.position) / 60), 1)) min left")
+        }
+        let kept = parts.compactMap { $0 }
+        return kept.isEmpty ? nil : kept.joined(separator: " · ")
+    }
+}
+
+/// What Play does for a title. Movies play or resume themselves. Series continue where the
+/// viewer left off: the unfinished episode, else the one after the last finished, else the first.
+@MainActor
+struct PlayAction {
+    /// "Play", "Resume" or "Resume S1, E6".
+    let label: String
+    /// Autoplays the remembered source, if there is one.
+    let route: SourcesRoute
+
+    /// Nil for a series until its episodes are known.
+    init?(preview: MetaPreview, meta: Meta?, library: LibraryStore) {
+        guard preview.type == "series" else {
+            label = library.resumePosition(for: preview.id) == nil ? "Play" : "Resume"
+            route = Self.route(for: nil, preview: preview, meta: meta, autoplay: true)
+            return
+        }
+        guard let videos = meta?.videos else { return nil }
+        if let next = library.upNext(metaID: preview.id, videos: videos) {
+            label = "\(next.resumeAt == nil ? "Play" : "Resume") \(Self.shortCode(for: next.video))"
+            route = Self.route(for: next.video, preview: preview, meta: meta, autoplay: true)
+        } else if let first = EpisodesSection.firstEpisode(in: videos) {
+            label = "Play \(Self.shortCode(for: first))"
+            route = Self.route(for: first, preview: preview, meta: meta, autoplay: true)
+        } else {
+            return nil
+        }
+    }
+
+    /// The sources route for the movie itself, or for one of the series' episodes.
+    static func route(for video: Video?, preview: MetaPreview, meta: Meta?, autoplay: Bool = false) -> SourcesRoute {
+        let name = meta?.name ?? preview.name
+        let item = WatchItem(
+            id: video?.id ?? preview.id,
+            type: preview.type,
+            metaID: preview.id,
+            title: name,
+            season: video?.season,
+            episode: video?.episode,
+            episodeTitle: video?.displayTitle,
+            poster: meta?.poster ?? preview.poster,
+            background: meta?.background ?? preview.background,
+            thumbnail: video?.thumbnail
+        )
+        let title = video.map { "\(name) · \(EpisodesSection.code(for: $0))" } ?? name
+        return SourcesRoute(item: item, title: title, autoplay: autoplay)
+    }
+
+    /// "S1, E6", as the button says it.
+    private static func shortCode(for video: Video) -> String {
+        switch (video.season, video.episode) {
+        case let (season?, episode?): "S\(season), E\(episode)"
+        default: EpisodesSection.code(for: video)
+        }
     }
 }

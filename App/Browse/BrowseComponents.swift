@@ -9,27 +9,135 @@ extension Color {
 @MainActor
 enum Metrics {
     #if os(tvOS)
-    static let posterWidth: CGFloat = 220
-    static let episodeWidth: CGFloat = 400
+    static let posterWidth: CGFloat = 210
+    /// Continue Watching stills.
+    static let cardWidth: CGFloat = 354
+    static let episodeWidth: CGFloat = 375
     // tvOS already insets content by its own safe area margins.
     static let gutter: CGFloat = 0
     static let rowSpacing: CGFloat = 40
+    static let cardRadius: CGFloat = 24
+    static let posterRadius: CGFloat = 21
     #elseif os(macOS)
-    static let posterWidth: CGFloat = 140
-    static let episodeWidth: CGFloat = 260
-    static let gutter: CGFloat = 28
+    static let posterWidth: CGFloat = 132
+    static let cardWidth: CGFloat = 232
+    static let episodeWidth: CGFloat = 232
+    static let gutter: CGFloat = 32
     static let rowSpacing: CGFloat = 16
+    static let cardRadius: CGFloat = 12
+    static let posterRadius: CGFloat = 10
     #else
     // The idiom never changes while running, so these can stay constants.
     private static let isPad = UIDevice.current.userInterfaceIdiom == .pad
     static let posterWidth: CGFloat = isPad ? 160 : 112
-    static let episodeWidth: CGFloat = isPad ? 320 : 220
-    static let gutter: CGFloat = isPad ? 32 : 16
-    static let rowSpacing: CGFloat = isPad ? 18 : 12
+    static let cardWidth: CGFloat = isPad ? 320 : 270
+    static let episodeWidth: CGFloat = isPad ? 320 : 240
+    static let gutter: CGFloat = isPad ? 32 : 20
+    static let rowSpacing: CGFloat = 12
+    static let cardRadius: CGFloat = 14
+    static let posterRadius: CGFloat = 12
     #endif
 }
 
+extension Font {
+    #if os(tvOS)
+    static let sectionTitle = Font.system(size: 33, weight: .bold)
+    static let metaLine = Font.system(size: 23, weight: .medium)
+    static let synopsis = Font.system(size: 24)
+    static let cardTitle = Font.system(size: 25, weight: .bold)
+    #elseif os(macOS)
+    static let sectionTitle = Font.system(size: 19, weight: .bold)
+    static let metaLine = Font.system(size: 13, weight: .medium)
+    static let synopsis = Font.system(size: 14)
+    static let cardTitle = Font.system(size: 14, weight: .bold)
+    #else
+    static let sectionTitle = Font.title2.bold()
+    static let metaLine = Font.footnote.weight(.medium)
+    static let synopsis = Font.subheadline
+    static let cardTitle = Font.subheadline.bold()
+    #endif
+}
 
+/// The one white call to action on a screen: Play or Resume.
+struct PrimaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        StyledLabel(configuration: configuration)
+    }
+
+    private struct StyledLabel: View {
+        let configuration: Configuration
+        #if os(tvOS)
+        @Environment(\.isFocused) private var isFocused
+        #endif
+
+        var body: some View {
+            configuration.label
+                .font(font)
+                .labelStyle(PlayLabelStyle())
+                .foregroundStyle(.black)
+                .padding(.leading, height * 0.44)
+                .padding(.trailing, height * 0.56)
+                .frame(minHeight: height)
+                .background(.white, in: .capsule)
+                .opacity(configuration.isPressed ? 0.8 : 1)
+                #if os(tvOS)
+                .scaleEffect(isFocused ? 1.06 : 1)
+                .shadow(color: .black.opacity(isFocused ? 0.5 : 0), radius: 24, y: 14)
+                .animation(.easeOut(duration: 0.15), value: isFocused)
+                #endif
+        }
+
+        #if os(tvOS)
+        private let height: CGFloat = 78
+        private let font = Font.system(size: 27, weight: .semibold)
+        #elseif os(macOS)
+        private let height: CGFloat = 36
+        private let font = Font.system(size: 14, weight: .semibold)
+        #else
+        private let height: CGFloat = 50
+        private let font = Font.headline
+        #endif
+    }
+
+    /// A smaller glyph than the text, as in the TV app.
+    private struct PlayLabelStyle: LabelStyle {
+        func makeBody(configuration: Configuration) -> some View {
+            HStack(spacing: 8) {
+                configuration.icon.imageScale(.small)
+                configuration.title
+            }
+        }
+    }
+}
+
+/// Round, icon-only Liquid Glass buttons beside the primary one: My List, Choose a Source.
+struct GlassIconButtonStyle: PrimitiveButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Button(role: configuration.role, action: configuration.trigger) {
+            configuration.label
+                .labelStyle(.iconOnly)
+                .font(font)
+                .frame(width: size, height: size)
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        #if os(macOS)
+        // The Mac fills glass buttons with the tint, which is white app-wide.
+        .tint(.clear)
+        #endif
+    }
+
+    #if os(tvOS)
+    private let size: CGFloat = 78
+    private let font = Font.system(size: 27, weight: .semibold)
+    #elseif os(macOS)
+    private let size: CGFloat = 36
+    private let font = Font.system(size: 14, weight: .semibold)
+    #else
+    private let size: CGFloat = 50
+    private let font = Font.title3.weight(.semibold)
+    #endif
+}
 
 /// Remote artwork that fills whatever frame it's given, cropping rather than
 /// growing to the image's own size, with a quiet placeholder while loading or missing.
@@ -49,31 +157,45 @@ struct Artwork: View {
     }
 }
 
-/// A thin bar along the bottom of artwork showing how much has been watched,
-/// or a checkmark once it's finished.
+/// An inset bar along the bottom of artwork showing how much has been watched,
+/// or a checkmark in the corner once it's finished.
 struct WatchProgressBar: View {
     let progress: WatchProgress
 
     var body: some View {
         if progress.isFinished {
             Image(systemName: "checkmark.circle.fill")
-                .font(.title3)
+                .font(Self.checkmarkFont)
                 .symbolRenderingMode(.palette)
                 .foregroundStyle(.black, .white)
-                .padding(8)
+                .padding(Self.inset * 0.8)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                 .accessibilityLabel("Watched")
         } else {
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Rectangle().fill(.white.opacity(0.3))
-                    Rectangle().fill(.white).frame(width: proxy.size.width * progress.fraction)
+            Capsule()
+                .fill(.white.opacity(0.32))
+                .overlay(alignment: .leading) {
+                    GeometryReader { proxy in
+                        Capsule().fill(.white).frame(width: proxy.size.width * progress.fraction)
+                    }
                 }
-            }
-            .frame(height: 4)
-            .accessibilityLabel("\(Int(progress.fraction * 100)) percent watched")
+                .frame(height: Self.height)
+                .padding(.horizontal, Self.inset)
+                .padding(.bottom, Self.inset * 0.75)
+                .frame(maxHeight: .infinity, alignment: .bottom)
+                .accessibilityLabel("\(Int(progress.fraction * 100)) percent watched")
         }
     }
+
+    #if os(tvOS)
+    static let height: CGFloat = 4
+    static let inset: CGFloat = 21
+    private static let checkmarkFont = Font.system(size: 30)
+    #else
+    static let height: CGFloat = 3
+    static let inset: CGFloat = 12
+    private static let checkmarkFont = Font.title3
+    #endif
 }
 
 /// Fades a backdrop into the canvas so text placed over its lower part stays legible.
@@ -121,15 +243,18 @@ struct TitleLogo: View {
     }
 }
 
-/// "2008–2013 · Crime, Drama · 49 min · ★ 9.5"
+/// "Crime · 2008–2013 · 49 min · ★ 9.5"
 struct InfoLine: View {
     let releaseInfo: String?
     let genres: [String]?
     let runtime: String?
     let rating: String?
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
 
     var body: some View {
-        let parts = [releaseInfo, genres?.prefix(2).joined(separator: ", "), runtime]
+        let parts = [genres?.prefix(genreCount).joined(separator: ", "), releaseInfo, runtime]
             .compactMap { $0 }
             .filter { !$0.isEmpty }
         let details = parts.joined(separator: " · ")
@@ -140,10 +265,20 @@ struct InfoLine: View {
         } else {
             line = Text(details)
         }
+        // Wraps rather than truncates at large text sizes.
         return line
-            .font(.subheadline)
+            .font(.metaLine)
             .foregroundStyle(.secondary)
-            .lineLimit(1)
+            .lineLimit(2)
+    }
+
+    /// One genre on a phone, where the line has to fit under a centred title.
+    private var genreCount: Int {
+        #if os(iOS)
+        horizontalSizeClass == .compact ? 1 : 2
+        #else
+        2
+        #endif
     }
 }
 
@@ -156,16 +291,5 @@ extension MetaPreview {
 extension Meta {
     var infoLine: InfoLine {
         InfoLine(releaseInfo: releaseInfo, genres: genres, runtime: runtime, rating: imdbRating)
-    }
-
-    /// "Directed by Vince Gilligan · Starring Bryan Cranston, Aaron Paul and Anna Gunn".
-    var credits: String? {
-        let directors = (director ?? []).prefix(2)
-        let actors = (cast ?? []).prefix(4)
-        let parts = [
-            directors.isEmpty ? nil : "Directed by \(directors.formatted(.list(type: .and)))",
-            actors.isEmpty ? nil : "Starring \(actors.formatted(.list(type: .and)))",
-        ].compactMap { $0 }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }
