@@ -34,6 +34,7 @@ final class PlaybackSession {
     /// Set when the file opens; done once mpv reports the duration.
     @ObservationIgnored private var needsEstimatedSeek = false
     @ObservationIgnored private var pendingRestore: ((Bool) -> Void)?
+    @ObservationIgnored private var isInBackground = false
     @ObservationIgnored private var tasks: [Task<Void, Never>] = []
 
     init(library: LibraryStore, addons: AddonStore, trakt: TraktAccount) {
@@ -43,17 +44,30 @@ final class PlaybackSession {
     }
 
     func start(_ request: PlaybackRequest, fallbacks: [PlaybackRequest] = []) {
-        end()
+        var request = request
+        if let item = request.item, let currentItem = current?.item,
+           item.id == currentItem.id, item.type == currentItem.type,
+           let player, player.position > 0 {
+            request.startAt = player.position
+        }
+        // Keep the existing player screen mounted when its source is replaced.
+        stopPlayback()
         self.fallbacks = fallbacks
         let player = MPVPlayer()
         let pictureInPicture = PictureInPicture(player: player)
         pictureInPicture.onStart = { [weak self] in self?.isScreenPresented = false }
         pictureInPicture.onRestore = { [weak self] completion in
             // Answered once the screen is back, so the window shrinks into it.
-            self?.pendingRestore = completion
-            self?.isScreenPresented = true
+            guard let self else { completion(false); return }
+            pendingRestore = completion
+            isScreenPresented = true
         }
         pictureInPicture.onClose = { [weak self] in self?.end() }
+        pictureInPicture.onFailure = { [weak self] in
+            guard let self, isInBackground else { return }
+            player.pause()
+            player.setVideoEnabled(false)
+        }
         self.player = player
         self.pictureInPicture = pictureInPicture
         nowPlaying = NowPlaying(player: player)
@@ -66,14 +80,31 @@ final class PlaybackSession {
     }
 
     func end() {
+        stopPlayback()
+        isScreenPresented = false
+        #if !os(macOS)
+        UIApplication.shared.isIdleTimerDisabled = false
+        #endif
+    }
+
+    private func stopPlayback() {
         guard let player else { return }
         recordProgress()
         scrobble(.stop)
         tasks.forEach { $0.cancel() }
         tasks = []
         openingTimeout?.cancel()
+        externalSubtitles?.cancel()
+        externalSubtitles = nil
         fallbacks = []
         isTryingAnotherSource = false
+        // AVKit can finish stopping after a replacement session has started.
+        pictureInPicture?.onStart = {}
+        pictureInPicture?.onRestore = { $0(false) }
+        pictureInPicture?.onClose = {}
+        pictureInPicture?.onFailure = {}
+        pendingRestore?(false)
+        pendingRestore = nil
         pictureInPicture?.stop()
         nowPlaying?.clear()
         player.shutDown()
@@ -83,10 +114,6 @@ final class PlaybackSession {
         current = nil
         next = nil
         episodes = []
-        isScreenPresented = false
-        #if !os(macOS)
-        UIApplication.shared.isIdleTimerDisabled = false
-        #endif
     }
 
     /// Alternatives found after playback started, for a source played before the list loaded.
@@ -127,12 +154,20 @@ final class PlaybackSession {
     }
 
     func sceneDidEnterBackground() {
-        guard pictureInPicture?.isActive != true else { return }
+        isInBackground = true
+        if let pictureInPicture {
+            // AVKit may deliver its start callback after the scene backgrounds.
+            if pictureInPicture.isActive || pictureInPicture.isStarting { return }
+            #if os(iOS)
+            if pictureInPicture.isPossible && player?.status == .playing { return }
+            #endif
+        }
         player?.pause()
         player?.setVideoEnabled(false)
     }
 
     func sceneDidBecomeActive() {
+        isInBackground = false
         player?.setVideoEnabled(true)
     }
 
@@ -247,7 +282,8 @@ final class PlaybackSession {
 
     private func recordProgress() {
         // Live streams have no duration, and nothing is known before the file has loaded.
-        guard let item = current?.item, let player, let duration = player.duration, player.position > 0 else { return }
+        guard !isOpeningFile, let item = current?.item, let player,
+              let duration = player.duration, player.position > 0 else { return }
         library.record(item, position: player.position, duration: duration)
         lastRecordedPosition = player.position
     }
@@ -334,7 +370,7 @@ final class PlaybackSession {
         guard let request = current, let task = externalSubtitles else { return }
         Task {
             let subtitles = await task.value
-            guard current == request, let player else { return }
+            guard !task.isCancelled, current == request, let player else { return }
             // Switch one on only if the file had nothing in the preferred language.
             var shouldSelect = !player.tracks.contains { $0.kind == .sub && $0.isSelected }
             for subtitle in subtitles {
@@ -351,7 +387,10 @@ final class PlaybackSession {
         guard let item = current?.item, item.type == "series",
               let client = addons.addons.metaClient(type: item.type, id: item.metaID)
         else { return }
-        episodes = (try? await client.meta(type: item.type, id: item.metaID).videos) ?? []
+        let videos = (try? await client.meta(type: item.type, id: item.metaID).videos) ?? []
+        guard !Task.isCancelled, current?.item?.metaID == item.metaID,
+              current?.item?.type == item.type else { return }
+        episodes = videos
         lookUpNextIfDue()
     }
 

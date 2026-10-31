@@ -10,6 +10,7 @@ struct CatalogGridView: View {
     @State private var items: [MetaPreview] = []
     @State private var phase = Phase.loading
     @State private var reachedEnd = false
+    @State private var loadGeneration = UUID()
 
     private enum Phase: Equatable {
         case loading, idle, failed
@@ -53,6 +54,7 @@ struct CatalogGridView: View {
             }
         }
         .task(id: genre) {
+            loadGeneration = UUID()
             items = []
             reachedEnd = false
             phase = .idle
@@ -96,20 +98,21 @@ struct CatalogGridView: View {
         guard phase != .loading, !reachedEnd else { return }
         phase = .loading
         let requestedGenre = genre
+        let generation = loadGeneration
         do {
             let page = try await source.items(genre: requestedGenre, skip: items.count)
-            // The genre may have changed while this page was loading.
-            guard requestedGenre == genre else { return }
+            try Task.checkCancellation()
+            // A previous filter's request must not overwrite the current list or loading state.
+            guard generation == loadGeneration, requestedGenre == genre else { return }
             // Addons that ignore `skip` return the first page again; treat that as the end.
-            let known = Set(items.map(\.id))
-            let fresh = page.filter { !known.contains($0.id) }
+            var known = Set(items.map(\.id))
+            let fresh = page.filter { known.insert($0.id).inserted }
             items += fresh
             reachedEnd = fresh.isEmpty || !source.catalog.supportsPaging
             phase = .idle
-        } catch is CancellationError {
-            phase = .idle
         } catch {
-            phase = .failed
+            guard generation == loadGeneration, requestedGenre == genre else { return }
+            phase = error is CancellationError || Task.isCancelled ? .idle : .failed
         }
     }
 }

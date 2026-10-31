@@ -4,6 +4,7 @@ import XCTest
 /// End-to-end checks of browsing flows against live addons. They need the network,
 /// Cinemeta, and for playback the local test addon (Tools/test-addon.py) installed, so
 /// they only run on request. Screenshots go to `SCREENSHOT_DIR` when it's set:
+/// Track switching also uses the generated MOV server on port 8766; see docs/REVIEW_VALIDATION.md.
 ///
 ///     TEST_RUNNER_UI_FLOWS=1 TEST_RUNNER_SCREENSHOT_DIR=/tmp/shots xcodebuild test \
 ///       -scheme MediaApp -destination 'platform=iOS Simulator,name=iPhone 18 Pro' \
@@ -32,16 +33,20 @@ final class FlowTests: XCTestCase {
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'Batman'")).firstMatch
             .waitForExistence(timeout: 15), "No results for batman")
         screenshot("search-results")
+        field.typeText("\n")
+        field.tap()
 
         field.typeText("zzqxjvw")
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'No Results'")).firstMatch
             .waitForExistence(timeout: 15), "No empty state for a query without matches")
         screenshot("search-empty")
 
-        // Searching from the keyboard remembers the query; clearing the field shows it.
+        // Only the successful query should be remembered.
         field.typeText("\n")
         field.buttons.firstMatch.tap()
         XCTAssertTrue(app.staticTexts["Recent Searches"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["batman"].exists)
+        XCTAssertFalse(app.buttons["batmanzzqxjvw"].exists)
         screenshot("search-recent")
     }
 
@@ -79,6 +84,62 @@ final class FlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["Season"].waitForExistence(timeout: 5),
                       "Closing the player didn't return to the details screen")
         screenshot("after-close")
+    }
+
+    @MainActor
+    func testClosingActivePlaybackCanStartAgain() {
+        startPlayback()
+        for attempt in 0..<3 {
+            if attempt > 0 {
+                app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Play' OR label BEGINSWITH 'Resume'"))
+                    .firstMatch.tap()
+            }
+            XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 20))
+            app.buttons["Close"].tap()
+            XCTAssertTrue(app.buttons["Season"].waitForExistence(timeout: 5), "Closing playback lost the details screen")
+            XCTAssertEqual(app.state, .runningForeground)
+        }
+        screenshot("repeated-close")
+    }
+
+    @MainActor
+    func testPlayerTransportStaysCentered() {
+        startPlayback()
+        app.buttons["Pause"].tap()
+        XCTAssertFalse(app.buttons["Play Now"].exists, "Up Next appeared before the short clip's credits")
+        for orientation in [UIDeviceOrientation.portrait, .landscapeLeft] {
+            XCUIDevice.shared.orientation = orientation
+            let play = app.buttons["Play"]
+            XCTAssertTrue(play.waitForExistence(timeout: 5))
+            let screen = app.frame
+            XCTAssertEqual(play.frame.midX, screen.midX, accuracy: 12)
+            XCTAssertEqual(play.frame.midY, screen.midY, accuracy: 12)
+            screenshot(orientation == .portrait ? "centered-portrait" : "centered-landscape")
+        }
+        app.buttons["Audio"].tap()
+        app.buttons["Audio Timing…"].tap()
+        let done = app.buttons["Done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.frame.contains(done.frame))
+        XCTAssertTrue(app.frame.contains(app.buttons["Play sound earlier"].frame))
+        screenshot("timing-landscape")
+        done.tap()
+        app.buttons["Close"].tap()
+    }
+
+    @MainActor
+    func testSwitchingSourceKeepsPlayerUsable() {
+        startPlayback()
+        app.buttons["Pause"].tap()
+        app.buttons["Sources"].tap()
+        let source = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Test Header'")).firstMatch
+        XCTAssertTrue(source.waitForExistence(timeout: 10))
+        source.tap()
+        XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 20), "Replacement source didn't start")
+        app.buttons["Pause"].tap()
+        screenshot("source-replaced")
+        app.buttons["Close"].tap()
+        XCTAssertTrue(app.buttons["Season"].waitForExistence(timeout: 5))
     }
 
     @MainActor
@@ -179,10 +240,51 @@ final class FlowTests: XCTestCase {
         XCTAssertTrue(broken.waitForExistence(timeout: 15), "No broken test source")
         screenshot("sources")
         broken.tap()
-        XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 30), "Didn't fall back to another source")
+        let pause = app.buttons["Pause"]
+        XCTAssertTrue(pause.waitForExistence(timeout: 30), "Didn't fall back to another source")
+        // Keep controls visible while taking the screenshot and closing the short test clip.
+        pause.tap()
         XCTAssertFalse(app.staticTexts["Couldn't play this source"].exists)
         screenshot("fallback-playing")
         app.buttons["Close"].tap()
+    }
+
+    @MainActor
+    func testTrackSwitchingWhilePlaying() {
+        installTestAddonIfNeeded(name: "Playback Test Streams", manifestURL: "http://127.0.0.1:8766/manifest.json")
+        openSeries("Lanterns")
+        episodeCard().tap()
+        let source = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Local Multi Track'")).firstMatch
+        XCTAssertTrue(source.waitForExistence(timeout: 15))
+        source.tap()
+        XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 30))
+        let initialPosition = app.sliders["Playback position"].value as? String
+        XCTAssertNotNil(initialPosition)
+
+        for index in 0..<3 {
+            if !app.buttons["Audio"].exists { app.tap() }
+            app.buttons["Audio"].tap()
+            let language = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", index == 1 ? "English" : "German")).firstMatch
+            XCTAssertTrue(language.waitForExistence(timeout: 5))
+            screenshot("tracks-audio-menu-\(index)")
+            language.tap()
+            XCTAssertFalse(app.alerts.firstMatch.exists)
+            app.buttons["Subtitles"].tap()
+            let subtitle = index == 1 ? app.buttons["Off"] : app.buttons.matching(NSPredicate(format: "label CONTAINS %@", index == 0 ? "German" : "English")).firstMatch
+            XCTAssertTrue(subtitle.waitForExistence(timeout: 5))
+            subtitle.tap()
+            for _ in 0..<15 where !app.buttons["Pause"].exists {
+                if !app.buttons["Close"].exists { app.tap() }
+                sleep(1)
+            }
+            screenshot("tracks-after-switch-\(index)")
+            XCTAssertTrue(app.buttons["Pause"].exists, "Track change interrupted playback")
+        }
+        XCTAssertNotEqual(app.sliders["Playback position"].value as? String, initialPosition,
+                          "Playback position did not advance while switching tracks")
+        screenshot("tracks-playing")
+        app.buttons["Close"].tap()
+        XCTAssertTrue(episodeCard().exists)
     }
 
     /// Subtitles that come with a stream and those from subtitle addons join the file's own.
@@ -270,20 +372,18 @@ final class FlowTests: XCTestCase {
 
     // MARK: Helpers
 
-    /// Plays Lanterns with the local test addon, whether Play starts a remembered source
-    /// straight away or opens the source list first. Leaves the controls showing.
+    /// Chooses the short local-addon fixture explicitly, independent of remembered sources.
+    /// Leaves the controls showing; subsequent Play/Resume actions exercise autoplay.
     @MainActor
     private func startPlayback() {
         installTestAddonIfNeeded()
         openSeries("Lanterns")
-        let play = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Play' OR label BEGINSWITH 'Resume'")).firstMatch
-        XCTAssertTrue(play.waitForExistence(timeout: 15))
-        play.tap()
+        episodeCard().tap()
         // Once playing, the controls fade out; while they're up, Close is showing.
         let testSource = app.buttons.matching(NSPredicate(format: "label CONTAINS 'DTS 5.1'")).firstMatch
         let pause = app.buttons["Pause"]
         for _ in 0..<30 where !pause.exists {
-            if testSource.exists {
+            if testSource.isHittable {
                 testSource.tap()
             } else if !app.buttons["Close"].exists {
                 app.tap()
@@ -309,23 +409,20 @@ final class FlowTests: XCTestCase {
     }
 
     @MainActor
-    private func installTestAddonIfNeeded() {
+    private func installTestAddonIfNeeded(name: String = "Test Streams", manifestURL: String = "http://127.0.0.1:8765/manifest.json") {
         openTab("Settings")
-        guard !app.staticTexts["Test Streams"].waitForExistence(timeout: 5) else { return }
+        guard !app.staticTexts[name].waitForExistence(timeout: 5) else { return }
         let field = app.textFields["Manifest URL"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         field.tap()
-        field.typeText("http://127.0.0.1:8765/manifest.json\n")
-        XCTAssertTrue(app.staticTexts["Test Streams"].waitForExistence(timeout: 10), "Test addon didn't install")
+        field.typeText(manifestURL + "\n")
+        XCTAssertTrue(app.staticTexts[name].waitForExistence(timeout: 10), "Test addon didn't install")
     }
 
     @MainActor
     private func openSeries(_ name: String) {
         openTab("Home")
         let poster = app.buttons[name].firstMatch
-        for _ in 0..<6 where !poster.isHittable {
-            app.swipeUp()
-        }
         // Home follows Cinemeta's popular lists, which change; search finds it either way.
         if !poster.isHittable {
             openTab("Search")

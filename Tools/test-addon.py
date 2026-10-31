@@ -5,13 +5,25 @@ in the app (the simulators share the Mac's network).
 
 Serves the same sources and subtitles for every movie and episode. Binds to 127.0.0.1 only.
 Logs each request's path and X-Test-Token header so header forwarding can be checked.
+
+For local audio-language switching, first run `sh Tools/generate-playback-fixture.sh`,
+then `python3 Tools/test-addon.py --port 8766 --tracks-file /tmp/loge-multiaudio.mov`.
+Install its manifest in addition to the default server's manifest.
 """
 import json
+import argparse
+from pathlib import Path
+import re
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-PORT = 8765
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--port", type=int, default=8765)
+parser.add_argument("--tracks-file", type=Path, help="Local multi-audio MOV for track-switch tests")
+args = parser.parse_args() if __name__ == "__main__" else parser.parse_args([])
+PORT = args.port
 BASE = f"http://127.0.0.1:{PORT}"
+TRACKS_FILE = args.tracks_file.resolve(strict=True) if args.tracks_file else None
 TOKEN = "secret-value, with comma"
 MKV = "https://test-videos.co.uk/vids/bigbuckbunny/mkv/1080/Big_Buck_Bunny_1080_10s_30MB.mkv"
 
@@ -73,6 +85,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
+        elif self.path == "/tracks.mov" and TRACKS_FILE is not None:
+            self.send_tracks()
         elif self.path == "/protected.mkv":
             if token == TOKEN:
                 self.send_response(302)
@@ -91,11 +105,40 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def send_tracks(self):
+        size = TRACKS_FILE.stat().st_size
+        requested = self.headers.get("Range")
+        match = re.fullmatch(r"bytes=(\d+)-(\d*)", requested or "")
+        start = int(match[1]) if match else 0
+        end = min(int(match[2]), size - 1) if match and match[2] else size - 1
+        if (requested and not match) or start > end:
+            self.send_error(416)
+            return
+        self.send_response(206 if requested else 200)
+        self.send_header("Content-Type", "video/quicktime")
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Content-Length", str(end - start + 1))
+        if requested:
+            self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        self.end_headers()
+        with TRACKS_FILE.open("rb") as video:
+            video.seek(start)
+            remaining = end - start + 1
+            while remaining:
+                data = video.read(min(remaining, 1024 * 1024))
+                if not data:
+                    break
+                self.wfile.write(data)
+                remaining -= len(data)
+
     def log_message(self, *args):
         pass
 
 
 if __name__ == "__main__":
+    if TRACKS_FILE:
+        MANIFEST["name"] = "Playback Test Streams"
+        STREAMS = [{"name": "Local Multi Track", "url": f"{BASE}/tracks.mov"}]
     print(f"Serving on {BASE}", flush=True)
     sys.stdout.flush()
     ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()

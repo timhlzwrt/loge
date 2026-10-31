@@ -133,13 +133,10 @@ public final class LibraryStore {
     // MARK: Progress
 
     public func record(_ item: WatchItem, position: Double, duration: Double, at date: Date = .now) {
-        guard duration > 0, position >= Self.minimumResumePosition || progress[item.id] != nil else { return }
+        guard duration.isFinite, duration > 0, position.isFinite, position >= 0,
+              position >= Self.minimumResumePosition || progress[item.id] != nil else { return }
         progress[item.id] = WatchProgress(item: item, position: position, duration: duration, updatedAt: date)
-        if progress.count > Self.maximumEntries {
-            let oldest = progress.values.sorted { $0.updatedAt < $1.updatedAt }.prefix(progress.count - Self.maximumEntries)
-            oldest.forEach { progress[$0.item.id] = nil }
-        }
-        save(progress, forKey: Self.progressKey)
+        saveProgress()
     }
 
     /// Progress reported by another device, as a fraction. Newer local progress wins.
@@ -149,17 +146,17 @@ public final class LibraryStore {
         guard local.map({ $0.updatedAt < date }) ?? true else { return }
         let knownDuration = local.flatMap { $0.isEstimated == true ? nil : $0.duration }
         let duration = knownDuration ?? estimatedDuration
-        guard duration > 0 else { return }
+        guard duration.isFinite, duration > 0, fraction.isFinite else { return }
         progress[item.id] = WatchProgress(
-            item: local?.item ?? item, position: fraction * duration, duration: duration,
+            item: local?.item ?? item, position: min(max(fraction, 0), 1) * duration, duration: duration,
             updatedAt: date, isEstimated: knownDuration == nil ? true : nil)
-        save(progress, forKey: Self.progressKey)
+        saveProgress()
     }
 
     /// For progress from another device that hasn't been played here: how far in it is,
     /// so playback can seek once the real duration is known.
     public func estimatedFraction(for id: String) -> Double? {
-        guard let entry = progress[id], entry.isEstimated == true else { return nil }
+        guard let entry = progress[id], entry.isEstimated == true, !entry.isFinished else { return nil }
         return entry.fraction
     }
 
@@ -179,18 +176,28 @@ public final class LibraryStore {
             .filter { !$0.isFinished && $0.position >= Self.minimumResumePosition }
     }
 
+    /// Checks one title's resume state without building and sorting Continue Watching.
+    public func isInProgress(metaID: String) -> Bool {
+        guard let latest = progress.values.lazy.filter({ $0.item.metaID == metaID })
+            .max(by: { $0.updatedAt < $1.updatedAt }) else { return false }
+        return !latest.isFinished && latest.position >= Self.minimumResumePosition
+    }
+
     /// Marks items watched without playing them, e.g. a whole season the viewer saw elsewhere.
     public func markWatched(_ items: [WatchItem], at date: Date = .now) {
         for item in items {
-            let duration = progress[item.id]?.duration ?? 1
-            progress[item.id] = WatchProgress(item: item, position: duration, duration: duration, updatedAt: date)
+            let existing = progress[item.id]
+            let duration = existing?.duration ?? 1
+            progress[item.id] = WatchProgress(
+                item: item, position: duration, duration: duration, updatedAt: date,
+                isEstimated: existing == nil ? true : existing?.isEstimated)
         }
-        save(progress, forKey: Self.progressKey)
+        saveProgress()
     }
 
     public func markUnwatched(_ ids: [String]) {
         ids.forEach { progress[$0] = nil }
-        save(progress, forKey: Self.progressKey)
+        saveProgress()
     }
 
     public func isWatched(_ id: String) -> Bool {
@@ -200,7 +207,7 @@ public final class LibraryStore {
     /// Hides a title from Continue Watching by forgetting its progress.
     public func removeFromContinueWatching(metaID: String) {
         progress = progress.filter { $0.value.item.metaID != metaID }
-        save(progress, forKey: Self.progressKey)
+        saveProgress()
     }
 
     /// The episode to play next: the most recently watched one if it's unfinished,
@@ -209,7 +216,11 @@ public final class LibraryStore {
     public func upNext(metaID: String, videos: [Video]) -> UpNext? {
         let latest = progress.values
             .filter { $0.item.metaID == metaID }
-            .max { $0.updatedAt < $1.updatedAt }
+            .max {
+                if $0.updatedAt != $1.updatedAt { return $0.updatedAt < $1.updatedAt }
+                // A whole season marked watched shares one timestamp; advance from its last episode.
+                return ($0.item.season ?? 0, $0.item.episode ?? 0) < ($1.item.season ?? 0, $1.item.episode ?? 0)
+            }
         guard let latest else { return nil }
         guard latest.isFinished else {
             guard let video = videos.first(where: { $0.id == latest.item.id }) else { return nil }
@@ -261,6 +272,14 @@ public final class LibraryStore {
     }
 
     // MARK: Persistence
+
+    private func saveProgress() {
+        if progress.count > Self.maximumEntries {
+            let oldest = progress.values.sorted { $0.updatedAt < $1.updatedAt }.prefix(progress.count - Self.maximumEntries)
+            oldest.forEach { progress[$0.item.id] = nil }
+        }
+        save(progress, forKey: Self.progressKey)
+    }
 
     private func save(_ value: some Encodable, forKey key: String) {
         do {
