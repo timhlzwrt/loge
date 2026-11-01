@@ -12,14 +12,20 @@ struct HomeView: View {
         #else
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 28) {
-                FeaturedCarousel(source: sources[0])
+                FeaturedCarousel(movies: sources[0], series: sources[1])
                 ContinueWatchingRow()
                 MyListRow(shelf: .series)
                 MyListRow(shelf: .movies)
-                ForEach(sources) { CatalogRow(source: $0) }
+                // Genres follow the popular shelves, ahead of the narrower ones.
+                ForEach(sources.prefix(3)) { CatalogRow(source: $0) }
+                GenreRow()
+                ForEach(sources.dropFirst(3)) { CatalogRow(source: $0) }
             }
             .padding(.bottom, 32)
             .id(refreshID)
+        }
+        .task(id: refreshID) {
+            await prefetchArtwork(of: sources)
         }
         .refreshable {
             refreshID = UUID()
@@ -38,6 +44,36 @@ struct HomeView: View {
     }
 }
 
+/// Downloads artwork into the shared URL cache that `Artwork` and `TitleLogo` load from,
+/// so it's already there when a row scrolls in or the carousel pages.
+private func prefetch(_ urls: [String?]) async {
+    await withTaskGroup(of: Void.self) { group in
+        for url in Set(urls.compactMap { $0 }).compactMap(URL.init(string:)) {
+            group.addTask {
+                // Only warms the cache: the view that shows the image handles a failure.
+                _ = try? await URLSession.shared.data(from: url)
+            }
+        }
+    }
+}
+
+/// The first posters of every Home row, one row at a time in screen order, so rows further
+/// down have theirs before they scroll in. Their catalog responses are cached too, so the
+/// rows don't download them again.
+private func prefetchArtwork(of sources: [CatalogSource]) async {
+    for source in sources {
+        guard !Task.isCancelled else { return }
+        // A row that fails shows its own error and retry.
+        guard let metas = try? await source.items() else { continue }
+        var urls = metas.prefix(12).map(\.poster)
+        #if os(tvOS)
+        // Focus usually enters a row at its start, which fills the screen with its backdrop.
+        urls += metas.prefix(2).map(\.featuredBackground)
+        #endif
+        await prefetch(urls)
+    }
+}
+
 #if os(tvOS)
 /// Like the TV app: the focused poster's backdrop fills the screen and its
 /// details sit above the rows, so browsing doesn't require opening anything.
@@ -47,7 +83,7 @@ private struct TVHome: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            Artwork(url: focused?.background)
+            Artwork(url: focused?.featuredBackground)
                 .ignoresSafeArea()
                 .overlay {
                     // Darken the left and bottom, where the text and rows sit.
@@ -69,8 +105,12 @@ private struct TVHome: View {
                         ContinueWatchingRow { focused = $0 }
                         MyListRow(shelf: .series) { focused = $0 }
                         MyListRow(shelf: .movies) { focused = $0 }
-                        ForEach(sources) { source in
+                        ForEach(sources.prefix(3)) { source in
                             CatalogRow(source: source, isPrimary: source == sources.first) { focused = $0 }
+                        }
+                        GenreRow()
+                        ForEach(sources.dropFirst(3)) { source in
+                            CatalogRow(source: source) { focused = $0 }
                         }
                     }
                     .scrollTargetLayout()
@@ -81,6 +121,9 @@ private struct TVHome: View {
             }
         }
         .background(Color.canvas)
+        .task {
+            await prefetchArtwork(of: sources)
+        }
     }
 
     private var header: some View {
@@ -95,9 +138,6 @@ private struct TVHome: View {
 
     private func details(_ focused: MetaPreview) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("For You")
-                .font(.headline)
-                .foregroundStyle(.secondary)
             TitleLogo(logo: focused.logo, name: focused.name, maxHeight: 140)
                 .frame(maxWidth: 600, alignment: .leading)
                 .id(focused.id)
@@ -113,9 +153,10 @@ private struct TVHome: View {
     }
 }
 #else
-/// Swipeable highlights from the first catalog, edge to edge, with page dots underneath.
+/// Swipeable highlights from the popular movies and series, edge to edge, with page dots underneath.
 private struct FeaturedCarousel: View {
-    let source: CatalogSource
+    let movies: CatalogSource
+    let series: CatalogSource
     @State private var items: [MetaPreview] = []
     @State private var currentID: MetaPreview.ID?
     #if os(iOS)
@@ -147,9 +188,21 @@ private struct FeaturedCarousel: View {
         .task {
             // The carousel is decoration on top of the rows below, which show
             // their own error, so a failure here just leaves it out.
-            let metas = (try? await source.items()) ?? []
-            items = Array(metas.filter { $0.background != nil }.prefix(10))
+            async let movieItems = try? movies.items()
+            async let seriesItems = try? series.items()
+            items = DiscoveryCatalogs.featured(movies: await movieItems ?? [], series: await seriesItems ?? [])
+            await prefetchPages(after: nil)
         }
+        .task(id: currentID) {
+            await prefetchPages(after: currentID)
+        }
+    }
+
+    /// The next two pages' artwork, so paging never shows an empty backdrop.
+    private func prefetchPages(after id: MetaPreview.ID?) async {
+        let index = items.firstIndex { $0.id == id } ?? 0
+        let upcoming = items.dropFirst(index + 1).prefix(2)
+        await prefetch(upcoming.flatMap { [$0.featuredBackground, $0.logo] })
     }
 
     private var pageDots: some View {
@@ -192,7 +245,7 @@ private struct FeaturedPage: View {
     var body: some View {
         ZStack(alignment: isCentred ? .bottom : .bottomLeading) {
             NavigationLink(value: meta) {
-                Artwork(url: meta.background)
+                Artwork(url: meta.featuredBackground)
                     .overlay { scrims }
                     .contentShape(.rect)
             }
@@ -204,9 +257,6 @@ private struct FeaturedPage: View {
             #endif
 
             VStack(alignment: isCentred ? .center : .leading, spacing: 12) {
-                Text("For You")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
                 NavigationLink(value: meta) {
                     VStack(alignment: isCentred ? .center : .leading, spacing: 12) {
                         TitleLogo(logo: meta.logo, name: meta.name, maxHeight: isCentred ? 72 : 96)
