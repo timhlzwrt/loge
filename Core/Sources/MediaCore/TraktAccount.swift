@@ -107,9 +107,12 @@ public final class TraktAccount {
             return
         }
         var metas: [String: Meta] = [:]
+        var attemptedIDs: Set<String> = []
         for entry in entries {
             let type = entry.season == nil ? "movie" : "series"
-            if metas[entry.imdbID] == nil, let meta = try? await addons.addons.metaClient(type: type, id: entry.imdbID)?
+            // Several paused episodes can share a show; unavailable metadata should only be requested once per sync.
+            if attemptedIDs.insert(entry.imdbID).inserted,
+               let meta = try? await addons.addons.metaClient(type: type, id: entry.imdbID)?
                 .meta(type: type, id: entry.imdbID) {
                 metas[entry.imdbID] = meta
             }

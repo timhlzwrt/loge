@@ -59,6 +59,8 @@ struct SourcesView: View {
         .task {
             playRememberedSourceIfPossible()
             await load(providers)
+            // Leaving Sources cancels loading even when a shared prefetched request finishes later.
+            guard !Task.isCancelled else { return }
             if playedAutomatically, let current = playback.current, current.item?.id == route.id {
                 playback.offerFallbacks(fallbacks(for: current), for: current)
             }
@@ -379,6 +381,7 @@ struct SourcesView: View {
                 }
             }
             for await (id, result) in group {
+                guard !Task.isCancelled else { return }
                 results[id] = result
             }
         }
