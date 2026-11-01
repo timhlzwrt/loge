@@ -33,6 +33,8 @@ extension MPVVideoView: NSViewRepresentable {
             CATransaction.begin()
             CATransaction.setDisableActions(true)
             videoLayer.frame = bounds
+            // mpv's subtitle layer, which doesn't follow its superlayer's size by itself.
+            videoLayer.sublayers?.forEach { $0.frame = videoLayer.bounds }
             CATransaction.commit()
         }
     }
@@ -77,6 +79,8 @@ extension MPVVideoView: UIViewRepresentable {
             CATransaction.setAnimationDuration(duration)
             CATransaction.setDisableActions(duration == 0)
             videoLayer.frame = bounds
+            // mpv's subtitle layer, which doesn't follow its superlayer's size by itself.
+            videoLayer.sublayers?.forEach { $0.frame = videoLayer.bounds }
             CATransaction.commit()
         }
 

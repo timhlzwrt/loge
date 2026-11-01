@@ -25,7 +25,7 @@ struct PlayerPanel: View {
                             .buttonStyle(.glass)
                             .buttonBorderShape(.capsule)
                             .focused($focusedTab, equals: tab)
-                            .background(tab == self.tab ? Color.white.opacity(0.2) : .clear, in: .capsule)
+                            .background(tab == self.tab ? AnyShapeStyle(.tint.opacity(0.2)) : AnyShapeStyle(.clear), in: .capsule)
                     }
                 }
             }

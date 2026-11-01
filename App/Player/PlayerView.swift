@@ -274,7 +274,16 @@ struct PlayerView: View {
             }
             #endif
             .onTapGesture {
-                if controlsVisible { controlsVisible = false } else { showControls() }
+                // Like a menu, the timing panel closes when the picture is tapped; hiding it
+                // with the controls would bring it back with them and keep them from hiding.
+                if adjustingTiming != nil {
+                    adjustingTiming = nil
+                    showControls()
+                } else if controlsVisible {
+                    controlsVisible = false
+                } else {
+                    showControls()
+                }
             }
     }
     #endif
