@@ -127,8 +127,8 @@ final class MPVPlayer {
         }
     }
 
-    /// mpv's avfoundation output hands it each frame as it's due, already decoded by
-    /// VideoToolbox and with subtitles drawn in, which is what Picture in Picture shows.
+    /// mpv's avfoundation output hands it each frame as it's due, as VideoToolbox decoded
+    /// it, which is what Picture in Picture shows. Subtitles are drawn in a sublayer.
     @ObservationIgnored let layer = AVSampleBufferDisplayLayer()
     /// The exact `time-pos`; `position` is rounded for the UI.
     @ObservationIgnored private var exactPosition: Double = 0
@@ -174,9 +174,11 @@ final class MPVPlayer {
         var wid = Int64(Int(bitPattern: Unmanaged.passUnretained(layer).toOpaque()))
         check(mpv_set_option(handle, "wid", MPV_FORMAT_INT64, &wid), "wid")
         for (name, value) in [
+            // Subtitles go in a layer over the video rather than into each frame: compositing
+            // converted every frame through Core Image at screen size, which dropped frames
+            // and spoiled HDR. The cost is no subtitles in Picture in Picture.
             ("vo", "avfoundation"),
-            // Draw subtitles into the frames, so they're also in Picture in Picture.
-            ("avfoundation-composite-osd", "yes"),
+            ("avfoundation-composite-osd", "no"),
             ("hwdec", "videotoolbox"),
             // Stay on the last frame at the end instead of unloading the file.
             ("keep-open", "yes"),
@@ -397,7 +399,7 @@ final class MPVPlayer {
         trackOperations = []
         pendingLoad = nil
         activeTrackOperation = nil
-        command(["quit"], ignoringShutdown: true, replyID: 0)
+        command(["quit"], ignoringShutdown: true)
     }
 
     // MARK: - Events
@@ -446,6 +448,11 @@ final class MPVPlayer {
         switch event.event_id {
         case MPV_EVENT_COMMAND_REPLY:
             return .commandReply(event.reply_userdata, event.error)
+        case MPV_EVENT_SET_PROPERTY_REPLY:
+            if event.error < 0 {
+                log.error("set property: \(String(cString: mpv_error_string(event.error)))")
+            }
+            return nil
         case MPV_EVENT_SEEK:
             return .seekStarted
         case MPV_EVENT_PLAYBACK_RESTART:
@@ -740,29 +747,33 @@ final class MPVPlayer {
         runNextTrackOperation()
     }
 
-    private func command(_ args: [String], ignoringShutdown: Bool = false, replyID: UInt64? = nil) {
+    /// A `replyID` of 0 asks for no reply handling beyond logging a failure.
+    private func command(_ args: [String], ignoringShutdown: Bool = false, replyID: UInt64 = 0) {
         guard !isShutDown || ignoringShutdown else { return }
         var cArgs: [UnsafeMutablePointer<CChar>?] = args.map { strdup($0) } + [nil]
         defer { cArgs.forEach { free($0) } }
         let status = cArgs.withUnsafeMutableBufferPointer { buffer in
             buffer.baseAddress!.withMemoryRebound(to: UnsafePointer<CChar>?.self, capacity: buffer.count) {
-                if let replyID {
-                    mpv_command_async(handle, replyID, $0)
-                } else {
-                    mpv_command(handle, $0)
-                }
+                mpv_command_async(handle, replyID, $0)
             }
         }
-        if let replyID, replyID != 0 {
+        if replyID != 0 {
             if status < 0 { apply(.commandReply(replyID, status)) }
         } else {
             check(status, args[0])
         }
     }
 
+    /// Asynchronous, like every call from here: the video output creates and removes its
+    /// subtitle layer on the main thread while mpv's core waits for it, so the main thread
+    /// must never wait on mpv. Requests still run in the order they're made.
     private func setProperty(_ name: String, _ value: String) {
         guard !isShutDown else { return }
-        check(mpv_set_property_string(handle, name, value), name)
+        let status = value.withCString { cValue in
+            var data: UnsafePointer<CChar>? = cValue
+            return mpv_set_property_async(handle, 0, name, MPV_FORMAT_STRING, &data)
+        }
+        check(status, name)
     }
 
     private func check(_ status: Int32, _ context: String) {

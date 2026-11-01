@@ -153,9 +153,9 @@ private struct PersonTile: View {
                 .font(Self.initialsFont)
                 .foregroundStyle(isFocused ? AnyShapeStyle(.black) : AnyShapeStyle(.secondary))
                 .frame(width: Metrics.personSize, height: Metrics.personSize)
-                .background(.white.opacity(isFocused ? 1 : 0.08), in: .circle)
+                .background(isFocused ? AnyShapeStyle(.tint) : AnyShapeStyle(.white.opacity(0.08)), in: .circle)
                 #if os(tvOS)
-                // The circle turns white and lifts, as the glass buttons above it do.
+                // The circle fills with the accent and lifts, as the glass buttons above it do.
                 .scaleEffect(isFocused ? 1.08 : 1)
                 .shadow(color: .black.opacity(isFocused ? 0.5 : 0), radius: 24, y: 14)
                 .animation(.easeOut(duration: 0.15), value: isFocused)

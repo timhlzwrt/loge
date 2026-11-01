@@ -143,6 +143,85 @@ struct LibraryStoreTests {
         store.toggleSaved(first)
         #expect(!LibraryStore(defaults: defaults).isSaved("tt1"))
     }
+
+    @Test func myListFromOlderBuildsSplitsIntoShowsAndMovies() {
+        // As older builds wrote it: one list, no custom lists alongside.
+        let json = #"[{"id":"tt9","type":"series","name":"Show","poster":"https://img/9"},{"id":"tt1","type":"movie","name":"Movie"},{"id":"ch1","type":"channel","name":"Channel"}]"#
+        defaults.set(Data(json.utf8), forKey: "savedTitles")
+
+        let store = LibraryStore(defaults: defaults)
+        #expect(store.saved.map(\.id) == ["tt9", "tt1", "ch1"])
+        #expect(store.savedSeries.map(\.id) == ["tt9"])
+        #expect(store.savedMovies.map(\.id) == ["tt1", "ch1"])
+        #expect(store.savedSeries.first?.poster == "https://img/9")
+        #expect(store.lists.isEmpty)
+
+        // Adding a custom list leaves My List as it was.
+        store.toggle(MetaPreview(id: "tt5", type: "movie", name: "Other"), inList: store.createList(named: "Later"))
+        #expect(LibraryStore(defaults: defaults).saved.map(\.id) == ["tt9", "tt1", "ch1"])
+    }
+
+    @Test func customListsPersistTheirTitlesNewestFirst() {
+        let store = LibraryStore(defaults: defaults)
+        let horror = store.createList(named: "  Horror  ")
+        let empty = store.createList(named: " ")
+        let first = MetaPreview(id: "tt1", type: "movie", name: "First")
+        let second = MetaPreview(id: "tt2", type: "series", name: "Second")
+        store.toggle(first, inList: horror)
+        store.toggle(second, inList: horror)
+
+        var reloaded = LibraryStore(defaults: defaults)
+        #expect(reloaded.lists.map(\.name) == ["Horror", "Untitled List"])
+        #expect(reloaded.lists.first?.titles.map(\.id) == ["tt2", "tt1"])
+        #expect(reloaded.isInList("tt1", list: horror))
+        #expect(!reloaded.isInList("tt1", list: empty))
+        #expect(!reloaded.isSaved("tt1"))
+
+        store.toggle(first, inList: horror)
+        store.renameList(horror, to: "Scary")
+        store.renameList(empty, to: "")
+        reloaded = LibraryStore(defaults: defaults)
+        #expect(!reloaded.isInList("tt1", list: horror))
+        #expect(reloaded.lists.map(\.name) == ["Scary", "Untitled List"])
+
+        store.deleteList(horror)
+        #expect(LibraryStore(defaults: defaults).lists.map(\.id) == [empty])
+    }
+
+    @Test func fillsArtworkMissingFromSavedEntries() async throws {
+        let store = LibraryStore(defaults: defaults)
+        let list = store.createList(named: "Later")
+        let bare = MetaPreview(id: "tt9", type: "series", name: "Show")
+        let drawn = MetaPreview(id: "tt1", type: "movie", name: "Movie", poster: "https://img/own")
+        store.toggleSaved(bare)
+        store.toggleSaved(drawn)
+        store.toggle(bare, inList: list)
+        store.record(episode(1, 2), position: 300, duration: 2000, at: t0)
+        #expect(store.titlesMissingArtwork.map(\.id) == ["tt9"])
+
+        let meta = Meta(id: "tt9", type: "series", name: "Show", poster: "https://img/poster",
+                        background: "https://img/backdrop",
+                        videos: [Video(id: "tt9:1:2", season: 1, episode: 2, thumbnail: "https://img/still")])
+        var lookups: [String] = []
+        await store.fillMissingArtwork { type, id in
+            lookups.append("\(type)/\(id)")
+            return id == meta.id ? meta : nil
+        }
+        // Once per launch, even for a title whose artwork couldn't be found.
+        await store.fillMissingArtwork { _, id in
+            lookups.append(id)
+            return nil
+        }
+        #expect(lookups == ["series/tt9"])
+
+        let reloaded = LibraryStore(defaults: defaults)
+        #expect(reloaded.titlesMissingArtwork.isEmpty)
+        #expect(reloaded.saved.map(\.poster) == ["https://img/own", "https://img/poster"])
+        #expect(reloaded.lists.first?.titles.first?.background == "https://img/backdrop")
+        let item = try #require(reloaded.progress["tt9:1:2"]?.item)
+        #expect(item.poster == "https://img/poster")
+        #expect(item.thumbnail == "https://img/still")
+    }
 }
 
 @MainActor

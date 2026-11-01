@@ -99,6 +99,44 @@ final class FlowTests: XCTestCase {
     }
 
     @MainActor
+    func testSearchAndSeeAllFilterByGenreTypeAndSort() {
+        openTab("Search")
+        let comedy = app.buttons["Comedy"].firstMatch
+        XCTAssertTrue(comedy.waitForExistence(timeout: 5))
+        screenshot("search-genres")
+        comedy.tap()
+        XCTAssertTrue(app.staticTexts["Series · Comedy"].waitForExistence(timeout: 20))
+        screenshot("search-genre-browse")
+
+        app.segmentedControls.buttons["Series"].tap()
+        XCTAssertFalse(app.staticTexts["Movies · Comedy"].exists)
+        let field = app.searchFields.firstMatch
+        field.tap()
+        field.typeText("office")
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'Office'")).firstMatch
+            .waitForExistence(timeout: 30), "No comedy series for office")
+        screenshot("search-genre-results")
+        field.buttons.firstMatch.tap()
+
+        // A genre's See All can switch to another catalog that offers the genre.
+        app.buttons["Series · Comedy"].firstMatch.tap()
+        app.buttons["Sort"].firstMatch.tap()
+        app.buttons["Featured"].firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["Featured Series · Comedy"].waitForExistence(timeout: 5))
+        screenshot("grid-sorted-genre")
+
+        // Cinemeta's "New" catalog filters by year instead.
+        openTab("Home")
+        app.buttons["Popular Movies"].firstMatch.tap()
+        app.buttons["Sort"].firstMatch.tap()
+        app.buttons["New"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["Year"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars.matching(NSPredicate(format: "identifier BEGINSWITH 'New Movies · '")).firstMatch
+            .waitForExistence(timeout: 5))
+        screenshot("grid-new-by-year")
+    }
+
+    @MainActor
     func testMarkingAnEpisodeWatchedAndUnwatched() {
         openSeries("Lanterns")
         // Marking the card changes what's Up Next, so it's then found by its episode number.
@@ -173,6 +211,15 @@ final class FlowTests: XCTestCase {
         XCTAssertTrue(app.frame.contains(app.buttons["Play sound earlier"].frame))
         screenshot("timing-landscape")
         done.tap()
+        XCTAssertTrue(app.buttons["Audio"].waitForExistence(timeout: 5), "Done didn't close the timing panel")
+        XCTAssertFalse(done.exists, "Done didn't close the timing panel")
+        // Tapping the picture closes it too, as it closes a menu.
+        app.buttons["Audio"].tap()
+        app.buttons["Audio Timing…"].tap()
+        XCTAssertTrue(done.waitForExistence(timeout: 5))
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertTrue(app.buttons["Audio"].waitForExistence(timeout: 5), "Tapping the picture didn't close the timing panel")
+        XCTAssertFalse(done.exists, "Tapping the picture didn't close the timing panel")
         app.buttons["Close"].tap()
     }
 

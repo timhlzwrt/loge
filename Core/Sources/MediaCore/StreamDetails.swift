@@ -35,15 +35,24 @@ public struct StreamDetails: Sendable, Equatable {
                 func rank(_ cached: Bool?) -> Int { cached == true ? 0 : cached == nil ? 1 : 2 }
                 return rank(lhs.isCached) < rank(rhs.isCached)
             case .lowerBitrate:
-                return (lhs.bitrate ?? .infinity) < (rhs.bitrate ?? .infinity)
+                return (lhs.listedBitrate ?? .infinity) < (rhs.listedBitrate ?? .infinity)
             case .higherBitrate:
-                return (lhs.bitrate ?? 0) > (rhs.bitrate ?? 0)
+                return (lhs.listedBitrate ?? 0) > (rhs.listedBitrate ?? 0)
             case .smallerFile:
                 return (lhs.isPackageSize ? .infinity : lhs.size?.converted(to: .bytes).value ?? .infinity)
                     < (rhs.isPackageSize ? .infinity : rhs.size?.converted(to: .bytes).value ?? .infinity)
             case .addonOrder:
                 return false
             }
+        }
+
+        /// The first order that tells the two apart decides; later ones break its ties.
+        public static func precedes(_ lhs: StreamDetails, _ rhs: StreamDetails, by orders: [SortOrder]) -> Bool {
+            for order in orders {
+                if order.precedes(lhs, rhs) { return true }
+                if order.precedes(rhs, lhs) { return false }
+            }
+            return false
         }
     }
 
@@ -60,13 +69,16 @@ public struct StreamDetails: Sendable, Equatable {
     /// Only the protocol's explicit videoSize identifies the individual playable file.
     public var fileSize: Int64?
     /// The addon's explicitly reported video/overall bitrate, in bits per second.
-    /// Never inferred from a file or season-pack size.
     public var bitrate: Double?
+    /// The file size spread over the title's runtime, for the many addons that report no
+    /// bitrate. Never taken from a season-pack total.
+    public var estimatedBitrate: Double?
     /// Debrid services mark files they already hold; others have to be fetched first and
     /// often stall. Nil when the addon doesn't say.
     public var isCached: Bool?
 
-    public init(_ stream: StreamSource) {
+    /// `runtime`, in seconds, lets a bitrate be estimated from the file size.
+    public init(_ stream: StreamSource, runtime: TimeInterval? = nil) {
         let text = [stream.name, stream.title, stream.description, stream.behaviorHints?.filename]
             .compactMap { $0 }
             .joined(separator: "\n")
@@ -76,6 +88,19 @@ public struct StreamDetails: Sendable, Equatable {
             size = Measurement(value: Double(bytes), unit: .bytes)
             isPackageSize = false
         }
+        if bitrate == nil, let runtime { estimateBitrate(runtime: runtime) }
+    }
+
+    /// No single video file comes near the top (UHD Blu-ray peaks at 128 Mbps), and nothing
+    /// watchable is below the bottom, so an estimate outside means the size was really a pack
+    /// or a sample, or the runtime is wrong.
+    static let plausibleEstimatedBitrates: ClosedRange<Double> = 200_000...150_000_000
+
+    private mutating func estimateBitrate(runtime: TimeInterval) {
+        guard !isPackageSize, runtime.isFinite, runtime > 0,
+              let bytes = size?.converted(to: .bytes).value, bytes > 0 else { return }
+        let rate = bytes * 8 / runtime
+        estimatedBitrate = Self.plausibleEstimatedBitrates.contains(rate) ? rate : nil
     }
 
     init(text: String) {
@@ -189,8 +214,14 @@ public struct StreamDetails: Sendable, Equatable {
         size.map { $0.formatted(.byteCount(style: .file)) + (isPackageSize ? " pack" : "") }
     }
 
+    /// The reported bitrate, else the estimate: what the list sorts and caps by.
+    public var listedBitrate: Double? { bitrate ?? estimatedBitrate }
+
+    /// "18 Mbps" as reported, or "≈18 Mbps" estimated from the size.
     public var bitrateLabel: String? {
-        bitrate.map { ($0 / 1_000_000).formatted(.number.precision(.fractionLength(0...1))) + " Mbps" }
+        guard let rate = listedBitrate else { return nil }
+        let mbps = (rate / 1_000_000).formatted(.number.precision(.fractionLength(bitrate == nil ? 0...0 : 0...1)))
+        return (bitrate == nil ? "≈" : "") + mbps + " Mbps"
     }
 
     /// Series with unknown sizes or pack totals need a manual choice while a limit is enabled.

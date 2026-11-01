@@ -368,14 +368,17 @@ private struct CapsuleIcon: ViewModifier {
 
 /// The system's route picker, for sending sound to AirPlay speakers.
 private struct AirPlayButton: UIViewRepresentable {
+    @AppStorage(Accent.storageKey) private var accent = Accent.white
+
     func makeUIView(context: Context) -> AVRoutePickerView {
         let picker = AVRoutePickerView()
         picker.tintColor = .white
-        picker.activeTintColor = .white
         return picker
     }
 
-    func updateUIView(_ uiView: AVRoutePickerView, context: Context) {}
+    func updateUIView(_ uiView: AVRoutePickerView, context: Context) {
+        uiView.activeTintColor = UIColor(accent.color)
+    }
 }
 #endif
 
@@ -523,6 +526,10 @@ private struct TimingPanel: View {
                     .font(.subheadline.weight(.semibold))
                 Spacer()
                 Button("Done", action: onDone)
+                    #if !os(tvOS)
+                    // Escape closes it, as it closes the menus.
+                    .keyboardShortcut(.cancelAction)
+                    #endif
                     .frame(minWidth: 44, minHeight: 44)
             }
             HStack(spacing: 12) {

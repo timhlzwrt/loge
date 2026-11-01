@@ -7,6 +7,7 @@ struct MediaApp: App {
     @State private var library: LibraryStore
     @State private var trakt: TraktAccount
     @State private var playback: PlaybackSession
+    @AppStorage(Accent.storageKey) private var accent = Accent.white
 
     init() {
         let addonStore = AddonStore()
@@ -34,12 +35,13 @@ struct MediaApp: App {
                 .environment(playback)
                 .environment(trakt)
                 .preferredColorScheme(.dark)
-                // No accent colour: artwork carries the colour, controls stay neutral.
-                .tint(.white)
+                // White unless the user picks another accent: artwork carries the colour.
+                .tint(accent.color)
                 .task {
                     await addonStore.refreshManifests()
                     // Needs the addons to look up titles started on other devices.
                     await trakt.pullProgress()
+                    await library.fillMissingArtwork(from: addonStore)
                 }
         }
         #if os(macOS)
@@ -53,7 +55,7 @@ struct MediaApp: App {
             PlayerView()
                 .environment(playback)
                 .frame(minWidth: 640, minHeight: 360)
-                .tint(.white)
+                .tint(accent.color)
                 .preferredColorScheme(.dark)
                 .navigationTitle(playback.current?.title ?? "")
         }

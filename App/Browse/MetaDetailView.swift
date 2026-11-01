@@ -83,6 +83,8 @@ struct MetaDetailView: View {
                 let meta = try await client.meta(type: preview.type, id: preview.id)
                 try Task.checkCancellation()
                 state = .loaded(meta)
+                // Entries saved before this title's artwork was known get it now.
+                library.fillArtwork(from: meta)
             } catch is CancellationError {
                 // Navigated away; nothing to show.
             } catch {
@@ -107,6 +109,12 @@ struct MetaDetailView: View {
     /// Full details once loaded; until then the catalog entry already has enough to draw the page.
     private var loaded: Meta? {
         if case .loaded(let meta) = state { meta } else { nil }
+    }
+
+    /// What My List and the user's lists keep: the catalog entry, with artwork it lacked
+    /// filled in from the full details, so the title has a poster wherever it's listed.
+    private var savedPreview: MetaPreview {
+        loaded.map(preview.fillingArtwork(from:)) ?? preview
     }
 
     private var playAction: PlayAction? {
@@ -204,8 +212,9 @@ struct MetaDetailView: View {
             GlassEffectContainer(spacing: 0) {
                 HStack(spacing: 12) {
                     MyListButton(isSaved: library.isSaved(preview.id)) {
-                        library.toggleSaved(preview)
+                        library.toggleSaved(savedPreview)
                     }
+                    ListsMenu(title: savedPreview)
                     if let play = playAction {
                         Button("Choose a Source", systemImage: "list.bullet") {
                             var route = play.route
@@ -529,7 +538,7 @@ private struct EpisodesSection: View {
 }
 
 #if os(tvOS)
-/// The title stays where it is and gains the white focus platter around it, since a
+/// The title stays where it is and gains the accent focus platter around it, since a
 /// borderless menu shows no focus at all.
 private struct SeasonMenuStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
@@ -545,7 +554,7 @@ private struct SeasonMenuStyle: ButtonStyle {
                 .foregroundStyle(isFocused ? .black : .white)
                 .background {
                     Capsule()
-                        .fill(.white)
+                        .fill(.tint)
                         .padding(.horizontal, -20)
                         .padding(.vertical, -6)
                         .opacity(isFocused ? 1 : 0)
@@ -665,7 +674,8 @@ struct PlayAction {
             thumbnail: video?.thumbnail
         )
         let title = video.map { "\(name) · \(EpisodesSection.code(for: $0))" } ?? name
-        return SourcesRoute(item: item, title: title, autoplay: autoplay)
+        let runtime = TraktAccount.minutes(meta?.runtime ?? preview.runtime).map { $0 * 60 }
+        return SourcesRoute(item: item, title: title, autoplay: autoplay, runtime: runtime)
     }
 
     /// "S1, E6", as the button says it.

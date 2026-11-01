@@ -9,6 +9,8 @@ struct SourcesRoute: Hashable, Identifiable {
     /// Start playing straight away with the source last used for this title, if there is
     /// one, rather than waiting for a choice. The list stays underneath as a fallback.
     var autoplay = false
+    /// The movie's or series' listed runtime in seconds, to estimate bitrates from file sizes.
+    var runtime: TimeInterval?
 
     var type: String { item.type }
     var id: String { item.id }
@@ -30,6 +32,7 @@ struct SourcesView: View {
     @State private var hasAutoplayed = false
     @State private var playedAutomatically = false
     @State private var sourceOrder = StreamDetails.SortOrder.cachedFirst
+    @State private var secondaryOrder = StreamDetails.SortOrder.addonOrder
     @State private var maximumBitrate = 0
     #if os(macOS)
     @State private var selectedID: Entry.ID?
@@ -200,7 +203,7 @@ struct SourcesView: View {
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
                     .buttonStyle(.glass)
-                    // The Mac fills glass buttons with the tint, which is white app-wide.
+                    // The Mac fills glass buttons with the tint, the accent app-wide.
                     .tint(.clear)
                 Button("Play") {
                     if let entry { choose(entry) }
@@ -229,7 +232,7 @@ struct SourcesView: View {
         ListContainer {
             sourceOptions
             if maximumBitrate > 0 {
-                Text("Up to \(maximumBitrate) Mbps reported bitrate. Unknown bitrates stay visible.")
+                Text("Up to \(maximumBitrate) Mbps, estimated from the size where not reported. Unknown bitrates stay visible.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -268,18 +271,26 @@ struct SourcesView: View {
 
     private var sourceOptions: some View {
         Menu {
-            Picker("Sort within each resolution", selection: $sourceOrder) {
-                ForEach(StreamDetails.SortOrder.allCases) { order in Text(order.rawValue).tag(order) }
+            // Submenus, so each list is named; inline, the two sort lists read as one
+            // repeated list.
+            Group {
+                Picker("Sort by", selection: $sourceOrder) {
+                    ForEach(StreamDetails.SortOrder.allCases) { order in Text(order.rawValue).tag(order) }
+                }
+                Picker("Then by", selection: $secondaryOrder) {
+                    ForEach(StreamDetails.SortOrder.allCases) { order in Text(order.rawValue).tag(order) }
+                }
+                Picker("Maximum bitrate", selection: $maximumBitrate) {
+                    Text("Any bitrate").tag(0)
+                    ForEach([10, 25, 50, 100], id: \.self) { Text("Up to \($0) Mbps").tag($0) }
+                }
             }
-            Picker("Maximum reported bitrate", selection: $maximumBitrate) {
-                Text("Any bitrate").tag(0)
-                ForEach([10, 25, 50, 100], id: \.self) { Text("Up to \($0) Mbps").tag($0) }
-            }
+            .pickerStyle(.menu)
         } label: {
             Label("Sort & Filter", systemImage: "line.3.horizontal.decrease")
                 .frame(minHeight: 44)
         }
-        .accessibilityValue("\(sourceOrder.rawValue), \(maximumBitrate == 0 ? "any bitrate" : "up to \(maximumBitrate) Mbps")")
+        .accessibilityValue("\(sourceOrder.rawValue), then \(secondaryOrder.rawValue), \(maximumBitrate == 0 ? "any bitrate" : "up to \(maximumBitrate) Mbps")")
     }
 
     @ViewBuilder
@@ -289,7 +300,7 @@ struct SourcesView: View {
         if isChoosing {
             // Click selects and double-click plays, as in a Mac list; Play plays the selection.
             label
-                .background(isSelected ? Color.white.opacity(0.12) : .clear)
+                .background(isSelected ? AnyShapeStyle(.tint.opacity(0.2)) : AnyShapeStyle(.clear))
                 .contentShape(.rect)
                 .onTapGesture(count: 2) { choose(entry) }
                 .onTapGesture { selectedID = entry.id }
@@ -339,21 +350,33 @@ struct SourcesView: View {
             guard case .success(let streams) = results[provider.id] else { return [] }
             return streams.enumerated()
                 .filter { $0.element.playbackURL != nil }
-                .map { Entry(id: "\(provider.id)#\($0.offset)", stream: $0.element, provider: provider, details: StreamDetails($0.element)) }
-                .filter { maximumBitrate == 0 || ($0.details.bitrate ?? 0) <= Double(maximumBitrate) * 1_000_000 }
+                .map { Entry(id: "\(provider.id)#\($0.offset)", stream: $0.element, provider: provider, details: details($0.element)) }
+                .filter { withinBitrateLimit($0.details) }
         }
         let listed = StreamDetails.listedResolutions
         let buckets = listed.map { resolution in
             SourceGroup(title: resolution.label, entries: entries.filter { $0.details.resolution == resolution })
         } + [SourceGroup(title: "Other", entries: entries.filter { entry in !listed.contains { $0 == entry.details.resolution } })]
+        let orders = [sourceOrder, secondaryOrder]
         return buckets.filter { !$0.entries.isEmpty }.map { group in
             let sorted = group.entries.enumerated().sorted { lhs, rhs in
-                if sourceOrder.precedes(lhs.element.details, rhs.element.details) { return true }
-                if sourceOrder.precedes(rhs.element.details, lhs.element.details) { return false }
+                if StreamDetails.SortOrder.precedes(lhs.element.details, rhs.element.details, by: orders) { return true }
+                if StreamDetails.SortOrder.precedes(rhs.element.details, lhs.element.details, by: orders) { return false }
                 return lhs.offset < rhs.offset
             }
             return SourceGroup(title: group.title, entries: sorted.map(\.element))
         }
+    }
+
+    /// The length of the file as last played here beats the listed runtime, which is rounded.
+    private func details(_ stream: StreamSource) -> StreamDetails {
+        let played = library.progress[route.id].flatMap { $0.isEstimated == true ? nil : $0.duration }
+        return StreamDetails(stream, runtime: played ?? route.runtime)
+    }
+
+    /// Unknown bitrates pass, so a limit never hides sources that just don't say.
+    private func withinBitrateLimit(_ details: StreamDetails) -> Bool {
+        maximumBitrate == 0 || (details.listedBitrate ?? 0) <= Double(maximumBitrate) * 1_000_000
     }
 
     /// The remembered source: the same file, or for another episode the same release.
@@ -454,8 +477,8 @@ struct SourcesView: View {
     }
 
     private func permitsAutomaticPlayback(_ stream: StreamSource) -> Bool {
-        let details = StreamDetails(stream)
-        return (maximumBitrate == 0 || (details.bitrate ?? 0) <= Double(maximumBitrate) * 1_000_000)
+        let details = details(stream)
+        return withinBitrateLimit(details)
             && details.permitsAutomaticPlayback(type: route.type, maximumFileSize: PlaybackPreferences.maximumAutomaticFileSize)
     }
 }
@@ -528,7 +551,10 @@ private struct StreamRow: View {
             Spacer(minLength: 8)
             if details.bitrateLabel != nil || details.sizeLabel != nil {
                 VStack(alignment: .trailing, spacing: 2) {
-                    if let bitrate = details.bitrateLabel { Text(bitrate) }
+                    if let bitrate = details.bitrateLabel {
+                        Text(bitrate)
+                            .accessibilityLabel(details.bitrate == nil ? "about \(bitrate.dropFirst())" : bitrate)
+                    }
                     if let size = details.sizeLabel { Text(size) }
                 }
                 .font(sizeFont.monospacedDigit())
