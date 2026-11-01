@@ -10,6 +10,7 @@ enum NextEpisode {
         else { return nil }
 
         let streams = try await AddonClient(manifestURL: providerURL).streams(type: item.type, id: video.id)
+            .filter { StreamDetails($0).permitsAutomaticPlayback(type: item.type, maximumFileSize: PlaybackPreferences.maximumAutomaticFileSize) }
         guard let stream = StreamSource.continuing(bingeGroup: current.bingeGroup, in: streams)
             ?? streams.first(where: { $0.playbackURL != nil }),
             let url = stream.playbackURL

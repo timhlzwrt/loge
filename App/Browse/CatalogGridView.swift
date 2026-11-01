@@ -47,7 +47,7 @@ struct CatalogGridView: View {
         .background(Color.canvas)
         .navigationTitle(genre.map { "\(source.title) · \($0)" } ?? source.title)
         .toolbar {
-            if !source.catalog.genres.isEmpty {
+            if source.defaultGenre == nil && !source.catalog.genres.isEmpty {
                 ToolbarItem {
                     genreMenu
                 }

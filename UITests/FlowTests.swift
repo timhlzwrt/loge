@@ -24,6 +24,54 @@ final class FlowTests: XCTestCase {
     }
 
     @MainActor
+    func test4KPlaybackAdvances() {
+        installTestAddonIfNeeded(name: "4K Playback Test", manifestURL: "http://127.0.0.1:8768/manifest.json")
+        openSeries("Lanterns")
+        episodeCard().tap()
+        let source = app.buttons.matching(NSPredicate(format: "label CONTAINS '4K Playback Test'")).firstMatch
+        XCTAssertTrue(source.waitForExistence(timeout: 15))
+        source.tap()
+        XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 30))
+        let position = app.sliders["Playback position"].value as? String
+        XCTAssertNotNil(position)
+        app.buttons["Audio"].tap()
+        app.buttons["Playback Info…"].tap()
+        XCTAssertTrue(app.staticTexts["Playback Info"].waitForExistence(timeout: 5))
+        screenshot("4k-playback-info")
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS '3840' AND label CONTAINS '2160'"))
+            .firstMatch.exists, "Fixture must actually decode at 4K")
+        app.buttons["Done"].tap()
+        if !app.buttons["Close"].exists { app.tap() }
+        XCTAssertNotEqual(app.sliders["Playback position"].value as? String, position)
+        screenshot("4k-playing")
+        app.buttons["Close"].tap()
+        XCTAssertTrue(episodeCard().exists)
+    }
+
+    @MainActor
+    func testBuiltInDiscoveryWithoutAddons() {
+        openTab("Settings")
+        XCTAssertTrue(app.staticTexts["No playback addons yet"].waitForExistence(timeout: 5),
+                      "Run this flow on a fresh simulator without installed addons")
+        openTab("Home")
+        XCTAssertTrue(app.staticTexts["For You"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.staticTexts["Popular Movies"].waitForExistence(timeout: 20))
+        screenshot("builtin-home")
+        openTab("Search")
+        let field = app.searchFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap()
+        field.typeText("Dune")
+        let movie = app.buttons["Dune"].firstMatch
+        XCTAssertTrue(movie.waitForExistence(timeout: 20))
+        movie.tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'IMDb '")).firstMatch
+            .waitForExistence(timeout: 15))
+        XCTAssertTrue(app.links["Letterboxd"].exists || app.buttons["Letterboxd"].exists)
+        screenshot("builtin-movie-ratings")
+    }
+
+    @MainActor
     func testSearchFindsTitlesAndRemembersTheQuery() {
         openTab("Search")
         let field = app.searchFields.firstMatch
@@ -88,7 +136,8 @@ final class FlowTests: XCTestCase {
 
     @MainActor
     func testClosingActivePlaybackCanStartAgain() {
-        startPlayback()
+        // Keep this title separate from the longer track/4K fixtures' resume history.
+        startPlayback(series: "Slow Horses")
         for attempt in 0..<3 {
             if attempt > 0 {
                 app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Play' OR label BEGINSWITH 'Resume'"))
@@ -229,6 +278,91 @@ final class FlowTests: XCTestCase {
         XCTAssertFalse(app.buttons["Picture in Picture"].exists, "The player came back")
     }
 
+    @MainActor
+    func testPictureInPictureSkippingPreservesPlaybackState() throws {
+        installTestAddonIfNeeded(name: "Playback Test Streams", manifestURL: "http://127.0.0.1:8766/manifest.json")
+        openSeries("Lanterns")
+        episodeCard().tap()
+        let source = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Local Multi Track'")).firstMatch
+        XCTAssertTrue(source.waitForExistence(timeout: 15))
+        source.tap()
+        XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 30))
+        // The controls can fade between XCTest locating Pause and delivering its tap.
+        for _ in 0..<3 where !app.buttons["Play"].exists {
+            if !app.buttons["Close"].exists { app.tap() }
+            if app.buttons["Pause"].exists { app.buttons["Pause"].tap() }
+        }
+        XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 5))
+        let timeline = app.sliders["Playback position"]
+        XCTAssertTrue(timeline.waitForExistence(timeout: 5))
+        timeline.adjust(toNormalizedSliderPosition: 0.2)
+        let pausedPosition = app.sliders["Playback position"].value as? String
+        let pip = app.buttons["Picture in Picture"]
+        guard pip.exists else { throw XCTSkip("Picture in Picture isn't available on this simulator") }
+        pip.tap()
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let restore = springboard.buttons.matching(NSPredicate(format:
+            "label IN %@", ["Restore Full Screen", "Vollbildmodus wiederherstellen"])).firstMatch
+        XCTAssertTrue(restore.waitForExistence(timeout: 5))
+        screenshot("pip-skip-controls")
+        let forward = springboard.buttons.matching(NSPredicate(format:
+            "label CONTAINS[c] 'forward' OR label CONTAINS[c] 'vorspringen'")).firstMatch
+        let backward = springboard.buttons.matching(NSPredicate(format:
+            "label CONTAINS[c] 'backward' OR label CONTAINS[c] 'zurückspringen'")).firstMatch
+        XCTAssertTrue(forward.exists)
+        XCTAssertTrue(backward.exists)
+        forward.tap()
+        restore.tap()
+        XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 5), "Skipping a paused video started playback")
+        XCTAssertNotEqual(app.sliders["Playback position"].value as? String, pausedPosition,
+                          "PiP's skip completion ran without moving the paused video")
+        app.buttons["Play"].tap()
+        app.buttons["Picture in Picture"].tap()
+        XCTAssertTrue(restore.waitForExistence(timeout: 5))
+        forward.tap()
+        backward.tap()
+        forward.tap()
+        restore.tap()
+        XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 5), "PiP skipping left playback paused")
+        let position = app.sliders["Playback position"].value as? String
+        XCTAssertNotNil(position)
+        sleep(2)
+        if !app.buttons["Close"].exists { app.tap() }
+        XCTAssertNotEqual(app.sliders["Playback position"].value as? String, position,
+                          "Playback did not advance after PiP skips")
+        screenshot("pip-skips-playing")
+        app.buttons["Audio"].tap()
+        app.buttons["Playback Info…"].tap()
+        XCTAssertTrue(app.staticTexts["Video bitrate"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Audio bitrate"].exists)
+        screenshot("pip-skips-bitrate")
+        app.buttons["Done"].tap()
+        if !app.buttons["Close"].exists { app.tap() }
+        app.buttons["Close"].tap()
+    }
+
+    @MainActor
+    func testSourceBitrateFilteringAndSorting() {
+        installTestAddonIfNeeded()
+        openSeries("Lanterns")
+        episodeCard().tap()
+        let higherRate = app.buttons.matching(NSPredicate(format: "label MATCHES '.*25[,.]2 Mbps.*'")).firstMatch
+        XCTAssertTrue(higherRate.waitForExistence(timeout: 15))
+        screenshot("source-bitrates")
+        app.buttons["Sort & Filter"].tap()
+        screenshot("source-sort-menu")
+        app.buttons["Lower bitrate"].tap()
+        app.buttons["Sort & Filter"].tap()
+        app.buttons["Up to 25 Mbps"].tap()
+        XCTAssertTrue(app.staticTexts["Up to 25 Mbps reported bitrate. Unknown bitrates stay visible."].exists)
+        XCTAssertFalse(higherRate.exists)
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label MATCHES '.*23[,.]6 Mbps.*'")).firstMatch.exists)
+        screenshot("source-bitrate-filter")
+        app.buttons["Sort & Filter"].tap()
+        app.buttons["Any bitrate"].tap()
+        XCTAssertTrue(higherRate.exists)
+    }
+
     /// A source that doesn't open hands over to the next one instead of stopping.
     @MainActor
     func testBrokenSourceFallsBackToAnother() {
@@ -283,6 +417,14 @@ final class FlowTests: XCTestCase {
         XCTAssertNotEqual(app.sliders["Playback position"].value as? String, initialPosition,
                           "Playback position did not advance while switching tracks")
         screenshot("tracks-playing")
+        app.buttons["Audio"].tap()
+        app.buttons["Playback Info…"].tap()
+        XCTAssertTrue(app.staticTexts["Hardware decoder"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Buffered"].exists)
+        sleep(2)
+        screenshot("playback-info")
+        app.buttons["Done"].tap()
+        if !app.buttons["Close"].exists { app.tap() }
         app.buttons["Close"].tap()
         XCTAssertTrue(episodeCard().exists)
     }
@@ -375,15 +517,16 @@ final class FlowTests: XCTestCase {
     /// Chooses the short local-addon fixture explicitly, independent of remembered sources.
     /// Leaves the controls showing; subsequent Play/Resume actions exercise autoplay.
     @MainActor
-    private func startPlayback() {
+    private func startPlayback(series: String = "Lanterns") {
         installTestAddonIfNeeded()
-        openSeries("Lanterns")
+        openSeries(series)
         episodeCard().tap()
         // Once playing, the controls fade out; while they're up, Close is showing.
         let testSource = app.buttons.matching(NSPredicate(format: "label CONTAINS 'DTS 5.1'")).firstMatch
         let pause = app.buttons["Pause"]
-        for _ in 0..<30 where !pause.exists {
-            if testSource.isHittable {
+        for _ in 0..<30 {
+            if pause.exists { return }
+            if testSource.exists && testSource.isHittable {
                 testSource.tap()
             } else if !app.buttons["Close"].exists {
                 app.tap()
@@ -415,7 +558,8 @@ final class FlowTests: XCTestCase {
         let field = app.textFields["Manifest URL"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         field.tap()
-        field.typeText(manifestURL + "\n")
+        let url = name == "Test Streams" ? ProcessInfo.processInfo.environment["PLAYBACK_TEST_ADDON_URL"] ?? manifestURL : manifestURL
+        field.typeText(url + "\n")
         XCTAssertTrue(app.staticTexts[name].waitForExistence(timeout: 10), "Test addon didn't install")
     }
 

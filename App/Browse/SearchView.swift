@@ -2,7 +2,6 @@ import MediaCore
 import SwiftUI
 
 struct SearchView: View {
-    @Environment(AddonStore.self) private var store
     @State private var query = ""
     @State private var submittedQuery = ""
     /// Results per catalog for the current query, filled in as each one answers.
@@ -11,15 +10,9 @@ struct SearchView: View {
     @AppStorage("recentSearches") private var recentSearches = ""
 
     var body: some View {
-        let sources = store.addons.searchCatalogs
+        let sources = DiscoveryCatalogs.search
         ScrollView {
-            if sources.isEmpty {
-                ContentUnavailableView(
-                    "No searchable catalogs",
-                    systemImage: "magnifyingglass",
-                    description: Text("None of your addons supports search.")
-                )
-            } else if query.isEmpty {
+            if query.isEmpty {
                 recent
             } else if !submittedQuery.isEmpty {
                 // Rows with no matches hide themselves, so without this an unsuccessful

@@ -20,6 +20,10 @@ enum Metrics {
     static let headerSpacing: CGFloat = 16
     static let cardRadius: CGFloat = 24
     static let posterRadius: CGFloat = 21
+    /// Cast & Crew circles.
+    static let personSize: CGFloat = 150
+    /// The narrowest column of the details' Information grid.
+    static let infoColumnWidth: CGFloat = 300
     #elseif os(macOS)
     static let posterWidth: CGFloat = 132
     static let cardWidth: CGFloat = 232
@@ -29,6 +33,8 @@ enum Metrics {
     static let headerSpacing: CGFloat = 16
     static let cardRadius: CGFloat = 12
     static let posterRadius: CGFloat = 10
+    static let personSize: CGFloat = 76
+    static let infoColumnWidth: CGFloat = 180
     #else
     // The idiom never changes while running, so these can stay constants.
     private static let isPad = UIDevice.current.userInterfaceIdiom == .pad
@@ -40,6 +46,8 @@ enum Metrics {
     static let headerSpacing: CGFloat = 12
     static let cardRadius: CGFloat = 14
     static let posterRadius: CGFloat = 12
+    static let personSize: CGFloat = isPad ? 96 : 76
+    static let infoColumnWidth: CGFloat = isPad ? 200 : 150
     #endif
 }
 
@@ -265,7 +273,7 @@ struct TitleLogo: View {
     }
 }
 
-/// "Crime · 2008–2013 · 49 min · ★ 9.5"
+/// "Crime · 2008–2013 · 49 min · IMDb 9.5/10"
 struct InfoLine: View {
     let releaseInfo: String?
     let genres: [String]?
@@ -281,9 +289,8 @@ struct InfoLine: View {
             .filter { !$0.isEmpty }
         let details = parts.joined(separator: " · ")
         let line: Text
-        if let rating, !rating.isEmpty {
-            let star = Text(Image(systemName: "star.fill")).foregroundStyle(.yellow)
-            line = Text("\(details)\(parts.isEmpty ? "" : " · ")\(star) \(rating)")
+        if let rating, let score = Double(rating), score.isFinite, score > 0, score <= 10 {
+            line = Text("\(details)\(parts.isEmpty ? "" : " · ")IMDb \(rating)/10")
         } else {
             line = Text(details)
         }

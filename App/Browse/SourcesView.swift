@@ -14,8 +14,8 @@ struct SourcesRoute: Hashable, Identifiable {
     var id: String { item.id }
 }
 
-/// Every playable source from the user's stream addons, grouped by resolution and largest
-/// first. Rows describe the file (release, codec, HDR, audio, size) and never name the addon
+/// Every playable source from the user's stream addons, grouped by resolution.
+/// Rows describe the file (release, codec, HDR, audio, bitrate, size) and never name the addon
 /// or the file, whose names can carry account details.
 struct SourcesView: View {
     let route: SourcesRoute
@@ -29,6 +29,8 @@ struct SourcesView: View {
     @State private var results: [StreamProvider.ID: Result<[StreamSource], Error>] = [:]
     @State private var hasAutoplayed = false
     @State private var playedAutomatically = false
+    @State private var sourceOrder = StreamDetails.SortOrder.cachedFirst
+    @State private var maximumBitrate = 0
     #if os(macOS)
     @State private var selectedID: Entry.ID?
     #endif
@@ -223,6 +225,12 @@ struct SourcesView: View {
         let failed = providers.filter { if case .failure = results[$0.id] { true } else { false } }
         let isLoading = providers.contains { results[$0.id] == nil }
         ListContainer {
+            sourceOptions
+            if maximumBitrate > 0 {
+                Text("Up to \(maximumBitrate) Mbps reported bitrate. Unknown bitrates stay visible.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
             if route.autoplay && !hasAutoplayed && library.sources[route.item.metaID] != nil {
                 Text("Starting with your last source…")
                     .foregroundStyle(.secondary)
@@ -250,10 +258,26 @@ struct SourcesView: View {
                 }
             }
             if groups.isEmpty && !isLoading && failed.isEmpty {
-                Text("No sources found.")
+                Text(maximumBitrate > 0 ? "No sources match this bitrate limit." : "No sources found.")
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private var sourceOptions: some View {
+        Menu {
+            Picker("Sort within each resolution", selection: $sourceOrder) {
+                ForEach(StreamDetails.SortOrder.allCases) { order in Text(order.rawValue).tag(order) }
+            }
+            Picker("Maximum reported bitrate", selection: $maximumBitrate) {
+                Text("Any bitrate").tag(0)
+                ForEach([10, 25, 50, 100], id: \.self) { Text("Up to \($0) Mbps").tag($0) }
+            }
+        } label: {
+            Label("Sort & Filter", systemImage: "line.3.horizontal.decrease")
+                .frame(minHeight: 44)
+        }
+        .accessibilityValue("\(sourceOrder.rawValue), \(maximumBitrate == 0 ? "any bitrate" : "up to \(maximumBitrate) Mbps")")
     }
 
     @ViewBuilder
@@ -307,13 +331,14 @@ struct SourcesView: View {
         var id: String { title }
     }
 
-    /// 4K, 1080p and 720p, then everything else; largest first within each, ties in addon order.
+    /// Resolution stays explicit; sorting and the optional bitrate cap apply within it.
     private func groups(_ providers: [StreamProvider]) -> [SourceGroup] {
         let entries = providers.flatMap { provider -> [Entry] in
             guard case .success(let streams) = results[provider.id] else { return [] }
             return streams.enumerated()
                 .filter { $0.element.playbackURL != nil }
                 .map { Entry(id: "\(provider.id)#\($0.offset)", stream: $0.element, provider: provider, details: StreamDetails($0.element)) }
+                .filter { maximumBitrate == 0 || ($0.details.bitrate ?? 0) <= Double(maximumBitrate) * 1_000_000 }
         }
         let listed = StreamDetails.listedResolutions
         let buckets = listed.map { resolution in
@@ -321,8 +346,8 @@ struct SourcesView: View {
         } + [SourceGroup(title: "Other", entries: entries.filter { entry in !listed.contains { $0 == entry.details.resolution } })]
         return buckets.filter { !$0.entries.isEmpty }.map { group in
             let sorted = group.entries.enumerated().sorted { lhs, rhs in
-                if StreamDetails.largerFirst(lhs.element.details, rhs.element.details) { return true }
-                if StreamDetails.largerFirst(rhs.element.details, lhs.element.details) { return false }
+                if sourceOrder.precedes(lhs.element.details, rhs.element.details) { return true }
+                if sourceOrder.precedes(rhs.element.details, lhs.element.details) { return false }
                 return lhs.offset < rhs.offset
             }
             return SourceGroup(title: group.title, entries: sorted.map(\.element))
@@ -361,7 +386,10 @@ struct SourcesView: View {
 
     /// Resuming the item last played: its stream URL is already known.
     private func playRememberedSourceIfPossible() {
-        guard route.autoplay, !hasAutoplayed, let remembered = library.sources[route.item.metaID],
+        // Limited series need fresh metadata because remembered URLs don't retain file sizes.
+        guard maximumBitrate == 0,
+              route.type != "series" || PlaybackPreferences.maximumAutomaticFileSize == 0,
+              route.autoplay, !hasAutoplayed, let remembered = library.sources[route.item.metaID],
               remembered.itemID == route.id
         else { return }
         hasAutoplayed = true
@@ -377,7 +405,9 @@ struct SourcesView: View {
     private func playContinuingSourceIfPossible() {
         guard route.autoplay, !hasAutoplayed, let remembered = library.sources[route.item.metaID],
               case .success(let streams) = results[remembered.providerURL],
-              let stream = StreamSource.continuing(bingeGroup: remembered.bingeGroup, in: streams),
+              let stream = streams.first(where: {
+                  remembered.itemID == route.id && $0.playbackURL == remembered.url && permitsAutomaticPlayback($0)
+              }) ?? StreamSource.continuing(bingeGroup: remembered.bingeGroup, in: streams.filter(permitsAutomaticPlayback)),
               let provider = store.addons.streamProviders(type: route.type, id: route.id)
                 .first(where: { $0.id == remembered.providerURL })
         else { return }
@@ -412,12 +442,18 @@ struct SourcesView: View {
     private func fallbacks(for request: PlaybackRequest) -> [PlaybackRequest] {
         let all = store.addons.streamProviders(type: route.type, id: route.id).flatMap { provider in
             guard case .success(let streams) = results[provider.id] else { return [PlaybackRequest]() }
-            return streams.compactMap { self.request(for: $0, from: provider) }
+            return streams.filter(permitsAutomaticPlayback).compactMap { self.request(for: $0, from: provider) }
         }
         let others = all.filter { $0.url != request.url }
         let sameGroup = others.filter { request.bingeGroup != nil && $0.bingeGroup == request.bingeGroup }
         let rest = others.filter { request.bingeGroup == nil || $0.bingeGroup != request.bingeGroup }
         return Array((sameGroup + rest).prefix(3))
+    }
+
+    private func permitsAutomaticPlayback(_ stream: StreamSource) -> Bool {
+        let details = StreamDetails(stream)
+        return (maximumBitrate == 0 || (details.bitrate ?? 0) <= Double(maximumBitrate) * 1_000_000)
+            && details.permitsAutomaticPlayback(type: route.type, maximumFileSize: PlaybackPreferences.maximumAutomaticFileSize)
     }
 }
 
@@ -487,10 +523,14 @@ private struct StreamRow: View {
                 }
             }
             Spacer(minLength: 8)
-            if let size = details.sizeLabel {
-                Text(size)
-                    .font(sizeFont.monospacedDigit())
-                    .foregroundStyle(.secondary)
+            if details.bitrateLabel != nil || details.sizeLabel != nil {
+                VStack(alignment: .trailing, spacing: 2) {
+                    if let bitrate = details.bitrateLabel { Text(bitrate) }
+                    if let size = details.sizeLabel { Text(size) }
+                }
+                .font(sizeFont.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: true, vertical: false)
             }
             Image(systemName: "checkmark")
                 .font(sizeFont.weight(.semibold))

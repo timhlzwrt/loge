@@ -35,6 +35,11 @@ struct MetaDetailView: View {
                             choose: { choosingSource = route(for: $0) }
                         )
                     }
+                    let people = meta.people
+                    if !people.isEmpty {
+                        PeopleRow(people: people, title: preview)
+                    }
+                    InformationSection(meta: meta)
                 case .failed(let message):
                     HStack {
                         Text(message)
@@ -80,6 +85,14 @@ struct MetaDetailView: View {
                 // Navigated away; nothing to show.
             } catch {
                 state = .failed("Couldn't load the details for \(preview.name).")
+            }
+        }
+        // Stream addons such as AIOStreams take seconds to answer, so ask while the page is
+        // being read; the sources screen picks up the same request.
+        .task(id: playAction?.route.id) {
+            guard let route = playAction?.route else { return }
+            for provider in store.addons.streamProviders(type: route.type, id: route.id) {
+                provider.prefetchStreams(type: route.type, id: route.id)
             }
         }
     }
@@ -134,6 +147,7 @@ struct MetaDetailView: View {
                 .frame(maxWidth: logoWidth, alignment: Alignment(horizontal: heroAlignment, vertical: .center))
             (loaded?.infoLine ?? preview.infoLine)
                 .multilineTextAlignment(heroAlignment == .center ? .center : .leading)
+            ratingLinks
             if !synopsisUnderButtons, let description {
                 Text(description)
                     .font(.synopsis)
@@ -151,6 +165,26 @@ struct MetaDetailView: View {
         .frame(maxWidth: .infinity, alignment: Alignment(horizontal: heroAlignment, vertical: .bottom))
         .frame(minHeight: heroHeight, alignment: .bottom)
         .padding(.horizontal, Metrics.gutter)
+    }
+
+    @ViewBuilder
+    private var ratingLinks: some View {
+        #if !os(tvOS)
+        // IMDb IDs make stable links without guessing a title's translated Letterboxd slug.
+        if preview.id.wholeMatch(of: /tt\d+/) != nil {
+            HStack(spacing: 20) {
+                Link("IMDb", destination: URL(string: "https://www.imdb.com/title/\(preview.id)/")!)
+                    .frame(minHeight: 44)
+                if preview.type == "movie" {
+                    Link("Letterboxd", destination: URL(string: "https://letterboxd.com/imdb/\(preview.id)/")!)
+                        .frame(minHeight: 44)
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.white.opacity(0.85))
+            .underline()
+        }
+        #endif
     }
 
     private var buttons: some View {
@@ -202,8 +236,8 @@ struct MetaDetailView: View {
 
     #if os(tvOS)
     private let heroAlignment = HorizontalAlignment.leading
-    /// A movie has nothing under its buttons, so its details sit low on the screen, as on Home.
-    private var heroHeight: CGFloat { preview.type == "series" ? 560 : 880 }
+    /// Short enough for the first row below, episodes or cast, to show under the buttons.
+    private let heroHeight: CGFloat = 560
     private let logoHeight: CGFloat = 160
     private let logoWidth: CGFloat = 560
     private let synopsisWidth: CGFloat = 900
@@ -229,6 +263,55 @@ struct MetaDetailView: View {
     /// On a phone the buttons come first, so the synopsis doesn't push them down.
     private var synopsisUnderButtons: Bool { !isWide }
     #endif
+}
+
+/// Facts the hero's meta line leaves out, as label and value pairs in as many columns as fit.
+private struct InformationSection: View {
+    let meta: Meta
+
+    var body: some View {
+        let facts = facts
+        if !facts.isEmpty {
+            VStack(alignment: .leading, spacing: Metrics.headerSpacing) {
+                Text("Information")
+                    .font(.sectionTitle)
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: Metrics.infoColumnWidth), spacing: 24, alignment: .topLeading)],
+                          alignment: .leading, spacing: 20) {
+                    ForEach(facts, id: \.label) { fact in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(fact.label)
+                                .font(.metaLine)
+                                .foregroundStyle(.secondary)
+                            Text(fact.value)
+                                .font(.synopsis)
+                                .foregroundStyle(.white.opacity(0.88))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
+                }
+            }
+            .padding(.horizontal, Metrics.gutter)
+        }
+    }
+
+    /// Runtime, year and rating are already in the meta line; the line shows only the first genres.
+    private var facts: [(label: String, value: String)] {
+        var facts: [(label: String, value: String)] = []
+        if let genres = meta.genres, !genres.isEmpty {
+            facts.append(("Genres", genres.joined(separator: ", ")))
+        }
+        if let date = meta.releaseDate {
+            facts.append((meta.type == "series" ? "First Aired" : "Released", date.formatted(date: .long, time: .omitted)))
+        }
+        if let country = meta.country, !country.isEmpty {
+            facts.append(("Country", country))
+        }
+        if let awards = meta.awards, !awards.isEmpty {
+            facts.append(("Awards", awards))
+        }
+        return facts
+    }
 }
 
 /// A description clamped to two lines, with "more" at the end when it overflows.
