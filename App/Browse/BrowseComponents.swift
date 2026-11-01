@@ -173,17 +173,33 @@ struct GlassIconButtonStyle: ButtonStyle {
 /// growing to the image's own size, with a quiet placeholder while loading or missing.
 struct Artwork: View {
     let url: String?
+    /// Tried in order when `url` is missing or fails to load.
+    var fallbacks: [String] = []
 
     var body: some View {
         Color.white.opacity(0.06)
             .overlay {
-                AsyncImage(url: url.flatMap(URL.init(string:))) { phase in
-                    if let image = phase.image {
-                        image.resizable().scaledToFill()
+                if let url = url.flatMap(URL.init(string:)) {
+                    AsyncImage(url: url) { phase in
+                        if let image = phase.image {
+                            image.resizable().scaledToFill()
+                        } else if case .failure = phase {
+                            next
+                        }
                     }
+                } else {
+                    next
                 }
             }
             .clipped()
+    }
+
+    @ViewBuilder
+    private var next: some View {
+        let remaining = fallbacks.drop { $0 == url }
+        if let first = remaining.first {
+            Artwork(url: first, fallbacks: Array(remaining.dropFirst()))
+        }
     }
 }
 

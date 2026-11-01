@@ -40,6 +40,7 @@ struct MediaApp: App {
                     await addonStore.refreshManifests()
                     // Needs the addons to look up titles started on other devices.
                     await trakt.pullProgress()
+                    await library.fillMissingArtwork(from: addonStore)
                 }
         }
         #if os(macOS)
