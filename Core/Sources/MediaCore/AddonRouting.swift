@@ -37,7 +37,12 @@ public struct CatalogSource: Sendable, Hashable, Identifiable {
             extra.append((name: "genre", value: genre))
         }
         if skip > 0 { extra.append((name: "skip", value: String(skip))) }
-        let fetched = try await client.catalog(type: catalog.type, id: catalog.id, extra: extra)
+        let url = client.resourceURL("catalog", type: catalog.type, id: catalog.id, extra: extra)
+        let fetched = try await CatalogCache.shared.metas(
+            for: url, persist: search == nil && skip == 0,
+            load: { try await client.data(from: url) },
+            decode: AddonClient.decodeCatalog
+        )
         let results = usesCinemetaArtwork ? fetched.map(\.withCinemetaArtwork) : fetched
         guard search != nil, let scope = genre ?? defaultGenre else { return results }
         return try await Self.narrow(results, to: scope) { try await client.meta(type: $0.type, id: $0.id) }

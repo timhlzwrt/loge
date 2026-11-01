@@ -43,8 +43,11 @@ public struct AddonClient: Sendable {
     }
 
     public func catalog(type: String, id: String, extra: [(name: String, value: String)] = []) async throws -> [MetaPreview] {
-        let response: CatalogResponse = try await fetch(resourceURL("catalog", type: type, id: id, extra: extra))
-        return response.metas
+        try Self.decodeCatalog(try await data(from: resourceURL("catalog", type: type, id: id, extra: extra)))
+    }
+
+    static func decodeCatalog(_ data: Data) throws -> [MetaPreview] {
+        try JSONDecoder().decode(CatalogResponse.self, from: data).metas
     }
 
     public func meta(type: String, id: String) async throws -> Meta {
@@ -77,11 +80,15 @@ public struct AddonClient: Sendable {
     }
 
     private func fetch<T: Decodable>(_ url: URL) async throws -> T {
+        try JSONDecoder().decode(T.self, from: try await data(from: url))
+    }
+
+    func data(from url: URL) async throws -> Data {
         let (data, response) = try await session.data(from: url)
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
             throw AddonError.httpStatus(http.statusCode, url)
         }
-        return try JSONDecoder().decode(T.self, from: data)
+        return data
     }
 
     /// Matches JavaScript's `encodeURIComponent`, which the reference
