@@ -14,7 +14,8 @@ struct HomeView: View {
             LazyVStack(alignment: .leading, spacing: 28) {
                 FeaturedCarousel(source: sources[0])
                 ContinueWatchingRow()
-                MyListRow()
+                MyListRow(shelf: .series)
+                MyListRow(shelf: .movies)
                 ForEach(sources) { CatalogRow(source: $0) }
             }
             .padding(.bottom, 32)
@@ -66,7 +67,8 @@ private struct TVHome: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
                         ContinueWatchingRow { focused = $0 }
-                        MyListRow { focused = $0 }
+                        MyListRow(shelf: .series) { focused = $0 }
+                        MyListRow(shelf: .movies) { focused = $0 }
                         ForEach(sources) { source in
                             CatalogRow(source: source, isPrimary: source == sources.first) { focused = $0 }
                         }
