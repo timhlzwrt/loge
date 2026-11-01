@@ -298,7 +298,7 @@ final class FlowTests: XCTestCase {
         timeline.adjust(toNormalizedSliderPosition: 0.2)
         let pausedPosition = app.sliders["Playback position"].value as? String
         let pip = app.buttons["Picture in Picture"]
-        guard pip.exists else { throw XCTSkip("Picture in Picture isn't available on this simulator") }
+        guard pip.waitForExistence(timeout: 10) else { throw XCTSkip("Picture in Picture isn't available on this simulator") }
         pip.tap()
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let restore = springboard.buttons.matching(NSPredicate(format:
@@ -338,6 +338,56 @@ final class FlowTests: XCTestCase {
         screenshot("pip-skips-bitrate")
         app.buttons["Done"].tap()
         if !app.buttons["Close"].exists { app.tap() }
+        app.buttons["Close"].tap()
+    }
+
+    @MainActor
+    func testTransportSeeksPreservePlaybackState() {
+        installTestAddonIfNeeded(name: "Playback Test Streams", manifestURL: "http://127.0.0.1:8766/manifest.json")
+        openSeries("Lanterns")
+        episodeCard().tap()
+        let source = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Local Multi Track'")).firstMatch
+        XCTAssertTrue(source.waitForExistence(timeout: 15))
+        source.tap()
+        XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 30))
+        for _ in 0..<3 where !app.buttons["Play"].exists {
+            if !app.buttons["Close"].exists { app.tap() }
+            if app.buttons["Pause"].exists { app.buttons["Pause"].tap() }
+        }
+        XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 5))
+        let timeline = app.sliders["Playback position"]
+        func position() -> Double? {
+            guard let value = timeline.value as? String else { return nil }
+            let parts = value.split(separator: ":").compactMap { Double($0) }
+            guard parts.count >= 2 else { return nil }
+            return parts.reduce(0) { $0 * 60 + $1 }
+        }
+        timeline.adjust(toNormalizedSliderPosition: 0)
+        expectation(for: NSPredicate { _, _ in position() == 0 }, evaluatedWith: nil)
+        waitForExpectations(timeout: 10)
+        app.buttons["Forward 10 seconds"].tap()
+        let moved = NSPredicate { _, _ in (position() ?? 0) >= 8 }
+        expectation(for: moved, evaluatedWith: nil)
+        waitForExpectations(timeout: 10)
+        XCTAssertTrue(app.buttons["Play"].exists, "Seeking started a paused video")
+        let forwardPosition = position() ?? 0
+        app.buttons["Back 10 seconds"].tap()
+        let movedBack = NSPredicate { _, _ in
+            guard let seconds = position() else { return false }
+            return seconds <= forwardPosition - 8
+        }
+        expectation(for: movedBack, evaluatedWith: nil)
+        waitForExpectations(timeout: 10)
+        XCTAssertTrue(app.buttons["Play"].exists)
+        screenshot("transport-seeks-paused")
+        app.buttons["Play"].tap()
+        app.buttons["Forward 10 seconds"].tap()
+        XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 10))
+        let playingPosition = timeline.value as? String
+        sleep(2)
+        if !app.buttons["Close"].exists { app.tap() }
+        XCTAssertNotEqual(timeline.value as? String, playingPosition, "Playback stopped advancing after seeking")
+        screenshot("transport-seeks-playing")
         app.buttons["Close"].tap()
     }
 

@@ -291,7 +291,8 @@ final class MPVPlayer {
     }
 
     func seek(by seconds: Double) {
-        command(["seek", String(seconds), "relative"])
+        // Queue user gestures without waiting for mpv's playback thread on the UI actor.
+        command(["seek", String(seconds), "relative"], replyID: 0)
     }
 
     /// AVKit must wait for decoded playback to restart, rather than merely submitting the seek.
@@ -302,7 +303,7 @@ final class MPVPlayer {
     }
 
     func seek(to seconds: Double) {
-        command(["seek", String(seconds), "absolute"])
+        command(["seek", String(seconds), "absolute"], replyID: 0)
     }
 
     /// For the end of a scrub: lands on the keyframe next to `seconds` instead of decoding on
@@ -310,7 +311,7 @@ final class MPVPlayer {
     /// several seconds of video first. Seeking relative to here makes mpv take the keyframe in
     /// the direction of travel, so a short scrub forward still moves forward.
     func seek(toKeyframeNear seconds: Double) {
-        command(["seek", String(seconds - exactPosition), "relative+keyframes"])
+        command(["seek", String(seconds - exactPosition), "relative+keyframes"], replyID: 0)
     }
 
     /// 1 is normal speed.
@@ -554,7 +555,9 @@ final class MPVPlayer {
     private func apply(_ event: Event) {
         switch event {
         case .commandReply(let id, let status):
-            if activeSeek?.id == id {
+            if id == 0 {
+                check(status, "command")
+            } else if activeSeek?.id == id {
                 if status < 0 {
                     check(status, "seek")
                     completeSeek()
