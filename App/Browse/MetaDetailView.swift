@@ -662,7 +662,8 @@ struct PlayAction {
             thumbnail: video?.thumbnail
         )
         let title = video.map { "\(name) · \(EpisodesSection.code(for: $0))" } ?? name
-        return SourcesRoute(item: item, title: title, autoplay: autoplay)
+        let runtime = TraktAccount.minutes(meta?.runtime ?? preview.runtime).map { $0 * 60 }
+        return SourcesRoute(item: item, title: title, autoplay: autoplay, runtime: runtime)
     }
 
     /// "S1, E6", as the button says it.
