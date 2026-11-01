@@ -33,7 +33,12 @@ public struct CatalogSource: Sendable, Hashable, Identifiable {
             extra.append((name: "genre", value: genre))
         }
         if skip > 0 { extra.append((name: "skip", value: String(skip))) }
-        return try await client.catalog(type: catalog.type, id: catalog.id, extra: extra)
+        let url = client.resourceURL("catalog", type: catalog.type, id: catalog.id, extra: extra)
+        return try await CatalogCache.shared.metas(
+            for: url, persist: search == nil && skip == 0,
+            load: { try await client.data(from: url) },
+            decode: AddonClient.decodeCatalog
+        )
     }
 
     static func typeLabel(_ type: String) -> String {
