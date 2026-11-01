@@ -66,6 +66,8 @@ struct SettingsView: View {
             TraktSection()
 
             PlaybackSettingsSection()
+
+            AccentSettingsSection()
         }
         #if !os(tvOS)
         .scrollContentBackground(.hidden)
