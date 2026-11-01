@@ -70,7 +70,7 @@ extension Font {
     #endif
 }
 
-/// The one white call to action on a screen: Play or Resume.
+/// The one accent-coloured call to action on a screen: Play or Resume.
 struct PrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         StyledLabel(configuration: configuration)
@@ -90,7 +90,7 @@ struct PrimaryButtonStyle: ButtonStyle {
                 .padding(.leading, height * 0.44)
                 .padding(.trailing, height * 0.56)
                 .frame(minHeight: height)
-                .background(.white, in: .capsule)
+                .background(.tint, in: .capsule)
                 .opacity(configuration.isPressed ? 0.8 : 1)
                 #if os(tvOS)
                 .scaleEffect(isFocused ? 1.06 : 1)
@@ -143,9 +143,9 @@ struct GlassIconButtonStyle: ButtonStyle {
                 .frame(width: size, height: size)
                 .contentShape(.circle)
                 #if os(tvOS)
-                // Focus turns the circle white, as the system's glass buttons do.
+                // Focus fills the circle, as the system's glass buttons do, in the accent.
                 .foregroundStyle(isFocused ? .black : .white)
-                .background(.white.opacity(isFocused ? 1 : 0), in: .circle)
+                .background(.tint.opacity(isFocused ? 1 : 0), in: .circle)
                 .glassEffect(.regular, in: .circle)
                 .scaleEffect(isFocused ? 1.06 : 1)
                 .shadow(color: .black.opacity(isFocused ? 0.5 : 0), radius: 24, y: 14)
@@ -197,7 +197,7 @@ struct WatchProgressBar: View {
             Image(systemName: "checkmark.circle.fill")
                 .font(Self.checkmarkFont)
                 .symbolRenderingMode(.palette)
-                .foregroundStyle(.black, .white)
+                .foregroundStyle(.black, .tint)
                 .padding(Self.inset * 0.8)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                 .accessibilityLabel("Watched")
@@ -206,7 +206,7 @@ struct WatchProgressBar: View {
                 .fill(.white.opacity(0.32))
                 .overlay(alignment: .leading) {
                     GeometryReader { proxy in
-                        Capsule().fill(.white).frame(width: proxy.size.width * progress.fraction)
+                        Capsule().fill(.tint).frame(width: proxy.size.width * progress.fraction)
                     }
                 }
                 .frame(height: Self.height)
