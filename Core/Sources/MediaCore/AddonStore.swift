@@ -142,15 +142,17 @@ public final class AddonStore {
 
     private static func restore(from defaults: UserDefaults) -> [InstalledAddon] {
         guard let data = defaults.data(forKey: defaultsKey) else {
-            return [InstalledAddon(manifestURL: cinemetaURL, manifest: nil)]
+            return []
         }
         do {
+            // Cinemeta is now built into discovery, rather than an installed addon.
             return try JSONDecoder().decode([InstalledAddon].self, from: data)
+                .filter { $0.manifestURL != cinemetaURL }
         } catch {
             // Keep the stored data untouched so a fixed build can still read it;
             // it's only overwritten once the user changes their addons.
             log.error("Couldn't decode saved addons: \(error)")
-            return [InstalledAddon(manifestURL: cinemetaURL, manifest: nil)]
+            return []
         }
     }
 

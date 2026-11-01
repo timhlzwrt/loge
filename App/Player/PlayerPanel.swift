@@ -13,6 +13,7 @@ struct PlayerPanel: View {
     let player: MPVPlayer
     let onInteract: () -> Void
     @State private var tab = Tab.subtitles
+    @State private var showsPlaybackInfo = false
     @FocusState private var focusedTab: Tab?
 
     var body: some View {
@@ -47,6 +48,7 @@ struct PlayerPanel: View {
         }
         // Swiping down came from the picture, so focus has to be brought up here.
         .onAppear { focusedTab = tab }
+        .sheet(isPresented: $showsPlaybackInfo) { PlaybackInfoView(player: player) }
     }
 
     private var info: some View {
@@ -61,6 +63,7 @@ struct PlayerPanel: View {
                     player.setZoomToFill(!player.isZoomedToFill)
                     onInteract()
                 }
+                Button("Playback Info") { showsPlaybackInfo = true; onInteract() }
             }
             .frame(width: 420, alignment: .leading)
         }

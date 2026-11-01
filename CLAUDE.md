@@ -18,7 +18,8 @@ accent, system font, no cards/gradients/badges.
   catalog rows and See All grid, details (seasons, episodes, Up Next, watched marking),
   sources list (autoplays the remembered or same-binge-group stream), search.
 - `App/Player/` — `PlaybackSession` (owns the playback in progress, outliving the player
-  screen for Picture in Picture), `MPVPlayer` (libmpv, AVFoundation video layer), `PlayerView`,
+  screen for Picture in Picture), `MPVPlayer` (libmpv, AVFoundation video layer), `ScrubPreview`
+  (a second, silent mpv instance for timeline thumbnails), `PlayerView`,
   controls and menus, `PictureInPicture`, `NowPlaying`, next-episode countdown, tvOS remote
   swipe reader.
 - `App/Settings/` — addons (install/reorder/remove) and playback language preferences.
@@ -40,7 +41,8 @@ xcodegen generate                                   # after adding/removing file
 (cd Core && swift test)                             # Core unit tests
 xcodebuild -project MediaApp.xcodeproj -scheme MediaApp -destination 'generic/platform=iOS Simulator' -derivedDataPath .build/xcode build
 # also: 'generic/platform=tvOS Simulator' and 'platform=macOS'
-Tools/build-ipa.sh                                  # unsigned .ipa files in .build/ipa
+Tools/build-ipa.sh [iOS|tvOS]                       # unsigned .ipa files in .build/ipa
+Tools/install-tv.sh                                 # build tvOS, install on the Apple TV via atvloadly
 Tools/run-device.sh [--console]                     # build, install, launch on the USB iPhone/iPad
 ```
 
@@ -50,6 +52,10 @@ once (Settings > General > VPN & Device Management). Free installs expire after 
 
 Devices are installed without a paid account: Sideloadly (iPhone/iPad) and atvloadly
 (Apple TV) sign the `.ipa` files with a free Apple ID and refresh them before the 7 days run out.
+atvloadly runs on the home Proxmox server (CT 107, `http://192.168.178.115:5533`, set up in the
+separate infrastructure repo); it re-signs every night 03:00–06:30, and `install-tv.sh` uploads a
+new build to it. A free Apple ID allows 3 sideloaded apps at once across Xcode, Sideloadly and
+atvloadly.
 
 On-demand UI tests (need network and installed addons; skipped otherwise):
 
@@ -85,7 +91,10 @@ subtitle addons and streams with timing adjustment, automatic fallback to anothe
 tvOS frame-rate and dynamic-range matching, Trakt sign-in, scrobbling and progress sync.
 Phase 2: sources list read into quality, HDR, codec, audio and size (`StreamDetails`) with a
 best-quality order, retry for unreachable addons, director and cast on details, the Mac's
-Playback menu, VoiceOver labels in the player.
+Playback menu, VoiceOver labels in the player. From using it: Picture in Picture no longer
+starts after the player closed, search uses only the built-in catalogs, scrub thumbnails and
+keyframe seeks, stream lists fetched while details are open and kept 10 minutes, Cast & Crew
+and Information on details with person pages (a Cinemeta name search; no people database).
 
 Decisions: MPVKit player (vendored with an AVFoundation video output); addons added as manual
 manifest URLs; cross-device sync via Trakt (not iCloud), with the user's own Trakt app keys
@@ -103,4 +112,4 @@ Next, in plan order:
 
 Untested so far: playback and Picture in Picture on tvOS and macOS, HDR output and tvOS display
 matching (need real hardware), Trakt against the live API, tvOS swipe-to-scrub, Mac screens
-beyond Home. iPhone simulators report Picture in Picture as unsupported; use an iPad simulator.
+beyond Home, the scrub preview on screen. iPhone simulators report Picture in Picture as unsupported; use an iPad simulator.

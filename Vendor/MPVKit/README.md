@@ -12,6 +12,9 @@ built with the patches in [`patch/`](patch):
 - `0005-avfoundation-fixes.patch` makes it correct for mpv's non-ARC Objective-C build (it
   leaked a Core Image context per file), redraws paused frames so subtitle changes show, and
   leaves three-plane YUV to mpv's converter, since Core Image can't composite subtitles onto it.
+- `0006-avfoundation-presentation-timing.patch` prepares frames in `draw_frame` but presents
+  them in `flip_page`, after mpv waits for the target time. It keeps paused subtitle redraws
+  working and releases pending sample buffers on replacement, reset and teardown.
 
 To move to a newer MPVKit: update `TAG` in `rebuild-libmpv.sh` and the URLs and checksums in
 `Package.swift` from that release's manifest, check the patches still apply, then run

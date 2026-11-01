@@ -19,6 +19,34 @@ public struct StreamDetails: Sendable, Equatable {
         }
     }
 
+    public enum SortOrder: String, CaseIterable, Identifiable, Sendable {
+        case cachedFirst = "Cached first"
+        case lowerBitrate = "Lower bitrate"
+        case higherBitrate = "Higher bitrate"
+        case smallerFile = "Smaller file"
+        case addonOrder = "Addon order"
+
+        public var id: Self { self }
+
+        /// Equal or missing values leave the addon's own ranking intact.
+        public func precedes(_ lhs: StreamDetails, _ rhs: StreamDetails) -> Bool {
+            switch self {
+            case .cachedFirst:
+                func rank(_ cached: Bool?) -> Int { cached == true ? 0 : cached == nil ? 1 : 2 }
+                return rank(lhs.isCached) < rank(rhs.isCached)
+            case .lowerBitrate:
+                return (lhs.bitrate ?? .infinity) < (rhs.bitrate ?? .infinity)
+            case .higherBitrate:
+                return (lhs.bitrate ?? 0) > (rhs.bitrate ?? 0)
+            case .smallerFile:
+                return (lhs.isPackageSize ? .infinity : lhs.size?.converted(to: .bytes).value ?? .infinity)
+                    < (rhs.isPackageSize ? .infinity : rhs.size?.converted(to: .bytes).value ?? .infinity)
+            case .addonOrder:
+                return false
+            }
+        }
+    }
+
     public var resolution: Resolution?
     /// "Dolby Vision", "HDR10+", "HDR10" or "HLG", best first; a file can carry several.
     public var dynamicRange: [String] = []
@@ -28,6 +56,12 @@ public struct StreamDetails: Sendable, Equatable {
     /// Where the release came from: "Remux", "BluRay", "WEB-DL", "WEB" or "HDTV".
     public var releaseType: String?
     public var size: Measurement<UnitInformationStorage>?
+    public var isPackageSize = false
+    /// Only the protocol's explicit videoSize identifies the individual playable file.
+    public var fileSize: Int64?
+    /// The addon's explicitly reported video/overall bitrate, in bits per second.
+    /// Never inferred from a file or season-pack size.
+    public var bitrate: Double?
     /// Debrid services mark files they already hold; others have to be fetched first and
     /// often stall. Nil when the addon doesn't say.
     public var isCached: Bool?
@@ -37,6 +71,11 @@ public struct StreamDetails: Sendable, Equatable {
             .compactMap { $0 }
             .joined(separator: "\n")
         self.init(text: text)
+        if let bytes = stream.behaviorHints?.videoSize, bytes > 0 {
+            fileSize = bytes
+            size = Measurement(value: Double(bytes), unit: .bytes)
+            isPackageSize = false
+        }
     }
 
     init(text: String) {
@@ -91,7 +130,8 @@ public struct StreamDetails: Sendable, Equatable {
             else if has(/\bhdtv\b/) { "HDTV" }
             else { nil }
 
-        if let match = text.firstMatch(of: /(\d+(?:[.,]\d+)?)\s*(TB|TiB|GB|GiB|MB|MiB)\b/.ignoresCase()),
+        let reportedSizes = text.matches(of: /(\d+(?:[.,]\d+)?)\s*(TB|TiB|GB|GiB|MB|MiB)\b/.ignoresCase())
+        if reportedSizes.count == 1, let match = reportedSizes.first,
            let value = Double(match.1.replacingOccurrences(of: ",", with: ".")) {
             let unit: UnitInformationStorage = switch match.2.uppercased() {
             case "TB", "TIB": .terabytes
@@ -99,6 +139,28 @@ public struct StreamDetails: Sendable, Equatable {
             default: .gigabytes
             }
             size = Measurement(value: value, unit: unit)
+            isPackageSize = has(/\b(season[ .-]*pack|complete[ .-]*(series|season)|[sS]\d{1,2}[ .-]*[sS]\d{1,2})\b/)
+        }
+
+        // A bitrate unit identifies a rate, unlike a file size or release-name number.
+        // Conflicting reports (often separate audio/video rates) are left unknown.
+        let bitrateText = text.components(separatedBy: .newlines).filter { line in
+            !line.contains(/\b(audio|aac|dts|true[ -]?hd|opus|mp3|ddp?|e-?ac-?3)(?![a-z])/.ignoresCase())
+                || line.contains(/\b(video|overall|total)\b/.ignoresCase())
+        }.joined(separator: "\n")
+        let reportedBitrates = bitrateText.matches(of: /(?:^|[^\d.,-])(\d+(?:[.,]\d+)?)\s*([kKmMgG])(?:bps|bit\/s|b\/s)\b/)
+            .compactMap { match -> Double? in
+                guard let value = Double(match.1.replacingOccurrences(of: ",", with: ".")), value > 0 else { return nil }
+                let multiplier: Double = switch match.2.lowercased() {
+                case "k": 1_000
+                case "g": 1_000_000_000
+                default: 1_000_000
+                }
+                let rate = value * multiplier
+                return rate.isFinite ? rate : nil
+            }
+        if let first = reportedBitrates.first, reportedBitrates.allSatisfy({ $0 == first }) {
+            bitrate = first
         }
 
         // "[RD+]" is Torrentio's and AIOStreams' mark for a cached file, "[RD download]"
@@ -120,15 +182,20 @@ public struct StreamDetails: Sendable, Equatable {
 
     /// "58.2 GB".
     public var sizeLabel: String? {
-        size.map { $0.formatted(.byteCount(style: .file)) }
+        size.map { $0.formatted(.byteCount(style: .file)) + (isPackageSize ? " pack" : "") }
+    }
+
+    public var bitrateLabel: String? {
+        bitrate.map { ($0 / 1_000_000).formatted(.number.precision(.fractionLength(0...1))) + " Mbps" }
+    }
+
+    /// Series with unknown sizes or pack totals need a manual choice while a limit is enabled.
+    public func permitsAutomaticPlayback(type: String, maximumFileSize: Int64) -> Bool {
+        type != "series" || maximumFileSize <= 0 || fileSize.map { $0 <= maximumFileSize } == true
     }
 
     /// The headings the sources list groups by, best first; anything else, SD included,
     /// is listed under "Other".
     public static let listedResolutions: [Resolution] = [.ultraHD, .fullHD, .hd]
 
-    /// Within one resolution, the larger file usually means the better encode.
-    public static func largerFirst(_ lhs: StreamDetails, _ rhs: StreamDetails) -> Bool {
-        (lhs.size?.converted(to: .bytes).value ?? 0) > (rhs.size?.converted(to: .bytes).value ?? 0)
-    }
 }

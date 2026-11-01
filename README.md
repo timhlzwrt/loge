@@ -1,8 +1,9 @@
 # Loge
 
-A private media player for my own iPhone, iPad, Apple TV and Mac. It browses
-catalogs from Stremio addons, shows details and episodes, lists the streams an
-addon offers and plays them with mpv. Native SwiftUI, one app target for all
+A private streaming app for my own iPhone, iPad, Apple TV and Mac. Managed Home
+shelves, search, title details and IMDb scores work out of the box through
+Cinemeta. Add a Stremio playback addon to watch its streams with mpv.
+Native SwiftUI, one app target for all
 three platforms. Not published anywhere and not meant to be.
 
 The Xcode project, scheme and bundle ID still use the working name `MediaApp`,
@@ -50,3 +51,5 @@ mpv comes through MPVKit's LGPL build.
 See [the app overview](docs/APP_OVERVIEW.md) for ownership, data flow,
 platform behavior, persistence, review fixes and follow-up work, and
 [review validation](docs/REVIEW_VALIDATION.md) for checks actually performed.
+See [playback performance](docs/PLAYBACK_PERFORMANCE.md) for the automatic source
+size limit, on-screen diagnostics and native frame-presentation correction.
