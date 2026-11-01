@@ -63,9 +63,7 @@ struct MediaApp: App {
 
 struct RootView: View {
     @Environment(PlaybackSession.self) private var playback
-    #if os(macOS)
-    @Environment(AddonStore.self) private var addonStore
-    #elseif os(iOS)
+    #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
     #if os(macOS)
@@ -105,7 +103,7 @@ struct RootView: View {
             }
             #if os(macOS)
             TabSection("Catalogs") {
-                ForEach(addonStore.addons.homeCatalogs) { source in
+                ForEach(DiscoveryCatalogs.home) { source in
                     Tab(source.title, systemImage: source.catalog.type == "series" ? "tv" : "rectangle.portrait") {
                         BrowseStack { CatalogGridView(source: source) }
                     }
@@ -155,6 +153,7 @@ private struct BrowseStack<Content: View>: View {
                 .navigationDestination(for: MetaPreview.self) { MetaDetailView(preview: $0) }
                 .navigationDestination(for: SourcesRoute.self) { SourcesView(route: $0) }
                 .navigationDestination(for: CatalogSource.self) { CatalogGridView(source: $0) }
+                .navigationDestination(for: PersonRoute.self) { PersonView(route: $0) }
         }
     }
 }

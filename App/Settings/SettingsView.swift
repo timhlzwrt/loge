@@ -10,6 +10,14 @@ struct SettingsView: View {
     var body: some View {
         List {
             Section {
+                Text("Movies, series, search and IMDb ratings are built in. Add a playback addon to watch.")
+                    .foregroundStyle(.secondary)
+            }
+            Section {
+                if store.addons.isEmpty {
+                    Text("No playback addons yet")
+                        .foregroundStyle(.secondary)
+                }
                 ForEach(store.addons) { addon in
                     let row = AddonRow(addon: addon, isUnreachable: store.unreachable.contains(addon.id))
                     #if os(tvOS)
@@ -26,7 +34,7 @@ struct SettingsView: View {
                 }
                 #endif
             } header: {
-                Text("Installed")
+                Text("Your addons")
             } footer: {
                 Text("Addons higher in the list are asked first.")
                     .foregroundStyle(.secondary)

@@ -28,6 +28,7 @@ struct PlayerView: View {
     @State private var controlsVisible = true
     @State private var lastInteraction = Date.now
     @State private var scrubPosition: Double?
+    @State private var scrubPreview: ScrubPreview?
     @State private var isMenuOpen = false
     @State private var adjustingTiming: MPVPlayer.Track.Kind?
     @State private var seekFlash: SeekFlash?
@@ -77,6 +78,7 @@ struct PlayerView: View {
                             player: player,
                             pictureInPicture: session.pictureInPicture,
                             scrubPosition: $scrubPosition,
+                            scrubPreview: scrubPreview?.image,
                             isMenuOpen: $isMenuOpen,
                             adjustingTiming: $adjustingTiming,
                             onClose: { session.end() },
@@ -102,7 +104,26 @@ struct PlayerView: View {
         }
         .animation(.easeInOut(duration: 0.2), value: controlsVisible)
         .onAppear { session.screenDidAppear() }
-        .onDisappear { session.screenDidDisappear() }
+        .onDisappear {
+            scrubPreview = nil
+            session.screenDidDisappear()
+        }
+        .onChange(of: scrubPosition) { _, position in
+            guard let position, let current = session.current else { return }
+            // Started on the first scrub, and again when the source or episode has changed.
+            if scrubPreview?.url != current.url {
+                scrubPreview = ScrubPreview(url: current.url, headers: current.headers)
+            }
+            scrubPreview?.show(position)
+        }
+        .task(id: scrubPosition == nil) {
+            // Kept for a while after a scrub, since reopening the file takes a moment and
+            // scrubs tend to come in a row; then its connection and decoder are let go.
+            guard scrubPosition == nil, let scrubPreview else { return }
+            scrubPreview.clear()
+            do { try await Task.sleep(for: .seconds(30)) } catch { return }
+            self.scrubPreview = nil
+        }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .background: session.sceneDidEnterBackground()
@@ -211,7 +232,7 @@ struct PlayerView: View {
 
     private func finishScrub(_ player: MPVPlayer) {
         if let target = scrubPosition {
-            player.seek(to: target)
+            player.seek(toKeyframeNear: target)
         }
         scrubStart = nil
         scrubPosition = nil

@@ -1,15 +1,27 @@
 import Foundation
 
-/// One catalog of one installed addon, e.g. Cinemeta's popular movies.
+/// One catalog feed, either managed by Loge or supplied by an installed addon.
 public struct CatalogSource: Sendable, Hashable, Identifiable {
     public let manifestURL: String
     public let catalog: AddonManifest.Catalog
+    public let defaultGenre: String?
+    private let displayTitle: String?
 
-    public var id: String { "\(manifestURL)|\(catalog.type)|\(catalog.id)" }
+    public init(manifestURL: String, catalog: AddonManifest.Catalog, title: String? = nil, genre: String? = nil) {
+        self.manifestURL = manifestURL
+        self.catalog = catalog
+        self.displayTitle = title
+        self.defaultGenre = genre
+    }
+
+    public var id: String {
+        let base = "\(manifestURL)|\(catalog.type)|\(catalog.id)"
+        return defaultGenre.map { base + "|" + $0 } ?? base
+    }
 
     /// "Popular Movies": the catalog name followed by its content type.
     public var title: String {
-        [catalog.name ?? catalog.id, Self.typeLabel(catalog.type)].joined(separator: " ")
+        displayTitle ?? [catalog.name ?? catalog.id, Self.typeLabel(catalog.type)].joined(separator: " ")
     }
 
     /// - Parameter skip: How many items to skip, for loading further pages.
@@ -17,7 +29,9 @@ public struct CatalogSource: Sendable, Hashable, Identifiable {
         let client = try AddonClient(manifestURL: manifestURL)
         var extra: [(name: String, value: String)] = []
         if let search { extra.append((name: "search", value: search)) }
-        if let genre { extra.append((name: "genre", value: genre)) }
+        if let genre = genre ?? (search == nil ? defaultGenre : nil) {
+            extra.append((name: "genre", value: genre))
+        }
         if skip > 0 { extra.append((name: "skip", value: String(skip))) }
         return try await client.catalog(type: catalog.type, id: catalog.id, extra: extra)
     }
@@ -41,7 +55,16 @@ public struct StreamProvider: Sendable, Identifiable {
     public var id: String { manifestURL }
 
     public func streams(type: String, id: String) async throws -> [StreamSource] {
-        try await AddonClient(manifestURL: manifestURL).streams(type: type, id: id)
+        let manifestURL = manifestURL
+        return try await StreamCache.shared.streams(manifestURL: manifestURL, type: type, id: id) {
+            try await AddonClient(manifestURL: manifestURL).streams(type: type, id: id)
+        }
+    }
+
+    /// Starts loading streams the user is likely to ask for next. A failure isn't kept,
+    /// so the sources screen asks again and shows it.
+    public func prefetchStreams(type: String, id: String) {
+        Task { _ = try? await streams(type: type, id: id) }
     }
 }
 
@@ -68,10 +91,14 @@ extension [InstalledAddon] {
         catalogs { $0.supportsSearch }
     }
 
-    /// The first addon that serves details for this item, as Stremio picks it.
+    /// User-installed metadata providers take priority over built-in IMDb metadata.
     public func metaClient(type: String, id: String) -> AddonClient? {
-        first { $0.manifest?.provides("meta", type: type, id: id) == true }
-            .flatMap { try? AddonClient(manifestURL: $0.manifestURL) }
+        if let installed = first(where: { $0.manifest?.provides("meta", type: type, id: id) == true }),
+           let client = try? AddonClient(manifestURL: installed.manifestURL) {
+            return client
+        }
+        guard (type == "movie" || type == "series"), id.hasPrefix("tt") else { return nil }
+        return try? AddonClient(manifestURL: AddonStore.cinemetaURL)
     }
 
     /// Addons that serve streams for this item, in the user's order.

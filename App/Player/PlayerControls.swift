@@ -10,6 +10,8 @@ struct PlayerControls: View {
     let pictureInPicture: PictureInPicture?
     /// Where the timeline is being dragged or swiped to; nil while it follows playback.
     @Binding var scrubPosition: Double?
+    /// The frame near `scrubPosition`, once one has been decoded.
+    let scrubPreview: CGImage?
     /// True while one of the menus is open, so the controls don't hide out from under it.
     @Binding var isMenuOpen: Bool
     /// Which timing panel is showing, if any.
@@ -18,6 +20,10 @@ struct PlayerControls: View {
     /// Opens the list of sources for what's playing; nil when there's no list to go back to.
     let onChooseSource: (() -> Void)?
     let onInteract: () -> Void
+
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
 
     var body: some View {
         #if os(tvOS)
@@ -245,6 +251,7 @@ struct PlayerControls: View {
             VStack(spacing: 8) {
                 #if os(tvOS)
                 ProgressView(value: min(position, duration), total: duration)
+                    .overlay { scrubPreviewView(duration: duration, longForm: longForm) }
                 #else
                 slider(duration: duration, position: position, longForm: longForm)
                 #endif
@@ -279,17 +286,58 @@ struct PlayerControls: View {
             in: 0...duration,
             onEditingChanged: { isEditing in
                 if !isEditing, let target = scrubPosition {
-                    player.seek(to: target)
+                    player.seek(toKeyframeNear: target)
                     scrubPosition = nil
                 }
                 onInteract()
             }
         )
         .controlSize(.small)
+        .overlay { scrubPreviewView(duration: duration, longForm: longForm) }
         .accessibilityLabel("Playback position")
         .accessibilityValue(format(position, longForm: longForm))
     }
     #endif
+
+    /// The frame and time being scrubbed to, above the timeline at that spot. The time shows
+    /// alone until a frame has been decoded, and for files that can't give one.
+    @ViewBuilder
+    private func scrubPreviewView(duration: Double, longForm: Bool) -> some View {
+        if let scrubPosition {
+            GeometryReader { proxy in
+                let width = previewWidth
+                let x = proxy.size.width * scrubPosition / duration - width / 2
+                VStack(spacing: 6) {
+                    if let scrubPreview {
+                        Image(decorative: scrubPreview, scale: 1)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .clipShape(.rect(cornerRadius: 6))
+                    }
+                    Text(format(scrubPosition, longForm: longForm))
+                        .font(.caption.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(.white)
+                }
+                .shadow(color: .black.opacity(0.4), radius: 8)
+                .frame(width: width)
+                // A zero-height frame anchored at its bottom lets the preview rise above the bar.
+                .frame(width: width, height: 0, alignment: .bottom)
+                .offset(x: min(max(x, 0), max(proxy.size.width - width, 0)), y: -12)
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
+    }
+
+    private var previewWidth: CGFloat {
+        #if os(tvOS)
+        400
+        #elseif os(macOS)
+        220
+        #else
+        horizontalSizeClass == .regular ? 240 : 160
+        #endif
+    }
 
     private func format(_ seconds: Double, longForm: Bool) -> String {
         Duration.seconds(max(seconds, 0)).formatted(.time(pattern: longForm ? .hourMinuteSecond : .minuteSecond))
@@ -414,6 +462,7 @@ private struct AudioMenu: View {
     let onInteract: () -> Void
     @Binding var isOpen: Bool
     @Binding var adjustingTiming: MPVPlayer.Track.Kind?
+    @State private var showsPlaybackInfo = false
 
     var body: some View {
         let player = player
@@ -431,6 +480,7 @@ private struct AudioMenu: View {
             }
             .pickerStyle(.inline)
             Button("Audio Timing…", systemImage: "timer") { adjustingTiming = .audio }
+            Button("Playback Info…", systemImage: "info.circle") { showsPlaybackInfo = true }
             Color.clear.frame(height: 0).modifier(MenuPresenceTracker(isOpen: $isOpen))
         } label: {
             Label("Audio", systemImage: "waveform")
@@ -439,6 +489,11 @@ private struct AudioMenu: View {
                 #endif
         }
         .simultaneousGesture(TapGesture().onEnded(onInteract))
+        .sheet(isPresented: $showsPlaybackInfo) { PlaybackInfoView(player: player) }
+        .onChange(of: showsPlaybackInfo) { _, shown in
+            isOpen = shown
+            onInteract()
+        }
     }
 }
 #endif
@@ -508,5 +563,58 @@ enum TimingFormat {
     /// Rounded so repeated steps don't drift to values like 0.30000000000000004.
     static func step(_ delay: Double, by seconds: Double) -> Double {
         ((delay + seconds) * 10).rounded() / 10
+    }
+}
+
+struct PlaybackInfoView: View {
+    let player: MPVPlayer
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ViewThatFits(in: .vertical) {
+            content
+            ScrollView { content }
+        }
+        .frame(maxWidth: 620)
+        .task {
+            while !Task.isCancelled {
+                player.refreshPlaybackInfo()
+                do { try await Task.sleep(for: .seconds(1)) } catch { return }
+            }
+        }
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Text("Playback Info").font(.title2.weight(.semibold))
+            if let format = player.videoFormat {
+                LabeledContent("Video", value: "\(format.width) × \(format.height)")
+                if let rate = format.frameRate {
+                    LabeledContent("Source frame rate", value: "\(rate.formatted(.number.precision(.fractionLength(2)))) fps")
+                }
+            }
+            LabeledContent("Hardware decoder", value: player.playbackInfo.hardwareDecoder ?? "Unavailable")
+            LabeledContent("Video bitrate", value: bitrate(player.playbackInfo.videoBitrate))
+            LabeledContent("Audio bitrate", value: bitrate(player.playbackInfo.audioBitrate))
+            LabeledContent("Decoder drops", value: player.playbackInfo.decoderDrops.map(String.init) ?? "Unavailable")
+            LabeledContent("Output drops", value: player.playbackInfo.outputDrops.map(String.init) ?? "Unavailable")
+            LabeledContent("Buffered", value: player.playbackInfo.bufferedSeconds.map {
+                "\($0.formatted(.number.precision(.fractionLength(1)))) s"
+            } ?? "Unavailable")
+            Text("Bitrates estimate recent media packets, not download speed. Watch whether drop counts increase during a hitch. A low buffer can indicate a slow source. These counters cannot measure the TV's display cadence.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Button("Done") { dismiss() }
+                .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+        .monospacedDigit()
+        .padding(32)
+    }
+
+    private func bitrate(_ value: Double?) -> String {
+        guard let value else { return "Unavailable" }
+        let megabits = value >= 1_000_000
+        let number = value / (megabits ? 1_000_000 : 1_000)
+        return number.formatted(.number.precision(.fractionLength(0...1))) + (megabits ? " Mbps" : " kbps")
     }
 }

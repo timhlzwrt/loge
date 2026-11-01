@@ -20,6 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--port", type=int, default=8765)
 parser.add_argument("--tracks-file", type=Path, help="Local multi-audio MOV for track-switch tests")
+parser.add_argument("--name", help="Name for a separate playback fixture addon and its source")
 args = parser.parse_args() if __name__ == "__main__" else parser.parse_args([])
 PORT = args.port
 BASE = f"http://127.0.0.1:{PORT}"
@@ -39,19 +40,21 @@ MANIFEST = {
 }
 
 STREAMS = [
-    {"name": "[RD+] Test\n2160p", "description": "BluRay REMUX DV HDR10 HEVC TrueHD Atmos 7.1\n58.2 GB",
-     "url": MKV, "behaviorHints": {"bingeGroup": "test|2160p", "filename": "Big.Buck.Bunny.2008.2160p.REMUX.mkv"}},
-    {"name": "[RD download] Test\n720p", "description": "WEBRip AAC2.0 x264\n310 MB", "url": MKV},
-    {"name": "Test\n1080p", "description": "Big Buck Bunny · BluRay H.264 DTS 5.1\n30 MB", "url": MKV,
+    {"name": "[RD+] Test\n2160p", "description": "BluRay REMUX DV HDR10 HEVC TrueHD Atmos 7.1\n58.2 GB\nOverall: 23.6 Mbps",
+     "url": MKV, "behaviorHints": {"bingeGroup": "test|2160p", "filename": "Big.Buck.Bunny.2008.2160p.REMUX.mkv", "videoSize": 29478258}},
+    {"name": "[RD download] Test\n720p", "description": "WEBRip AAC2.0 x264\n310 MB", "url": MKV,
+     "behaviorHints": {"videoSize": 29478258}},
+    {"name": "Test\n1080p", "description": "Big Buck Bunny · BluRay H.264 DTS 5.1\n30 MB\nOverall: 23.6 Mbps", "url": MKV,
      "subtitles": [{"id": "stream-en", "url": f"{BASE}/subs/stream-en.srt", "lang": "eng"}],
-     "behaviorHints": {"bingeGroup": "test|1080p", "filename": "Big_Buck_Bunny_1080_10s_30MB.mkv"}},
-    {"name": "Test\nHEVC", "description": "Big Buck Bunny · 1080p WEB-DL HEVC DDP5.1\n1.4 GB",
-     "url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h265/1080/Big_Buck_Bunny_1080_10s_30MB.mp4"},
+     "behaviorHints": {"bingeGroup": "test|1080p", "filename": "Big_Buck_Bunny_1080_10s_30MB.mkv", "videoSize": 29478258}},
+    {"name": "Test\nHEVC", "description": "Big Buck Bunny · 1080p WEB-DL HEVC DDP5.1\n1.4 GB\nOverall: 25.2 Mbps",
+     "url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h265/1080/Big_Buck_Bunny_1080_10s_30MB.mp4",
+     "behaviorHints": {"videoSize": 31462182}},
     {"name": "Test\nTracks", "description": "Apple bipbop · HLS with several audio and subtitle tracks",
      "url": "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_adv_example_hevc/master.m3u8"},
     {"name": "Test\nHeader", "description": "Plays only if the X-Test-Token header is forwarded",
      "url": f"{BASE}/protected.mkv",
-     "behaviorHints": {"proxyHeaders": {"request": {"X-Test-Token": TOKEN}}}},
+     "behaviorHints": {"proxyHeaders": {"request": {"X-Test-Token": TOKEN}}, "videoSize": 29478258}},
     {"name": "Test\nBroken", "description": "Returns 404, to check the error state",
      "url": f"{BASE}/missing.mkv"},
     {"name": "Test\nTorrent", "title": "Should be hidden", "infoHash": "0" * 40, "fileIdx": 0},
@@ -137,8 +140,9 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     if TRACKS_FILE:
-        MANIFEST["name"] = "Playback Test Streams"
-        STREAMS = [{"name": "Local Multi Track", "url": f"{BASE}/tracks.mov"}]
+        MANIFEST["name"] = args.name or "Playback Test Streams"
+        STREAMS = [{"name": args.name or "Local Multi Track", "url": f"{BASE}/tracks.mov",
+                    "behaviorHints": {"videoSize": TRACKS_FILE.stat().st_size}}]
     print(f"Serving on {BASE}", flush=True)
     sys.stdout.flush()
     ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()

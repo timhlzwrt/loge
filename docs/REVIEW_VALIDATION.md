@@ -167,3 +167,16 @@ again. Xcode's AppIntents metadata warning and the iPad test runner's future
 orientation-support warning remain; there were no Swift compiler warnings.
 The generator ran end to end and compiles with warnings treated as errors; shell/Python syntax and
 the fixture server's 206 byte-range response were also checked.
+
+## Managed discovery and native frame timing
+
+The next branch replaces addon-ordered Home/search with built-in managed
+Cinemeta feeds, labels IMDb scores, and adds movie links to Letterboxd on iOS/Mac.
+Fresh installs need an addon only for playback. The native video output now
+presents at mpv's timed flip instead of enqueuing early; the vendored binary
+was rebuilt, not merely patched in source. Automatic choices default to a
+50 GB per-episode limit for series using explicit file sizes, with manual choice
+for unknown episode sizes and a No limit setting. Movies remain unrestricted.
+
+See [PLAYBACK_PERFORMANCE.md](PLAYBACK_PERFORMANCE.md)
+for the latest 78-test, simulator, native-binary, actual 4K fixture and build results.
