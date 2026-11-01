@@ -203,7 +203,7 @@ struct SourcesView: View {
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
                     .buttonStyle(.glass)
-                    // The Mac fills glass buttons with the tint, which is white app-wide.
+                    // The Mac fills glass buttons with the tint, the accent app-wide.
                     .tint(.clear)
                 Button("Play") {
                     if let entry { choose(entry) }
@@ -300,7 +300,7 @@ struct SourcesView: View {
         if isChoosing {
             // Click selects and double-click plays, as in a Mac list; Play plays the selection.
             label
-                .background(isSelected ? Color.white.opacity(0.12) : .clear)
+                .background(isSelected ? AnyShapeStyle(.tint.opacity(0.2)) : AnyShapeStyle(.clear))
                 .contentShape(.rect)
                 .onTapGesture(count: 2) { choose(entry) }
                 .onTapGesture { selectedID = entry.id }

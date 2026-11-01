@@ -538,7 +538,7 @@ private struct EpisodesSection: View {
 }
 
 #if os(tvOS)
-/// The title stays where it is and gains the white focus platter around it, since a
+/// The title stays where it is and gains the accent focus platter around it, since a
 /// borderless menu shows no focus at all.
 private struct SeasonMenuStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
@@ -554,7 +554,7 @@ private struct SeasonMenuStyle: ButtonStyle {
                 .foregroundStyle(isFocused ? .black : .white)
                 .background {
                     Capsule()
-                        .fill(.white)
+                        .fill(.tint)
                         .padding(.horizontal, -20)
                         .padding(.vertical, -6)
                         .opacity(isFocused ? 1 : 0)
