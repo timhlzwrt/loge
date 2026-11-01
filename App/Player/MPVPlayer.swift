@@ -34,6 +34,14 @@ final class MPVPlayer {
         status == .loading || status == .buffering
     }
 
+    /// Buffering stops the clock temporarily without changing the user's play/pause choice.
+    var isPlaybackPaused: Bool {
+        switch loadState {
+        case .loaded: isPaused || isEnded
+        default: true
+        }
+    }
+
     private(set) var position: Double = 0
     private(set) var duration: Double?
     private(set) var tracks: [Track] = []
@@ -45,6 +53,16 @@ final class MPVPlayer {
     private(set) var subtitleDelay = 0.0
     private(set) var audioDelay = 0.0
     private(set) var trackError: String?
+    private(set) var playbackInfo = PlaybackInfo()
+
+    struct PlaybackInfo {
+        var hardwareDecoder: String?
+        var decoderDrops: Int64?
+        var outputDrops: Int64?
+        var bufferedSeconds: Double?
+        var videoBitrate: Double?
+        var audioBitrate: Double?
+    }
 
     struct VideoFormat: Equatable, Sendable {
         enum DynamicRange: Sendable { case sdr, hdr10, hlg, dolbyVision }
@@ -133,6 +151,13 @@ final class MPVPlayer {
     @ObservationIgnored private var nextCommandID: UInt64 = 0
     @ObservationIgnored private var pendingLoad: (() -> Void)?
     @ObservationIgnored private var hasSelectedSubtitles = false
+    private struct SeekOperation {
+        let seconds: Double
+        let completion: () -> Void
+    }
+    @ObservationIgnored private var pendingSeeks: [SeekOperation] = []
+    @ObservationIgnored private var activeSeek: (id: UInt64, operation: SeekOperation, started: Bool)?
+    @ObservationIgnored private var seekTimeout: Task<Void, Never>?
 
     init() {
         // mpv_create only fails when allocation fails.
@@ -204,7 +229,9 @@ final class MPVPlayer {
         guard !isShutDown else { return }
         trackOperations = []
         trackError = nil
+        playbackInfo = PlaybackInfo()
         loadState = .loading
+        cancelSeeks()
         position = 0
         duration = nil
         tracks = []
@@ -267,8 +294,23 @@ final class MPVPlayer {
         command(["seek", String(seconds), "relative"])
     }
 
+    /// AVKit must wait for decoded playback to restart, rather than merely submitting the seek.
+    func seek(by seconds: Double, completion: @escaping () -> Void) {
+        guard !isShutDown, case .loaded = loadState, seconds.isFinite, seconds != 0 else { completion(); return }
+        pendingSeeks.append(SeekOperation(seconds: seconds, completion: completion))
+        runNextSeek()
+    }
+
     func seek(to seconds: Double) {
         command(["seek", String(seconds), "absolute"])
+    }
+
+    /// For the end of a scrub: lands on the keyframe next to `seconds` instead of decoding on
+    /// to the exact frame, which on long-GOP network files means fetching and decoding up to
+    /// several seconds of video first. Seeking relative to here makes mpv take the keyframe in
+    /// the direction of travel, so a short scrub forward still moves forward.
+    func seek(toKeyframeNear seconds: Double) {
+        command(["seek", String(seconds - exactPosition), "relative+keyframes"])
     }
 
     /// 1 is normal speed.
@@ -325,6 +367,21 @@ final class MPVPlayer {
 
     func dismissTrackError() { trackError = nil }
 
+    /// Requested only while Playback Info is open, without blocking the UI on mpv.
+    func refreshPlaybackInfo() {
+        guard !isShutDown else { return }
+        for (name, format) in [
+            ("hwdec-current", MPV_FORMAT_STRING),
+            ("decoder-frame-drop-count", MPV_FORMAT_INT64),
+            ("frame-drop-count", MPV_FORMAT_INT64),
+            ("demuxer-cache-duration", MPV_FORMAT_DOUBLE),
+            ("video-bitrate", MPV_FORMAT_DOUBLE),
+            ("audio-bitrate", MPV_FORMAT_DOUBLE),
+        ] {
+            check(mpv_get_property_async(handle, 0, name, format), name)
+        }
+    }
+
     /// Detaches video while the app is in the background without Picture in Picture;
     /// the system stops a hidden video layer, and reattaching starts it afresh.
     func setVideoEnabled(_ isEnabled: Bool) {
@@ -335,6 +392,7 @@ final class MPVPlayer {
     func shutDown() {
         guard !isShutDown else { return }
         isShutDown = true
+        cancelSeeks()
         trackOperations = []
         pendingLoad = nil
         activeTrackOperation = nil
@@ -344,11 +402,15 @@ final class MPVPlayer {
     // MARK: - Events
 
     private enum Event: Sendable {
-        case trackCommandReply(UInt64, Int32)
+        case commandReply(UInt64, Int32)
+        case seekStarted
+        case playbackRestart(Double?)
         case fileLoaded
         case failed(String)
         case flag(String, Bool)
         case double(String, Double?)
+        case integer(String, Int64)
+        case string(String, String)
         case tracks([Track])
         case videoFormat(VideoFormat?)
     }
@@ -382,7 +444,13 @@ final class MPVPlayer {
     private nonisolated static func parse(_ event: mpv_event, handle: OpaquePointer) -> Event? {
         switch event.event_id {
         case MPV_EVENT_COMMAND_REPLY:
-            return .trackCommandReply(event.reply_userdata, event.error)
+            return .commandReply(event.reply_userdata, event.error)
+        case MPV_EVENT_SEEK:
+            return .seekStarted
+        case MPV_EVENT_PLAYBACK_RESTART:
+            var position = 0.0
+            let result = mpv_get_property(handle, "time-pos", MPV_FORMAT_DOUBLE, &position)
+            return .playbackRestart(result >= 0 ? position : nil)
         case MPV_EVENT_FILE_LOADED:
             return .fileLoaded
         case MPV_EVENT_END_FILE:
@@ -390,9 +458,12 @@ final class MPVPlayer {
                   end.reason == MPV_END_FILE_REASON_ERROR
             else { return nil }
             return .failed(String(cString: mpv_error_string(end.error)))
-        case MPV_EVENT_PROPERTY_CHANGE:
+        case MPV_EVENT_PROPERTY_CHANGE, MPV_EVENT_GET_PROPERTY_REPLY:
             guard let property = event.data?.load(as: mpv_event_property.self) else { return nil }
             let name = String(cString: property.name)
+            if event.event_id == MPV_EVENT_GET_PROPERTY_REPLY, event.error < 0 {
+                return name == "video-bitrate" || name == "audio-bitrate" ? .double(name, nil) : nil
+            }
             if name == "track-list" {
                 guard property.format == MPV_FORMAT_NODE, let data = property.data else { return .tracks([]) }
                 return .tracks(readTracks(data.load(as: mpv_node.self)))
@@ -401,6 +472,10 @@ final class MPVPlayer {
                 return .videoFormat(readVideoFormat(handle))
             }
             switch property.format {
+            case MPV_FORMAT_STRING:
+                return .string(name, String(cString: property.data.load(as: UnsafePointer<CChar>.self)))
+            case MPV_FORMAT_INT64:
+                return .integer(name, property.data.load(as: Int64.self))
             case MPV_FORMAT_FLAG:
                 return .flag(name, property.data.load(as: Int32.self) != 0)
             case MPV_FORMAT_DOUBLE:
@@ -478,13 +553,32 @@ final class MPVPlayer {
 
     private func apply(_ event: Event) {
         switch event {
-        case .trackCommandReply(let id, let status):
-            completeTrackOperation(id: id, status: status)
+        case .commandReply(let id, let status):
+            if activeSeek?.id == id {
+                if status < 0 {
+                    check(status, "seek")
+                    completeSeek()
+                }
+            } else {
+                completeTrackOperation(id: id, status: status)
+            }
+            return
+        case .seekStarted:
+            activeSeek?.started = true
+            return
+        case .playbackRestart(let value):
+            if let value {
+                exactPosition = value
+                position = value.rounded(.down)
+            }
+            updateClock()
+            if activeSeek?.started == true { completeSeek() }
             return
         case .fileLoaded:
             loadState = .loaded
         case .failed(let message):
             loadState = .failed(message)
+            cancelSeeks()
         case .flag("pause", let value):
             isPaused = value
         case .flag("paused-for-cache", let value):
@@ -507,7 +601,25 @@ final class MPVPlayer {
             if value != tracks { tracks = value }
         case .videoFormat(let value):
             if value != videoFormat { videoFormat = value }
-        case .flag, .double:
+        case .string("hwdec-current", let value):
+            playbackInfo.hardwareDecoder = value
+            return
+        case .integer("decoder-frame-drop-count", let value):
+            playbackInfo.decoderDrops = value
+            return
+        case .integer("frame-drop-count", let value):
+            playbackInfo.outputDrops = value
+            return
+        case .double("demuxer-cache-duration", let value):
+            playbackInfo.bufferedSeconds = value
+            return
+        case .double("video-bitrate", let value):
+            playbackInfo.videoBitrate = value.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
+            return
+        case .double("audio-bitrate", let value):
+            playbackInfo.audioBitrate = value.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
+            return
+        case .flag, .double, .integer, .string:
             break
         }
         updateClock()
@@ -538,6 +650,47 @@ final class MPVPlayer {
 
     // MARK: - Commands
 
+    private func nextReplyID() -> UInt64 {
+        nextCommandID &+= 1
+        if nextCommandID == 0 { nextCommandID = 1 }
+        return nextCommandID
+    }
+
+    private func runNextSeek() {
+        guard !isShutDown, activeSeek == nil, !pendingSeeks.isEmpty else { return }
+        let operation = pendingSeeks.removeFirst()
+        let id = nextReplyID()
+        activeSeek = (id, operation, false)
+        // A demuxer can reject a queued seek without emitting a restart event. Don't
+        // leave AVKit's controls locked indefinitely for an unseekable source.
+        seekTimeout = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(15)) } catch { return }
+            guard let self, activeSeek?.id == id else { return }
+            log.error("Seek did not finish; releasing Picture in Picture controls")
+            cancelSeeks()
+        }
+        command(["seek", String(operation.seconds), "relative"], replyID: id)
+    }
+
+    private func completeSeek() {
+        seekTimeout?.cancel()
+        seekTimeout = nil
+        let completion = activeSeek?.operation.completion
+        activeSeek = nil
+        completion?()
+        runNextSeek()
+    }
+
+    private func cancelSeeks() {
+        seekTimeout?.cancel()
+        seekTimeout = nil
+        let completions = activeSeek.map { [$0.operation.completion] } ?? []
+        let queued = pendingSeeks.map(\.completion)
+        activeSeek = nil
+        pendingSeeks = []
+        for completion in completions + queued { completion() }
+    }
+
     private func enqueueTrackOperation(_ operation: TrackOperation) {
         guard !isShutDown else { return }
         if operation.kind != nil {
@@ -561,11 +714,10 @@ final class MPVPlayer {
         }
         guard !trackOperations.isEmpty else { return }
         let operation = trackOperations.removeFirst()
-        nextCommandID &+= 1
-        if nextCommandID == 0 { nextCommandID = 1 }
-        activeTrackOperation = (nextCommandID, operation, false)
+        let id = nextReplyID()
+        activeTrackOperation = (id, operation, false)
         // libmpv may reorder async requests, so submit the next only after its reply.
-        command(operation.arguments, replyID: nextCommandID)
+        command(operation.arguments, replyID: id)
     }
 
     private func completeTrackOperation(id: UInt64, status: Int32) {
@@ -599,7 +751,7 @@ final class MPVPlayer {
             }
         }
         if let replyID, replyID != 0 {
-            if status < 0 { completeTrackOperation(id: replyID, status: status) }
+            if status < 0 { apply(.commandReply(replyID, status)) }
         } else {
             check(status, args[0])
         }

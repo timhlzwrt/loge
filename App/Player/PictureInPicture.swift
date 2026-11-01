@@ -35,7 +35,7 @@ final class PictureInPicture: NSObject {
         self.player = player
         super.init()
         playbackState.withLock {
-            $0 = PlaybackState(timeRange: player.playbackTimeRange, isPaused: player.status != .playing)
+            $0 = PlaybackState(timeRange: player.playbackTimeRange, isPaused: player.isPlaybackPaused)
         }
         guard AVPictureInPictureController.isPictureInPictureSupported() else { return }
         let controller = AVPictureInPictureController(contentSource: .init(
@@ -54,11 +54,9 @@ final class PictureInPicture: NSObject {
         // The floating window asks for the time range and paused state only when told
         // they changed: on every play, pause, seek, and once a second as time passes.
         playbackObservation = Task { [weak self, player] in
-            for await _ in Observations({ (player.status, player.position, player.duration, player.speed) }) {
+            for await _ in Observations({ (player.isPlaybackPaused, player.position, player.duration, player.speed) }) {
                 guard let self else { return }
-                let state = PlaybackState(timeRange: player.playbackTimeRange, isPaused: player.status != .playing)
-                playbackState.withLock { $0 = state }
-                self.controller?.invalidatePlaybackState()
+                refreshPlaybackState()
             }
         }
     }
@@ -83,10 +81,23 @@ final class PictureInPicture: NSObject {
         playbackObservation = nil
         possibleObservation?.invalidate()
         possibleObservation = nil
+        // The controller can outlive this session, and with playback last seen as playing
+        // it would float the closed player on the next trip to the Home Screen.
+        #if os(iOS)
+        controller?.canStartPictureInPictureAutomaticallyFromInline = false
+        #endif
+        playbackState.withLock { $0.isPaused = true }
+        controller?.invalidatePlaybackState()
         controller?.stopPictureInPicture()
     }
 
     func dismissFailure() { failureMessage = nil }
+
+    private func refreshPlaybackState() {
+        let state = PlaybackState(timeRange: player.playbackTimeRange, isPaused: isStopping || player.isPlaybackPaused)
+        playbackState.withLock { $0 = state }
+        controller?.invalidatePlaybackState()
+    }
 }
 
 extension PictureInPicture: AVPictureInPictureControllerDelegate {
@@ -173,8 +184,11 @@ extension PictureInPicture: AVPictureInPictureSampleBufferPlaybackDelegate {
     ) {
         nonisolated(unsafe) let completionHandler = completionHandler
         Task { @MainActor [weak self] in
-            if let self, !isStopping { player.seek(by: skipInterval.seconds) }
-            completionHandler()
+            guard let self, !isStopping else { completionHandler(); return }
+            player.seek(by: skipInterval.seconds) { [weak self] in
+                self?.refreshPlaybackState()
+                completionHandler()
+            }
         }
     }
 }

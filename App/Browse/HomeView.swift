@@ -2,48 +2,38 @@ import MediaCore
 import SwiftUI
 
 struct HomeView: View {
-    @Environment(AddonStore.self) private var store
     /// Replaced on pull-to-refresh, which rebuilds the rows so they load again.
     @State private var refreshID = UUID()
 
     var body: some View {
-        let sources = store.addons.homeCatalogs
-        if sources.isEmpty {
-            ContentUnavailableView(
-                "No catalogs yet",
-                systemImage: "square.stack",
-                description: Text("Install an addon with catalogs, such as Cinemeta, in Settings.")
-            )
-        } else {
-            #if os(tvOS)
-            TVHome(sources: sources)
-            #else
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 28) {
-                    FeaturedCarousel(source: sources[0])
-                    ContinueWatchingRow()
-                    MyListRow()
-                    ForEach(sources) { CatalogRow(source: $0) }
-                }
-                .padding(.bottom, 32)
-                .id(refreshID)
+        let sources = DiscoveryCatalogs.home
+        #if os(tvOS)
+        TVHome(sources: sources)
+        #else
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 28) {
+                FeaturedCarousel(source: sources[0])
+                ContinueWatchingRow()
+                MyListRow()
+                ForEach(sources) { CatalogRow(source: $0) }
             }
-            .refreshable {
-                await store.refreshManifests()
-                refreshID = UUID()
-            }
-            // The hero starts at the top edge of the screen, under the status bar or toolbar.
-            .ignoresSafeArea(edges: .top)
-            .background(Color.canvas)
-            #if os(iOS)
-            .toolbar(.hidden, for: .navigationBar)
-            #elseif os(macOS)
-            // The hero names what's on screen; the window needs no title over it.
-            .toolbar(removing: .title)
-            .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
-            #endif
-            #endif
+            .padding(.bottom, 32)
+            .id(refreshID)
         }
+        .refreshable {
+            refreshID = UUID()
+        }
+        // The hero starts at the top edge of the screen, under the status bar or toolbar.
+        .ignoresSafeArea(edges: .top)
+        .background(Color.canvas)
+        #if os(iOS)
+        .toolbar(.hidden, for: .navigationBar)
+        #elseif os(macOS)
+        // The hero names what's on screen; the window needs no title over it.
+        .toolbar(removing: .title)
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        #endif
+        #endif
     }
 }
 
@@ -103,6 +93,9 @@ private struct TVHome: View {
 
     private func details(_ focused: MetaPreview) -> some View {
         VStack(alignment: .leading, spacing: 14) {
+            Text("For You")
+                .font(.headline)
+                .foregroundStyle(.secondary)
             TitleLogo(logo: focused.logo, name: focused.name, maxHeight: 140)
                 .frame(maxWidth: 600, alignment: .leading)
                 .id(focused.id)
@@ -209,6 +202,9 @@ private struct FeaturedPage: View {
             #endif
 
             VStack(alignment: isCentred ? .center : .leading, spacing: 12) {
+                Text("For You")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
                 NavigationLink(value: meta) {
                     VStack(alignment: isCentred ? .center : .leading, spacing: 12) {
                         TitleLogo(logo: meta.logo, name: meta.name, maxHeight: isCentred ? 72 : 96)

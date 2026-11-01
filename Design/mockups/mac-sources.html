@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mac Sources</title>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+.r{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Helvetica Neue",Helvetica,Arial,sans-serif;color:#fff;background:#141417;position:relative;overflow:hidden;-webkit-font-smoothing:antialiased;letter-spacing:-.01em}
+.r *{box-sizing:border-box}
+.sec{color:rgba(235,235,245,.6)}
+.fill{position:absolute;inset:0}
+.grp{margin:0 0 6px 12px;font-size:12px;font-weight:600;color:rgba(235,235,245,.6)}
+.list{border-radius:12px;background:rgba(255,255,255,.06);box-shadow:inset 0 0 0 .5px rgba(255,255,255,.08);overflow:hidden}
+.src{position:relative;display:flex;align-items:center;gap:12px;width:100%;height:50px;padding:0 12px;border:0;background:none;color:#fff;font:inherit;text-align:left}
+.src + .src::before{content:"";position:absolute;left:12px;right:12px;top:0;height:.5px;background:rgba(255,255,255,.12)}
+.src .t{display:block;font-size:13px;font-weight:600}
+.src .m{display:block;font-size:11px;color:rgba(235,235,245,.6);margin-top:1px}
+.src .z{margin-left:auto;font-size:12px;font-variant-numeric:tabular-nums;color:rgba(235,235,245,.6)}
+.src.sel{background:rgba(255,255,255,.12)}
+.src.cold > span{opacity:.45}
+.chk{width:16px;flex:none}
+.btn{height:28px;padding:0 16px;border:0;border-radius:999px;font:inherit;font-size:13px;font-weight:600}
+.a-tos{background:radial-gradient(120% 110% at 40% 35%,#6d93b3 0,#2a4157 45%,#0b1118 100%)}
+</style>
+</helmet>
+<div class="r" style="width: 1280px; height: 800px; border-radius: 16px">
+  <div style="position: absolute; left: 0; right: 0; top: 0; height: 460px">
+    <div class="fill a-tos" aria-hidden="true"></div>
+    <div class="fill" style="background: linear-gradient(180deg, rgba(20,20,23,0) 40%, #141417 100%)" aria-hidden="true"></div>
+  </div>
+  <div style="position: absolute; left: 10px; top: 10px; bottom: 10px; width: 220px; border-radius: 18px; background: rgba(36,36,40,.55)" aria-hidden="true">
+    <div style="display: flex; gap: 8px; padding: 16px 16px" aria-hidden="true">
+      <span style="width: 12px; height: 12px; border-radius: 50%; background: #ff5f57"></span>
+      <span style="width: 12px; height: 12px; border-radius: 50%; background: #febc2e"></span>
+      <span style="width: 12px; height: 12px; border-radius: 50%; background: #28c840"></span>
+    </div>
+  </div>
+  <div class="fill" style="background: rgba(0,0,0,.45)" aria-hidden="true"></div>
+
+  <section role="dialog" aria-label="Choose a source" style="position: absolute; left: 50%; top: 96px; width: 520px; margin-left: -260px; padding: 22px 20px 18px; border-radius: 22px; background: rgba(40,40,44,.92); -webkit-backdrop-filter: blur(40px) saturate(180%); backdrop-filter: blur(40px) saturate(180%); box-shadow: inset 0 0 0 .5px rgba(255,255,255,.14), 0 30px 80px rgba(0,0,0,.6)">
+    <header style="text-align: center; margin-bottom: 18px">
+      <h1 style="margin: 0; font-size: 15px; font-weight: 700">Choose a Source</h1>
+      <p class="sec" style="margin: 3px 0 0; font-size: 12px">Tears of Steel · 5 sources</p>
+    </header>
+    <div style="display: flex; flex-direction: column; gap: 16px">
+      <section>
+        <h2 class="grp">4K</h2>
+        <div class="list">
+          <button type="button" class="src sel">
+            <span><span class="t">Remux</span><span class="m">HEVC · HDR10 · TrueHD Atmos 7.1</span></span>
+            <span class="z">7.9 GB</span>
+            <svg class="chk" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Last played"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+          </button>
+          <button type="button" class="src">
+            <span><span class="t">WEB-DL</span><span class="m">HEVC · HDR10 · DD+ 5.1</span></span>
+            <span class="z">2.1 GB</span><span class="chk"></span>
+          </button>
+        </div>
+      </section>
+      <section>
+        <h2 class="grp">1080p</h2>
+        <div class="list">
+          <button type="button" class="src">
+            <span><span class="t">BluRay</span><span class="m">AVC · DTS 5.1</span></span>
+            <span class="z">1.4 GB</span><span class="chk"></span>
+          </button>
+          <button type="button" class="src cold">
+            <span><span class="t">WEB-DL</span><span class="m">HEVC · DD+ 5.1 · not cached</span></span>
+            <span class="z">640 MB</span><span class="chk"></span>
+          </button>
+        </div>
+      </section>
+      <section>
+        <h2 class="grp">720p</h2>
+        <div class="list">
+          <button type="button" class="src">
+            <span><span class="t">WEB</span><span class="m">AVC · AAC 2.0</span></span>
+            <span class="z">310 MB</span><span class="chk"></span>
+          </button>
+        </div>
+      </section>
+    </div>
+    <footer style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px">
+      <button type="button" class="btn" style="background: rgba(255,255,255,.12); color: #fff">Cancel</button>
+      <button type="button" class="btn" style="background: #fff; color: #000">Play</button>
+    </footer>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

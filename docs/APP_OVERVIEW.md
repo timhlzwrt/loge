@@ -1,6 +1,6 @@
 # Loge: implementation overview
 
-Reviewed 31 October 2026. Loge is a private SwiftUI Stremio-addon client for
+Updated 1 November 2026. Loge is a private SwiftUI streaming app for
 iPhone, iPad, Apple TV and Mac. `MediaApp` remains the project, scheme and bundle
 identifier so existing installations keep their data.
 
@@ -13,12 +13,16 @@ series, catalog grids and source lists use typed navigation destinations.
 
 1. `AddonStore` loads the installed addon list and cached manifests from
    UserDefaults. Startup refreshes manifests concurrently, preserving cached
-   capabilities if a refresh fails.
+   capabilities if a refresh fails. Fresh installs have no addons; restore removes
+   the exact old built-in Cinemeta entry while retaining every custom addon.
 2. `AddonManifest` describes catalog, metadata, stream and subtitle capabilities.
    `AddonRouting` selects eligible providers in installation order.
 3. `AddonClient` builds Stremio resource URLs and decodes HTTP JSON responses.
    Configured URL paths and queries are opaque; they can contain credentials.
-4. Browse views request catalogs and metadata. Source lists collect provider
+4. `DiscoveryCatalogs` defines seven managed public Cinemeta shelves and movie/series
+   search feeds. These work without installed addons. Installed metadata providers
+   keep priority, with built-in Cinemeta fallback for IMDb movie/series IDs.
+   Source lists collect provider
    responses, group playable streams, and try the remembered source when asked
    to autoplay. Torrents without a playable URL are excluded.
 5. `PlaybackSession` opens a `PlaybackRequest`, owns the player lifecycle and
@@ -30,13 +34,18 @@ series, catalog grids and source lists use typed navigation destinations.
 ## Screens and platform behavior
 
 - `App/Browse/HomeView.swift`: artwork carousel on iPhone/iPad/Mac; a
-  focus-driven backdrop and fixed title header on Apple TV.
+  focus-driven backdrop and fixed title header on Apple TV. Fixed popular,
+  IMDb-favourites and genre shelves replace addon-ordered Home catalogs.
 - `CatalogRow.swift` and `CatalogGridView.swift`: poster rows and paginated
   grids, with genre filtering when the addon advertises it.
 - `MetaDetailView.swift`: title details, seasons, episode cards, watched
   actions and next episode selection.
-- `SourcesView.swift`: source selection, autoplay and fallback candidates.
-- `SearchView.swift`: debounced search across eligible catalogs and local
+- `PersonView.swift`: Cast & Crew on details and a person's titles, found by
+  searching Cinemeta for the name and keeping results that credit them.
+- `SourcesView.swift`: source selection, autoplay and fallback candidates. Resolution
+  groups retain addon order for ties, with cached-first, bitrate and file-size
+  sorting plus a reported-bitrate cap; unknown rates stay visible.
+- `SearchView.swift`: debounced search across built-in movie/series feeds and local
   recent searches.
 - `App/Settings`: addon installation/order/removal, playback preferences and
   Trakt app keys/sign-in/sync.
@@ -57,7 +66,17 @@ subtitles and episode metadata, and prepares the next episode near the end.
 state on the main actor. UI position updates are rounded to whole seconds.
 `MPVVideoView` presents the video layer; `PlayerControls`, `PlayerPanel` and
 `PlayerView` handle interaction and presentation. The vendored MPVKit build
-contains a resize patch; see `Vendor/MPVKit/README.md` before replacing it.
+contains resize, subtitle and frame-presentation timing patches; see
+`Vendor/MPVKit/README.md` before replacing it. Automatic source choices default
+to a 50 GB per-episode limit for series only, based on explicit video-file sizes.
+Movies and manual source choices are unrestricted. See
+[playback performance](PLAYBACK_PERFORMANCE.md) for behavior and diagnostics.
+
+IMDb scores supplied by Cinemeta are labelled with their source and ten-point
+scale. Movie details on iOS/Mac link to Letterboxd using its documented IMDb-ID
+redirect. Letterboxd ratings are not fetched: its API is request-only and the
+user chose IMDb scores plus Letterboxd links. Home's shelves are managed
+discovery feeds, not recommendations inferred from viewing history.
 
 ## Persistence and privacy
 

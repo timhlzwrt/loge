@@ -1,0 +1,70 @@
+--- a/video/out/vo_avfoundation.m
++++ b/video/out/vo_avfoundation.m
+@@ -45,6 +45,7 @@
+ 
+     struct mp_image *next_image;
+     double next_pts;
++    CMSampleBufferRef pending_buffer;
+     __strong AVSampleBufferDisplayLayer *displayLayer;
+     
+     // OSD/Subtitle support (CALayer mode)
+@@ -739,7 +740,15 @@
+ {
+     struct priv *p = vo->priv;
+     
+-    // In CALayer mode, render OSD here (video was enqueued in draw_frame)
++    // mpv calls draw_frame before waiting for the presentation deadline. Only
++    // enqueue here, after that wait; paused redraws also pass through flip_page.
++    if (p->pending_buffer) {
++        [p->displayLayer enqueueSampleBuffer:p->pending_buffer];
++        CFRelease(p->pending_buffer);
++        p->pending_buffer = NULL;
++    }
++
++    // In CALayer mode, render OSD alongside the presented video.
+     if (!p->composite_osd) {
+         render_osd(vo, p->next_pts);
+     }
+@@ -767,6 +776,10 @@
+         if (!frame->repeat && frame->current)
+             mpi = mp_image_new_ref(frame->current);
+ 
++        if (p->pending_buffer) {
++            CFRelease(p->pending_buffer);
++            p->pending_buffer = NULL;
++        }
+         talloc_free(p->next_image);
+         
+         if (!mpi) {
+@@ -862,8 +875,7 @@
+             );
+         }
+ 
+-        [p->displayLayer enqueueSampleBuffer:buf];
+-        CFRelease(buf);
++        p->pending_buffer = buf;
+         
+         // Release composited output buffer (always owned by us)
+         if (needsRelease)
+@@ -933,6 +945,10 @@
+     struct priv *p = vo->priv;
+     
+     mp_image_unrefp(&p->next_image);
++    if (p->pending_buffer) {
++        CFRelease(p->pending_buffer);
++        p->pending_buffer = NULL;
++    }
+     [p->displayLayer flushAndRemoveImage];
+     
+     if (p->cachedSubtitleImage) {
+@@ -977,6 +993,10 @@
+         return VO_TRUE;
+     case VOCTRL_RESET:
+         // Called when playback stops or video changes
++        if (p->pending_buffer) {
++            CFRelease(p->pending_buffer);
++            p->pending_buffer = NULL;
++        }
+         clear_subtitle_state(vo);
+         [p->displayLayer flushAndRemoveImage];
+         return VO_TRUE;

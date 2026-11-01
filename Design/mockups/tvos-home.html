@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>tvOS Home</title>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+.r{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Helvetica Neue",Helvetica,Arial,sans-serif;color:#fff;background:#141417;position:relative;overflow:hidden;-webkit-font-smoothing:antialiased;letter-spacing:-.01em}
+.r *{box-sizing:border-box}
+.sec{color:rgba(235,235,245,.6)}
+.fill{position:absolute;inset:0}
+.glass{background:rgba(120,120,128,.26);-webkit-backdrop-filter:blur(24px) saturate(180%);backdrop-filter:blur(24px) saturate(180%);box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 0 0 .5px rgba(255,255,255,.14)}
+.card{position:relative;overflow:hidden;border-radius:16px;flex:none}
+.cap{position:absolute;left:14px;bottom:20px;font-weight:700;font-size:17px;text-shadow:0 1px 12px rgba(0,0,0,.6)}
+.pb{position:absolute;left:14px;right:14px;bottom:10px;height:4px;border-radius:2px;background:rgba(255,255,255,.32);overflow:hidden}
+.pb i{display:block;height:100%;border-radius:2px;background:#fff}
+.poster{position:relative;overflow:hidden;border-radius:14px;flex:none;display:flex;align-items:flex-end;justify-content:center;padding:10px;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;text-align:center;color:rgba(255,255,255,.85)}
+.a-sintel{background:radial-gradient(110% 90% at 68% 38%,#b46a3a 0,#55301d 42%,#1a110c 100%)}
+.a-tos{background:radial-gradient(120% 100% at 30% 30%,#5f86a6 0,#22364a 48%,#0d141c 100%)}
+.a-bbb{background:radial-gradient(120% 100% at 50% 20%,#a9cf78 0,#3f6430 50%,#132011 100%)}
+.a-cosmos{background:radial-gradient(120% 100% at 60% 40%,#d48aa8 0,#5a2740 50%,#1a0c14 100%)}
+.a-elephants{background:radial-gradient(120% 100% at 40% 30%,#a59bd8 0,#3b3566 50%,#120f20 100%)}
+.a-spring{background:radial-gradient(120% 100% at 50% 30%,#8dd3c2 0,#2c5a54 50%,#0d1c1a 100%)}
+.a-agent{background:radial-gradient(120% 100% at 50% 30%,#e3c06a 0,#6a5524 50%,#1d170a 100%)}
+.a-charge{background:radial-gradient(120% 100% at 50% 40%,#e46b4b 0,#4a1e17 50%,#130909 100%)}
+.a-sprite{background:radial-gradient(120% 100% at 50% 30%,#c6d86a 0,#47502a 50%,#14170b 100%)}
+.a-sherlock{background:radial-gradient(120% 100% at 45% 30%,#c9c9c9 0,#4a4a4a 50%,#121212 100%)}
+</style>
+</helmet>
+<div class="r" style="width: 1280px; height: 720px">
+  <div class="fill a-sintel" aria-hidden="true"></div>
+  <div class="fill" style="background: linear-gradient(90deg, rgba(20,20,23,.9) 0%, rgba(20,20,23,.5) 42%, rgba(20,20,23,0) 72%)" aria-hidden="true"></div>
+  <div class="fill" style="background: linear-gradient(180deg, rgba(20,20,23,0) 42%, rgba(20,20,23,.88) 62%, #141417 80%)" aria-hidden="true"></div>
+
+  <nav style="position: absolute; left: 60px; top: 34px">
+    <a href="#" class="glass" style="display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 16px 0 12px; border-radius: 999px; color: #fff; font-size: 15px; font-weight: 600; text-decoration: none">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7v9h-5v-6h-6v6H4z"></path></svg>
+      Home
+    </a>
+  </nav>
+
+  <section style="position: absolute; left: 60px; top: 112px; width: 560px; display: flex; flex-direction: column; gap: 12px">
+    <h1 style="margin: 0; font-size: 58px; font-weight: 300; letter-spacing: .3em; line-height: 1">SINTEL</h1>
+    <p class="sec" style="margin: 0; font-size: 15px; font-weight: 500; display: flex; align-items: center; gap: 6px">
+      Animation · 2010 · 15 min ·
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="#ffd60a" aria-hidden="true"><path d="M12 3l2.6 6 6.4.5-4.9 4.3 1.5 6.2L12 16.6 6.4 20l1.5-6.2L3 9.5 9.4 9z"></path></svg>
+      <span>7.4</span>
+    </p>
+    <p style="margin: 0; font-size: 16px; line-height: 1.4; color: rgba(255,255,255,.88)">A lonely young woman befriends a baby dragon. When an adult dragon takes him, she sets out alone to bring him home.</p>
+  </section>
+
+  <section style="position: absolute; left: 60px; right: 0; top: 388px">
+    <h2 style="margin: 0 0 14px; font-size: 22px; font-weight: 700">Continue Watching</h2>
+    <div style="display: flex; gap: 24px; align-items: flex-start">
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <div class="card a-sintel" style="width: 268px; height: 151px; transform: scale(1.08); transform-origin: left top; box-shadow: 0 22px 44px rgba(0,0,0,.55)">
+          <span class="cap">Sintel</span>
+          <div class="pb"><i style="width: 62%"></i></div>
+        </div>
+        <span class="sec" style="font-size: 13px; font-weight: 500; margin-top: 16px">6 min left</span>
+      </div>
+      <div class="card a-sherlock" style="width: 236px; height: 133px; margin-left: 22px"><span class="cap">Sherlock Holmes</span><div class="pb"><i style="width: 35%"></i></div></div>
+      <div class="card a-tos" style="width: 236px; height: 133px"><span class="cap">Tears of Steel</span><div class="pb"><i style="width: 20%"></i></div></div>
+      <div class="card a-cosmos" style="width: 236px; height: 133px"><span class="cap">Cosmos Laundromat</span><div class="pb"><i style="width: 80%"></i></div></div>
+      <div class="card a-elephants" style="width: 236px; height: 133px"><span class="cap">Elephants Dream</span></div>
+    </div>
+  </section>
+
+  <section style="position: absolute; left: 60px; right: 0; top: 640px">
+    <h2 style="margin: 0 0 14px; font-size: 22px; font-weight: 700">Popular Movies</h2>
+    <div style="display: flex; gap: 24px">
+      <div class="poster a-bbb" style="width: 140px; height: 210px">Big Buck Bunny</div>
+      <div class="poster a-agent" style="width: 140px; height: 210px">Agent 327</div>
+      <div class="poster a-spring" style="width: 140px; height: 210px">Spring</div>
+      <div class="poster a-charge" style="width: 140px; height: 210px">Charge</div>
+      <div class="poster a-sprite" style="width: 140px; height: 210px">Sprite Fright</div>
+      <div class="poster a-tos" style="width: 140px; height: 210px">Tears of Steel</div>
+      <div class="poster a-cosmos" style="width: 140px; height: 210px">Cosmos Laundromat</div>
+      <div class="poster a-sintel" style="width: 140px; height: 210px">Sintel</div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

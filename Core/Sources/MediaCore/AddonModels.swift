@@ -20,11 +20,16 @@ public struct MetaPreview: Codable, Sendable, Hashable, Identifiable {
     public var imdbRating: String?
     public var genres: [String]?
     public var runtime: String?
+    // Credits, which tell a search by a person's name apart from titles that only contain it.
+    public var cast: [String]?
+    public var director: [String]?
+    public var writer: [String]?
 
     public init(
         id: String, type: String, name: String, poster: String? = nil, posterShape: String? = nil,
         releaseInfo: String? = nil, background: String? = nil, logo: String? = nil,
-        description: String? = nil, imdbRating: String? = nil, genres: [String]? = nil, runtime: String? = nil
+        description: String? = nil, imdbRating: String? = nil, genres: [String]? = nil, runtime: String? = nil,
+        cast: [String]? = nil, director: [String]? = nil, writer: [String]? = nil
     ) {
         self.id = id
         self.type = type
@@ -38,6 +43,9 @@ public struct MetaPreview: Codable, Sendable, Hashable, Identifiable {
         self.imdbRating = imdbRating
         self.genres = genres
         self.runtime = runtime
+        self.cast = cast
+        self.director = director
+        self.writer = writer
     }
 }
 
@@ -56,8 +64,25 @@ public struct Meta: Codable, Sendable, Equatable, Identifiable {
     public var imdbRating: String?
     public var cast: [String]?
     public var director: [String]?
+    public var writer: [String]?
+    /// ISO 8601: the premiere for a movie, the first episode for a series.
+    public var released: String?
+    public var country: String?
+    public var awards: String?
+    /// The protocol's newer form of credits and genres, which some addons send instead of
+    /// `cast`, `director` and `writer`.
+    public var links: [MetaLink]?
     /// Episodes for series; absent or empty for movies.
     public var videos: [Video]?
+
+    public var releaseDate: Date? { released.flatMap(isoDate) }
+}
+
+public struct MetaLink: Codable, Sendable, Equatable {
+    public var name: String?
+    /// `Cast`, `Directors`, `Writers` or `Genres`, among others.
+    public var category: String?
+    public var url: String?
 }
 
 /// An episode (or other playable item) within a `Meta`. Its `id` is what
@@ -75,12 +100,7 @@ public struct Video: Codable, Sendable, Hashable, Identifiable {
     /// Addons disagree on whether the episode name lives in `title` or `name`.
     public var displayTitle: String? { title ?? name }
 
-    /// Addons send ISO 8601 dates both with and without fractional seconds.
-    public var releaseDate: Date? {
-        guard let released else { return nil }
-        return (try? Date(released, strategy: Date.ISO8601FormatStyle(includingFractionalSeconds: true)))
-            ?? (try? Date(released, strategy: .iso8601))
-    }
+    public var releaseDate: Date? { released.flatMap(isoDate) }
 
     /// False for announced episodes that haven't aired, which addons have no streams for yet.
     public func isReleased(asOf date: Date = .now) -> Bool {
@@ -88,6 +108,12 @@ public struct Video: Codable, Sendable, Hashable, Identifiable {
         // which crashes the details screen there.
         releaseDate.map { !($0 > date) } ?? true
     }
+}
+
+/// Addons send ISO 8601 dates both with and without fractional seconds.
+private func isoDate(_ string: String) -> Date? {
+    (try? Date(string, strategy: Date.ISO8601FormatStyle(includingFractionalSeconds: true)))
+        ?? (try? Date(string, strategy: .iso8601))
 }
 
 /// One playable source returned by a `stream` resource.
@@ -108,6 +134,8 @@ public struct StreamSource: Codable, Sendable, Hashable {
     public struct BehaviorHints: Codable, Sendable, Hashable {
         public var bingeGroup: String?
         public var filename: String?
+        /// The selected video file's size in bytes, distinct from a torrent or season pack.
+        public var videoSize: Int64?
         public var proxyHeaders: ProxyHeaders?
     }
 
