@@ -209,7 +209,7 @@ private struct FeaturedCarousel: View {
         HStack(spacing: 7) {
             ForEach(items) { meta in
                 Circle()
-                    .fill(meta.id == (currentID ?? items.first?.id) ? Color.white : Color.white.opacity(0.35))
+                    .fill(meta.id == (currentID ?? items.first?.id) ? AnyShapeStyle(.tint) : AnyShapeStyle(.white.opacity(0.35)))
                     .frame(width: 7, height: 7)
             }
         }
