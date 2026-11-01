@@ -173,6 +173,15 @@ final class FlowTests: XCTestCase {
         XCTAssertTrue(app.frame.contains(app.buttons["Play sound earlier"].frame))
         screenshot("timing-landscape")
         done.tap()
+        XCTAssertTrue(app.buttons["Audio"].waitForExistence(timeout: 5), "Done didn't close the timing panel")
+        XCTAssertFalse(done.exists, "Done didn't close the timing panel")
+        // Tapping the picture closes it too, as it closes a menu.
+        app.buttons["Audio"].tap()
+        app.buttons["Audio Timing…"].tap()
+        XCTAssertTrue(done.waitForExistence(timeout: 5))
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertTrue(app.buttons["Audio"].waitForExistence(timeout: 5), "Tapping the picture didn't close the timing panel")
+        XCTAssertFalse(done.exists, "Tapping the picture didn't close the timing panel")
         app.buttons["Close"].tap()
     }
 
