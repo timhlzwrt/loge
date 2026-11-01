@@ -523,6 +523,10 @@ private struct TimingPanel: View {
                     .font(.subheadline.weight(.semibold))
                 Spacer()
                 Button("Done", action: onDone)
+                    #if !os(tvOS)
+                    // Escape closes it, as it closes the menus.
+                    .keyboardShortcut(.cancelAction)
+                    #endif
                     .frame(minWidth: 44, minHeight: 44)
             }
             HStack(spacing: 12) {
