@@ -164,7 +164,7 @@ public final class TraktAccount {
     }
 
     /// Minutes in a runtime such as "45 min" or "2h 16min".
-    static func minutes(_ runtime: String?) -> Double? {
+    public static func minutes(_ runtime: String?) -> Double? {
         guard let runtime else { return nil }
         let hours = runtime.firstMatch(of: /(\d+)\s*h/).flatMap { Double($0.1) } ?? 0
         let minutes = runtime.firstMatch(of: /(\d+)\s*min/).flatMap { Double($0.1) } ?? 0

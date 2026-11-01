@@ -141,6 +141,69 @@ struct StreamDetailsTests {
         #expect([unknown, low, high].sorted(by: StreamDetails.SortOrder.higherBitrate.precedes) == [high, low, unknown])
     }
 
+    private func stream(_ json: String) throws -> StreamSource {
+        try JSONDecoder().decode(StreamSource.self, from: Data(json.utf8))
+    }
+
+    @Test func estimatesAMovieBitrateFromItsSizeAndRuntime() throws {
+        // 18 GB over two hours.
+        let details = StreamDetails(try stream(#"{"title":"Movie 2160p HEVC 18 GB"}"#), runtime: 7200)
+        #expect(details.bitrate == nil)
+        #expect(details.estimatedBitrate == 20_000_000)
+        #expect(details.listedBitrate == 20_000_000)
+        #expect(details.bitrateLabel == "≈20 Mbps")
+    }
+
+    @Test func estimatesAnEpisodeBitrateFromItsOwnVideoSize() throws {
+        let details = StreamDetails(
+            try stream(#"{"title":"Show Season Pack 633 GB", "behaviorHints":{"videoSize":2700000000}}"#),
+            runtime: 45 * 60)
+        #expect(details.estimatedBitrate == 8_000_000)
+        #expect(details.bitrateLabel == "≈8 Mbps")
+    }
+
+    @Test func doesNotEstimateFromPacksOrWithoutARuntime() throws {
+        #expect(StreamDetails(try stream(#"{"title":"Show 1080p Season Pack 60 GB"}"#), runtime: 2700).estimatedBitrate == nil)
+        #expect(StreamDetails(try stream(#"{"title":"Movie 1080p 10 GB"}"#)).estimatedBitrate == nil)
+        #expect(StreamDetails(try stream(#"{"title":"Movie 1080p 10 GB"}"#), runtime: 0).estimatedBitrate == nil)
+        #expect(StreamDetails(try stream(#"{"title":"Movie 1080p"}"#), runtime: 7200).estimatedBitrate == nil)
+        // A whole season that isn't labelled as a pack can't be one episode's rate.
+        #expect(StreamDetails(try stream(#"{"title":"Show 2160p 633 GB"}"#), runtime: 2700).estimatedBitrate == nil)
+        // Nor can a 30 MB sample be a two-hour film.
+        #expect(StreamDetails(try stream(#"{"title":"Movie 1080p 30 MB"}"#), runtime: 7200).estimatedBitrate == nil)
+    }
+
+    @Test func prefersTheReportedBitrateOverAnEstimate() throws {
+        let details = StreamDetails(try stream(#"{"title":"Movie 2160p 25 Mbps 18 GB"}"#), runtime: 7200)
+        #expect(details.bitrate == 25_000_000)
+        #expect(details.estimatedBitrate == nil)
+        #expect(details.listedBitrate == 25_000_000)
+        #expect(details.bitrateLabel == "25 Mbps")
+    }
+
+    @Test func sortsEstimatedAndReportedBitratesTogether() throws {
+        let reported = StreamDetails(try stream(#"{"title":"4K 30 Mbps"}"#), runtime: 7200)
+        let estimated = StreamDetails(try stream(#"{"title":"4K 9 GB"}"#), runtime: 7200)
+        let unknown = StreamDetails(try stream(#"{"title":"4K"}"#), runtime: 7200)
+        #expect([unknown, reported, estimated].sorted(by: StreamDetails.SortOrder.lowerBitrate.precedes) == [estimated, reported, unknown])
+        #expect([unknown, estimated, reported].sorted(by: StreamDetails.SortOrder.higherBitrate.precedes) == [reported, estimated, unknown])
+    }
+
+    @Test func breaksTiesWithTheSecondOrder() {
+        let cachedLow = StreamDetails(text: "[RD+] 4K 12 Mbps")
+        let cachedHigh = StreamDetails(text: "[RD+] 4K 80 Mbps")
+        let cachedUnknown = StreamDetails(text: "[RD+] 4K")
+        let uncachedHigh = StreamDetails(text: "[RD download] 4K 90 Mbps")
+        let all = [uncachedHigh, cachedUnknown, cachedLow, cachedHigh]
+
+        let higher = all.sorted { StreamDetails.SortOrder.precedes($0, $1, by: [.cachedFirst, .higherBitrate]) }
+        #expect(higher == [cachedHigh, cachedLow, cachedUnknown, uncachedHigh])
+        let lower = all.sorted { StreamDetails.SortOrder.precedes($0, $1, by: [.cachedFirst, .lowerBitrate]) }
+        #expect(lower == [cachedLow, cachedHigh, cachedUnknown, uncachedHigh])
+        #expect(!StreamDetails.SortOrder.precedes(cachedLow, cachedHigh, by: [.cachedFirst, .addonOrder]))
+        #expect(!StreamDetails.SortOrder.precedes(cachedHigh, cachedLow, by: [.cachedFirst, .addonOrder]))
+    }
+
     @Test func usesIndividualVideoSizeInsteadOfSeasonPackTotal() throws {
         let stream = try JSONDecoder().decode(StreamSource.self, from: Data("""
             {"title":"Show Season Pack 633 GB", "behaviorHints":{"videoSize":8000000000}}
