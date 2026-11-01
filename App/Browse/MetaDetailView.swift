@@ -80,7 +80,10 @@ struct MetaDetailView: View {
                 return
             }
             do {
-                state = .loaded(try await client.meta(type: preview.type, id: preview.id))
+                let meta = try await client.meta(type: preview.type, id: preview.id)
+                state = .loaded(meta)
+                // Entries saved before this title's artwork was known get it now.
+                library.fillArtwork(from: meta)
             } catch is CancellationError {
                 // Navigated away; nothing to show.
             } catch {
@@ -104,6 +107,12 @@ struct MetaDetailView: View {
     /// Full details once loaded; until then the catalog entry already has enough to draw the page.
     private var loaded: Meta? {
         if case .loaded(let meta) = state { meta } else { nil }
+    }
+
+    /// What My List and the user's lists keep: the catalog entry, with artwork it lacked
+    /// filled in from the full details, so the title has a poster wherever it's listed.
+    private var savedPreview: MetaPreview {
+        loaded.map(preview.fillingArtwork(from:)) ?? preview
     }
 
     private var playAction: PlayAction? {
@@ -201,8 +210,9 @@ struct MetaDetailView: View {
             GlassEffectContainer(spacing: 0) {
                 HStack(spacing: 12) {
                     MyListButton(isSaved: library.isSaved(preview.id)) {
-                        library.toggleSaved(preview)
+                        library.toggleSaved(savedPreview)
                     }
+                    ListsMenu(title: savedPreview)
                     if let play = playAction {
                         Button("Choose a Source", systemImage: "list.bullet") {
                             var route = play.route

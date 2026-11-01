@@ -93,6 +93,41 @@ public struct RememberedSource: Codable, Sendable, Equatable {
     }
 }
 
+/// A list the user named and fills from titles' pages, beside My List.
+public struct TitleList: Codable, Sendable, Hashable, Identifiable {
+    public var id: UUID
+    public var name: String
+    /// Newest first, like My List.
+    public var titles: [MetaPreview]
+
+    public init(id: UUID = UUID(), name: String, titles: [MetaPreview] = []) {
+        self.id = id
+        self.name = name
+        self.titles = titles
+    }
+}
+
+extension MetaPreview {
+    /// Artwork this entry was saved without, taken from the title's full details.
+    public func fillingArtwork(from meta: Meta) -> MetaPreview {
+        var preview = self
+        preview.poster = poster ?? meta.poster
+        preview.background = background ?? meta.background
+        preview.logo = logo ?? meta.logo
+        return preview
+    }
+}
+
+extension WatchItem {
+    func fillingArtwork(from meta: Meta) -> WatchItem {
+        var item = self
+        item.poster = poster ?? meta.poster
+        item.background = background ?? meta.background
+        item.thumbnail = thumbnail ?? meta.videos?.first { $0.id == id }?.thumbnail
+        return item
+    }
+}
+
 /// Where to pick a series back up.
 public struct UpNext: Sendable, Equatable {
     public var video: Video
@@ -115,18 +150,26 @@ public final class LibraryStore {
     private static let progressKey = "watchProgress"
     private static let savedKey = "savedTitles"
     private static let sourcesKey = "lastSources"
+    private static let listsKey = "titleLists"
 
     public private(set) var progress: [String: WatchProgress]
+    /// My List. It's split into shows and movies by type when shown, so it stays the
+    /// one list older builds saved and needs no migration.
     public private(set) var saved: [MetaPreview]
+    /// The user's own lists, oldest first.
+    public private(set) var lists: [TitleList]
     /// Keyed by movie or series ID.
     public private(set) var sources: [String: RememberedSource]
 
     private let defaults: UserDefaults
+    /// Titles already looked up for artwork, so one that has none isn't fetched again.
+    @ObservationIgnored private var artworkLookedUp = Set<String>()
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         progress = Self.decode(defaults.data(forKey: Self.progressKey)) ?? [:]
         saved = Self.decode(defaults.data(forKey: Self.savedKey)) ?? []
+        lists = Self.decode(defaults.data(forKey: Self.listsKey)) ?? []
         sources = Self.decode(defaults.data(forKey: Self.sourcesKey)) ?? [:]
     }
 
@@ -269,6 +312,106 @@ public final class LibraryStore {
             saved.insert(meta, at: 0)
         }
         save(saved, forKey: Self.savedKey)
+    }
+
+    public var savedSeries: [MetaPreview] {
+        saved.filter { $0.type == "series" }
+    }
+
+    /// Everything that isn't a series, so a title of an unusual type still shows somewhere.
+    public var savedMovies: [MetaPreview] {
+        saved.filter { $0.type != "series" }
+    }
+
+    // MARK: Lists
+
+    /// A blank name becomes "Untitled List". Returns the new list's ID.
+    @discardableResult
+    public func createList(named name: String) -> TitleList.ID {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let list = TitleList(name: trimmed.isEmpty ? "Untitled List" : trimmed)
+        lists.append(list)
+        save(lists, forKey: Self.listsKey)
+        return list.id
+    }
+
+    public func renameList(_ id: TitleList.ID, to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let index = lists.firstIndex(where: { $0.id == id }) else { return }
+        lists[index].name = trimmed
+        save(lists, forKey: Self.listsKey)
+    }
+
+    public func deleteList(_ id: TitleList.ID) {
+        lists.removeAll { $0.id == id }
+        save(lists, forKey: Self.listsKey)
+    }
+
+    public func isInList(_ metaID: String, list id: TitleList.ID) -> Bool {
+        lists.first { $0.id == id }?.titles.contains { $0.id == metaID } == true
+    }
+
+    public func toggle(_ meta: MetaPreview, inList id: TitleList.ID) {
+        guard let index = lists.firstIndex(where: { $0.id == id }) else { return }
+        if let position = lists[index].titles.firstIndex(where: { $0.id == meta.id }) {
+            lists[index].titles.remove(at: position)
+        } else {
+            lists[index].titles.insert(meta, at: 0)
+        }
+        save(lists, forKey: Self.listsKey)
+    }
+
+    // MARK: Artwork
+
+    /// Titles with a saved entry that can't be drawn: a list entry without a poster, or a
+    /// Continue Watching entry without a backdrop or poster. Entries keep the artwork they
+    /// were saved with, and catalogs, other devices' progress and older builds can leave it out.
+    public var titlesMissingArtwork: [MetaPreview] {
+        let listed = (saved + lists.flatMap(\.titles)).filter { $0.poster == nil }
+        let watching = continueWatching.map(\.item)
+            .filter { $0.background == nil || $0.poster == nil }
+            .map { MetaPreview(id: $0.metaID, type: $0.type, name: $0.title) }
+        var seen = Set<String>()
+        return (listed + watching).filter { seen.insert($0.id).inserted }
+    }
+
+    /// Fills in artwork missing from this title's entries everywhere in the library.
+    /// Artwork already there stays: it's what the user saw when they saved it.
+    public func fillArtwork(from meta: Meta) {
+        let before = (saved: saved, lists: lists, progress: progress)
+        saved = saved.map { $0.id == meta.id ? $0.fillingArtwork(from: meta) : $0 }
+        for index in lists.indices {
+            lists[index].titles = lists[index].titles.map { $0.id == meta.id ? $0.fillingArtwork(from: meta) : $0 }
+        }
+        for (id, entry) in progress where entry.item.metaID == meta.id {
+            progress[id]?.item = entry.item.fillingArtwork(from: meta)
+        }
+        if saved != before.saved { save(saved, forKey: Self.savedKey) }
+        if lists != before.lists { save(lists, forKey: Self.listsKey) }
+        if progress != before.progress { save(progress, forKey: Self.progressKey) }
+    }
+
+    /// Looks up the details of titles saved without artwork through the installed addons.
+    public func fillMissingArtwork(from addons: AddonStore) async {
+        await fillMissingArtwork { type, id in
+            guard let client = addons.addons.metaClient(type: type, id: id) else { return nil }
+            do {
+                return try await client.meta(type: type, id: id)
+            } catch {
+                // Tried again next launch; the entry keeps drawing its title meanwhile.
+                log.error("Couldn't look up artwork for \(id, privacy: .public): \(error)")
+                return nil
+            }
+        }
+    }
+
+    /// Looks up each title in `titlesMissingArtwork` once per launch.
+    func fillMissingArtwork(lookup: (_ type: String, _ id: String) async -> Meta?) async {
+        for title in titlesMissingArtwork where artworkLookedUp.insert(title.id).inserted {
+            if let meta = await lookup(title.type, title.id) {
+                fillArtwork(from: meta)
+            }
+        }
     }
 
     // MARK: Persistence
