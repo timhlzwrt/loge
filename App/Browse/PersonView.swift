@@ -59,10 +59,12 @@ struct PersonView: View {
                     for try await titles in group { results += titles }
                     return results
                 }
+                try Task.checkCancellation()
                 state = .loaded(route.person.titles(in: results, foundOn: route.title))
             } catch is CancellationError {
                 // Navigated away; nothing to show.
             } catch {
+                guard !Task.isCancelled else { return }
                 state = .failed
             }
         }

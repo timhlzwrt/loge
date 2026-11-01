@@ -82,6 +82,17 @@ struct StreamDetailsTests {
         #expect(StreamDetails(text: "1.2 TB").size == Measurement(value: 1.2, unit: .terabytes))
     }
 
+    @Test func preservesBinaryFileSizeUnits() {
+        #expect(StreamDetails(text: "1 MiB").size?.converted(to: .bytes).value == 1_048_576)
+        #expect(StreamDetails(text: "1 GiB").size?.converted(to: .bytes).value == 1_073_741_824)
+        #expect(StreamDetails(text: "1 TiB").size?.converted(to: .bytes).value == 1_099_511_627_776)
+
+        let binary = StreamDetails(text: "1 GiB")
+        let decimal = StreamDetails(text: "1.05 GB")
+        #expect(StreamDetails.SortOrder.smallerFile.precedes(decimal, binary))
+        #expect(!StreamDetails.SortOrder.smallerFile.precedes(binary, decimal))
+    }
+
     @Test func sortsSmallerFilesBeforeUnknownSizes() {
         let small = StreamDetails(text: "2160p 10 GB")
         let big = StreamDetails(text: "2160p 40 GB")

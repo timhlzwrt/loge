@@ -90,7 +90,7 @@ final class ScrubPreview {
     func shutDown() {
         guard !isShutDown else { return }
         isShutDown = true
-        command(["quit"], ignoringShutdown: true)
+        command(["quit"], ignoringShutdown: true, asynchronously: true)
     }
 
     private func fetchIfNeeded() {
@@ -100,11 +100,11 @@ final class ScrubPreview {
         isFetching = true
         fetched = wanted
         if isLoaded {
-            command(["seek", String(wanted), "absolute+keyframes"])
+            command(["seek", String(wanted), "absolute+keyframes"], asynchronously: true)
         } else {
             isLoaded = true
             check(mpv_set_property_string(handle, "start", String(wanted)), "start")
-            command(["loadfile", url.absoluteString])
+            command(["loadfile", url.absoluteString], asynchronously: true)
         }
     }
 
@@ -122,6 +122,8 @@ final class ScrubPreview {
         Thread.detachNewThread {
             while let event = mpv_wait_event(handle, -1)?.pointee, event.event_id != MPV_EVENT_SHUTDOWN {
                 switch event.event_id {
+                case MPV_EVENT_COMMAND_REPLY where event.error < 0:
+                    continuation.yield(.failed)
                 case MPV_EVENT_PLAYBACK_RESTART:
                     // A seek has finished and its frame is on the (null) output, even while paused.
                     continuation.yield(.frame(Self.readFrame(handle)))
@@ -144,6 +146,7 @@ final class ScrubPreview {
     }
 
     private func apply(_ event: Event) {
+        guard !isShutDown else { return }
         switch event {
         case .frame(let frame):
             if let frame, wanted != nil { image = frame }
@@ -196,16 +199,17 @@ final class ScrubPreview {
 
     // MARK: - Commands
 
-    private func command(_ args: [String], ignoringShutdown: Bool = false) {
+    private func command(_ args: [String], ignoringShutdown: Bool = false, asynchronously: Bool = false) {
         guard !isShutDown || ignoringShutdown else { return }
         var cArgs: [UnsafeMutablePointer<CChar>?] = args.map { strdup($0) } + [nil]
         defer { cArgs.forEach { free($0) } }
         let status = cArgs.withUnsafeMutableBufferPointer { buffer in
             buffer.baseAddress!.withMemoryRebound(to: UnsafePointer<CChar>?.self, capacity: buffer.count) {
-                mpv_command(handle, $0)
+                asynchronously ? mpv_command_async(handle, 0, $0) : mpv_command(handle, $0)
             }
         }
         check(status, args[0])
+        if status < 0 && asynchronously { apply(.failed) }
     }
 
     private func check(_ status: Int32, _ context: String) {
