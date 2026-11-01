@@ -6,6 +6,9 @@ public struct CatalogSource: Sendable, Hashable, Identifiable {
     public let catalog: AddonManifest.Catalog
     public let defaultGenre: String?
     private let displayTitle: String?
+    /// For addons that draw ratings onto their posters, which don't fit the app's
+    /// plain artwork: their IMDb titles show Cinemeta's artwork instead.
+    var usesCinemetaArtwork = false
 
     public init(manifestURL: String, catalog: AddonManifest.Catalog, title: String? = nil, genre: String? = nil) {
         self.manifestURL = manifestURL
@@ -33,7 +36,8 @@ public struct CatalogSource: Sendable, Hashable, Identifiable {
             extra.append((name: "genre", value: genre))
         }
         if skip > 0 { extra.append((name: "skip", value: String(skip))) }
-        return try await client.catalog(type: catalog.type, id: catalog.id, extra: extra)
+        let metas = try await client.catalog(type: catalog.type, id: catalog.id, extra: extra)
+        return usesCinemetaArtwork ? metas.map(\.withCinemetaArtwork) : metas
     }
 
     static func typeLabel(_ type: String) -> String {
