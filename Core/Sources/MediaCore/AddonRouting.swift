@@ -24,6 +24,7 @@ public struct CatalogSource: Sendable, Hashable, Identifiable {
         displayTitle ?? [catalog.name ?? catalog.id, Self.typeLabel(catalog.type)].joined(separator: " ")
     }
 
+    /// A search in a genre, or by a source fixed to one, returns only titles in that genre.
     /// - Parameter skip: How many items to skip, for loading further pages.
     public func items(search: String? = nil, genre: String? = nil, skip: Int = 0) async throws -> [MetaPreview] {
         let client = try AddonClient(manifestURL: manifestURL)
@@ -33,7 +34,9 @@ public struct CatalogSource: Sendable, Hashable, Identifiable {
             extra.append((name: "genre", value: genre))
         }
         if skip > 0 { extra.append((name: "skip", value: String(skip))) }
-        return try await client.catalog(type: catalog.type, id: catalog.id, extra: extra)
+        let results = try await client.catalog(type: catalog.type, id: catalog.id, extra: extra)
+        guard search != nil, let scope = genre ?? defaultGenre else { return results }
+        return try await Self.narrow(results, to: scope) { try await client.meta(type: $0.type, id: $0.id) }
     }
 
     static func typeLabel(_ type: String) -> String {
