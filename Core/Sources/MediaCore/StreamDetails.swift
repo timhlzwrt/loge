@@ -134,8 +134,12 @@ public struct StreamDetails: Sendable, Equatable {
         if reportedSizes.count == 1, let match = reportedSizes.first,
            let value = Double(match.1.replacingOccurrences(of: ",", with: ".")) {
             let unit: UnitInformationStorage = switch match.2.uppercased() {
-            case "TB", "TIB": .terabytes
-            case "MB", "MIB": .megabytes
+            case "TB": .terabytes
+            case "TIB": .tebibytes
+            case "GB": .gigabytes
+            case "GIB": .gibibytes
+            case "MB": .megabytes
+            case "MIB": .mebibytes
             default: .gigabytes
             }
             size = Measurement(value: value, unit: unit)

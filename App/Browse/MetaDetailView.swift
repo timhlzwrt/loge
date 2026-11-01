@@ -80,10 +80,13 @@ struct MetaDetailView: View {
                 return
             }
             do {
-                state = .loaded(try await client.meta(type: preview.type, id: preview.id))
+                let meta = try await client.meta(type: preview.type, id: preview.id)
+                try Task.checkCancellation()
+                state = .loaded(meta)
             } catch is CancellationError {
                 // Navigated away; nothing to show.
             } catch {
+                guard !Task.isCancelled else { return }
                 state = .failed("Couldn't load the details for \(preview.name).")
             }
         }

@@ -24,7 +24,10 @@ series, catalog grids and source lists use typed navigation destinations.
    keep priority, with built-in Cinemeta fallback for IMDb movie/series IDs.
    Source lists collect provider
    responses, group playable streams, and try the remembered source when asked
-   to autoplay. Torrents without a playable URL are excluded.
+   to autoplay. `StreamCache` joins in-flight source requests and reuses successful
+   lists for ten minutes, including prefetches from details. A canceled source
+   screen cannot autoplay when that shared request later completes.
+   Torrents without a playable URL are excluded.
 5. `PlaybackSession` opens a `PlaybackRequest`, owns the player lifecycle and
    persists progress. `LibraryStore` supplies Continue Watching, My List,
    watched status, remembered sources and Up Next.
@@ -65,7 +68,11 @@ subtitles and episode metadata, and prepares the next episode near the end.
 `MPVPlayer` wraps libmpv, reads events off the main actor and applies observable
 state on the main actor. UI position updates are rounded to whole seconds.
 `MPVVideoView` presents the video layer; `PlayerControls`, `PlayerPanel` and
-`PlayerView` handle interaction and presentation. The vendored MPVKit build
+`PlayerView` handle interaction and presentation. `ScrubPreview` opens a separate,
+silent mpv decoder only when scrubbing starts, then releases it after thirty
+seconds without scrubbing. Transport seeks and preview load/seek/quit commands
+are submitted asynchronously; PiP additionally waits for playback to restart
+before completing AVKit's skip request. The vendored MPVKit build
 contains resize, subtitle and frame-presentation timing patches; see
 `Vendor/MPVKit/README.md` before replacing it. Automatic source choices default
 to a 50 GB per-episode limit for series only, based on explicit video-file sizes.
@@ -114,6 +121,12 @@ preferences while diagnosing a failure.
   estimated runtimes and replay finished estimated items from the beginning.
 - Reject nonfinite progress values, clamp imported fractions and enforce the
   progress limit for manual and remote writes as well as playback writes.
+- Discard canceled source, details and person responses before publishing state;
+  source cancellation also prevents delayed autoplay and fallback changes.
+- Preserve binary file-size units when comparing sources, so GiB and GB sort
+  according to their actual byte counts.
+- Look up unavailable title metadata once per Trakt progress pull, even when
+  several paused episodes belong to that title.
 
 These changes reduce wasted work and bound retained state. No frame-rate,
 memory or launch-time improvement is claimed without profiling.
@@ -136,9 +149,6 @@ old subtitle work cannot attach to a replacement file.
 - Trakt refresh requests can overlap; in-flight authentication/sync work needs
   explicit coordination with sign-out and changed app keys. Add an injectable
   transport and lifecycle tests before changing that flow.
-- Failed metadata lookups during a Trakt pull are not cached for the remainder
-  of that pull, so multiple episodes of an unavailable series can retry the
-  same lookup.
 - Verify tvOS swipe scrubbing, actual subtitle sizing, Picture in Picture and
   audio/session behavior on real devices. Simulator checks cannot establish
   hardware decoder, HDR or Siri Remote touch behavior.

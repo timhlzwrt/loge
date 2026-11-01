@@ -180,3 +180,34 @@ for unknown episode sizes and a No limit setting. Movies remain unrestricted.
 
 See [PLAYBACK_PERFORMANCE.md](PLAYBACK_PERFORMANCE.md)
 for the latest 78-test, simulator, native-binary, actual 4K fixture and build results.
+
+## Focused cleanup — 1 November 2026
+
+Reviewed playback command submission, browsing cancellation, source-size parsing
+and stream caching with three subagents, then reviewed the complete diff. The
+cleanup keeps the existing ownership and dependencies: async transport/preview
+commands, canceled-response guards, correct binary size units, and one missing
+metadata lookup per title per Trakt pull. The stream cache needed no rewrite.
+
+- All 90 Core tests in 13 suites passed, including binary-size conversion and
+  cross-unit source ordering (`/tmp/loge-cleanup-core.log`).
+- iOS Simulator app/test targets compiled; tvOS Simulator and macOS builds
+  succeeded with `SWIFT_TREAT_WARNINGS_AS_ERRORS=YES`. The existing AppIntents
+  metadata-extraction warning remains. Logs: `/tmp/loge-cleanup-ios-final.log`,
+  `/tmp/loge-cleanup-tv.log`, `/tmp/loge-cleanup-mac.log`.
+- The tvOS remote driver passed after restarting its simulator to restore the
+  missing test-manager socket (`/tmp/loge-cleanup-tv-focus-verified.log`). Home
+  and focused artwork were visually inspected in `/tmp/loge-cleanup-tv-app.png`.
+- The new paused/playing transport regression and existing PiP skip regression
+  compiled but did not complete verification. The iPhone simulator was shut down
+  during the transport run; a subsequent runner terminated before starting tests.
+  The first PiP attempt skipped because its button was absent; the test now waits
+  up to ten seconds for availability. These are not counted as passing checks.
+  Logs: `/tmp/loge-cleanup-ios-verified.log`, `/tmp/loge-cleanup-ios-final.log`.
+- `git diff --check` passed. Physical-device 4K/HDR performance, preview thumbnail
+  rendering and live Trakt synchronization were not verified in this follow-up.
+
+The new transport test uses the local 60-second multi-track fixture on port 8766
+and checks actual forward/backward position changes while paused, then continued
+playback after a playing seek. Rerun it and the PiP skip test when simulator
+sessions can remain running for the duration of the checks.
