@@ -99,6 +99,10 @@ Playback menu, VoiceOver labels in the player. From using it: Picture in Picture
 starts after the player closed, search uses only the built-in catalogs, scrub thumbnails and
 keyframe seeks, stream lists fetched while details are open and kept 10 minutes, Cast & Crew
 and Information on details with person pages (a Cinemeta name search; no people database).
+Phase 4 and 2 November: TMDB metadata, filmographies and festival collections (PR #9); both
+devices get a Release build of main every night (`nightly-deploy.sh`); sources load in
+Release builds again (an optimizer bug lost the task group's result); festival queries take
+about a second instead of timing out.
 
 Decisions: MPVKit player (vendored with an AVFoundation video output); addons added as manual
 manifest URLs; cross-device sync via Trakt (not iCloud), with the user's own Trakt app keys
@@ -112,17 +116,17 @@ Next, in plan order:
    extension, which free (personal team) signing likely doesn't allow; confirm before building.
    tvOS swipe-to-scrub and Mac screens beyond Home need checking by hand.
 2. Phase 3: watch history screen.
-3. Phase 4, onto devices: fix the iPhone Release orientation warning, then sideload.
 
 Open from the 2 November list (the rest shipped in PR #9):
 
-- Check on real devices: the player's Close button always closes, the timeline advances
-  (it showed 0:00 throughout), intro/recap/credits skip offers seek correctly (tvOS focus
-  too), and English is picked as the default audio. Fixed in code, never tried on hardware.
+- Check on real devices: the Close button always closes, intro/recap/credits skip offers
+  seek correctly (tvOS focus too), and English is picked as the default audio. Sources and
+  playback with AIOStreams and the advancing timeline are confirmed (simulator and iPhone);
+  close and recap/intro skips passed simulator UI tests.
 - Reviews: critic and Letterboxd reviews are only outbound links; show review text in the app.
   Letterboxd's API excludes personal projects, so it needs another source.
 - Festivals: pages list recorded Wikidata prize winners (up to 40), not the full latest
-  edition's winners; find a fuller source.
+  edition's winners (Sundance's newest is 2024); find a fuller source.
 - Directors: the row is a hand-picked five, not a popularity ranking; consider TMDB's
   popular people filtered to directing. Person pages could also filter acting vs. directing.
 
