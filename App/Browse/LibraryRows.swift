@@ -171,7 +171,7 @@ struct MyListView: View {
 
     var body: some View {
         Group {
-            if library.saved.isEmpty && library.lists.isEmpty {
+            if library.saved.isEmpty && library.lists.isEmpty && library.progress.isEmpty {
                 ContentUnavailableView(
                     "Nothing in Watch Later",
                     systemImage: "plus",
@@ -180,6 +180,9 @@ struct MyListView: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 32) {
+                        if !library.progress.isEmpty {
+                            historyLink
+                        }
                         if !library.savedSeries.isEmpty {
                             section(library.savedSeries) { Text("Watch Later · Series") }
                         }
@@ -190,6 +193,8 @@ struct MyListView: View {
                             section(list.titles) { listMenu(list) }
                         }
                     }
+                    // Keeps History at the leading edge when no wider list fills the row.
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.bottom, 24)
                 }
                 .scrollClipDisabled()
@@ -233,6 +238,25 @@ struct MyListView: View {
                 .padding(.horizontal, Metrics.gutter)
             }
         }
+    }
+
+    /// "History ›", styled like the list titles below it.
+    private var historyLink: some View {
+        NavigationLink(value: HistoryRoute()) {
+            HStack(spacing: 6) {
+                Text("History")
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.bold))
+                    .foregroundStyle(.secondary)
+            }
+            .font(.sectionTitle)
+        }
+        #if !os(tvOS)
+        .foregroundStyle(.white)
+        .buttonStyle(.plain)
+        #endif
+        .fixedSize()
+        .padding(.horizontal, Metrics.gutter)
     }
 
     /// "Horror ⌄": a list's name doubles as the way to rename or delete it.
