@@ -121,11 +121,11 @@ public struct StreamSource: Codable, Sendable, Hashable {
     public var name: String?
     public var title: String?
     public var description: String?
-    /// Direct HTTP(S) link — the only kind v1 plays.
+    /// Direct HTTP(S) media link. Peer-to-peer sources are never playable.
     public var url: String?
-    /// Torrent streams; listed but not playable until a torrent backend exists.
-    public var infoHash: String?
-    public var fileIdx: Int?
+    /// Retained only to reject torrent descriptors, including ones with a URL attached.
+    private var infoHash: String?
+    private var fileIdx: Int?
     public var externalUrl: String?
     /// Subtitles that belong to this particular file, offered alongside its own tracks.
     public var subtitles: [Subtitle]?
@@ -147,10 +147,18 @@ public struct StreamSource: Codable, Sendable, Hashable {
     /// The direct HTTP(S) link, if this source has one. Torrents, YouTube IDs
     /// and external links (which open another app) don't.
     public var playbackURL: URL? {
-        guard let url = url.flatMap(URL.init(string:)), url.scheme == "https" || url.scheme == "http" else {
+        guard infoHash == nil, fileIdx == nil,
+              let url = url.flatMap(URL.init(string:)), Self.isDirectPlaybackURL(url) else {
             return nil
         }
         return url
+    }
+
+    /// Applied again at the player boundary to cover remembered sources as well as addons.
+    public static func isDirectPlaybackURL(_ url: URL) -> Bool {
+        ["https", "http"].contains(url.scheme?.lowercased() ?? "")
+            && url.host?.isEmpty == false
+            && url.pathExtension.lowercased() != "torrent"
     }
 
     /// `name` without the padding addons add to line things up in Stremio's UI:

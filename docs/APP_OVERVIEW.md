@@ -1,14 +1,14 @@
 # Loge: implementation overview
 
-Updated 1 November 2026. Loge is a private SwiftUI streaming app for
+Updated 2 November 2026. See [HANDOFF.md](HANDOFF.md) for the latest batch, verification and remaining work. Loge is a private SwiftUI streaming app for
 iPhone, iPad, Apple TV and Mac. `MediaApp` remains the project, scheme and bundle
 identifier so existing installations keep their data.
 
 ## Application and data flow
 
-`App/MediaApp.swift` creates four observable, main-actor owners and injects them
+`App/MediaApp.swift` creates five observable, main-actor owners and injects them
 through the SwiftUI environment: `AddonStore`, `LibraryStore`, `TraktAccount`
-and `PlaybackSession`. Each browsing tab has its own navigation stack. Movies,
+`PlaybackSession` and `TMDBAccount`. Each browsing tab has its own navigation stack. Movies,
 series, catalog grids and source lists use typed navigation destinations.
 
 1. `AddonStore` loads the installed addon list and cached manifests from
