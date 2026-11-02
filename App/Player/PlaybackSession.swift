@@ -1,5 +1,8 @@
 import MediaCore
 import SwiftUI
+import os
+
+private let log = Logger(subsystem: "li.tjh.MediaApp", category: "playback")
 
 /// The playback in progress, if any. It outlives the player screen, so Picture in Picture
 /// can keep playing after the screen closes and bring it back later. The screen itself is
@@ -28,6 +31,8 @@ final class PlaybackSession {
     /// Found while the file opens; mpv can only add them once it's open.
     @ObservationIgnored private var externalSubtitles: Task<[ExternalSubtitle], Never>?
     @ObservationIgnored private var isOpeningFile = false
+    @ObservationIgnored private var skipLookup: Task<Void, Never>?
+    @ObservationIgnored private var didLookUpSkipSegments = false
     /// Other sources for the same item, best first, tried when one doesn't open.
     @ObservationIgnored private var fallbacks: [PlaybackRequest] = []
     @ObservationIgnored private var openingTimeout: Task<Void, Never>?
@@ -80,8 +85,8 @@ final class PlaybackSession {
     }
 
     func end() {
-        stopPlayback()
         isScreenPresented = false
+        stopPlayback()
         #if !os(macOS)
         UIApplication.shared.isIdleTimerDisabled = false
         #endif
@@ -96,6 +101,8 @@ final class PlaybackSession {
         openingTimeout?.cancel()
         externalSubtitles?.cancel()
         externalSubtitles = nil
+        skipLookup?.cancel()
+        skipLookup = nil
         fallbacks = []
         isTryingAnotherSource = false
         // AVKit can finish stopping after a replacement session has started.
@@ -176,6 +183,9 @@ final class PlaybackSession {
     private func load(_ request: PlaybackRequest) {
         guard let player else { return }
         let episodesChanged = request.item?.metaID != current?.item?.metaID
+        skipLookup?.cancel()
+        skipLookup = nil
+        didLookUpSkipSegments = false
         current = request
         nowPlaying?.show(request)
         next = nil
@@ -183,7 +193,7 @@ final class PlaybackSession {
         hasRememberedSource = false
         lastRecordedPosition = 0
         let defaults = UserDefaults.standard
-        let audio = defaults.string(forKey: PlaybackPreferences.audioKey) ?? ""
+        let audio = defaults.string(forKey: PlaybackPreferences.audioKey) ?? PlaybackPreferences.defaultAudioLanguage
         let subtitles = defaults.string(forKey: PlaybackPreferences.subtitleKey) ?? ""
         isOpeningFile = true
         needsEstimatedSeek = false
@@ -217,6 +227,11 @@ final class PlaybackSession {
             }
         })
         tasks.append(Task { [weak self] in
+            for await _ in Observations({ player.duration }) {
+                self?.lookUpSkipSegmentsIfReady()
+            }
+        })
+        tasks.append(Task { [weak self] in
             for await status in Observations({ player.status }) {
                 self?.statusChanged(status)
             }
@@ -235,6 +250,24 @@ final class PlaybackSession {
         lookUpNextIfDue()
     }
 
+    private func lookUpSkipSegmentsIfReady() {
+        guard !didLookUpSkipSegments, !isOpeningFile, let request = current,
+              let item = request.item, let player, let duration = player.duration,
+              duration.isFinite, duration > 0 else { return }
+        didLookUpSkipSegments = true
+        skipLookup = Task { [weak self] in
+            do {
+                let segments = try await SkipTimingClient().segments(for: item, duration: duration)
+                guard !Task.isCancelled, let self, current == request, self.player === player else { return }
+                player.setCommunitySegments(segments)
+            } catch {
+                guard !Task.isCancelled else { return }
+                // Timing data is optional; playback continues with any embedded chapters.
+                log.error("Community skip timings unavailable: \(error.localizedDescription)")
+            }
+        }
+    }
+
     private func statusChanged(_ status: MPVPlayer.Status) {
         let wasOpeningFile = isOpeningFile
         if isOpeningFile && status != .loading && status != .idle {
@@ -248,6 +281,7 @@ final class PlaybackSession {
         if case .failed = status, wasOpeningFile, tryAnotherSource() {
             return
         }
+        lookUpSkipSegmentsIfReady()
         switch status {
         case .playing:
             rememberSource()

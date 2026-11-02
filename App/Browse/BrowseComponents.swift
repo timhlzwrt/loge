@@ -123,7 +123,7 @@ struct PrimaryButtonStyle: ButtonStyle {
     }
 }
 
-/// Round, icon-only Liquid Glass buttons beside the primary one: My List, Choose a Source.
+/// Round, icon-only Liquid Glass buttons beside the primary one: Watch Later, Choose a Source.
 /// Drawn rather than using the `.glass` button style, which pads the circle beyond the
 /// primary button's height.
 struct GlassIconButtonStyle: ButtonStyle {

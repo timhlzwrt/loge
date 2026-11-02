@@ -29,6 +29,9 @@ struct ContinueWatchingRow: View {
                             #endif
                             .focused($focusedID, equals: entry.item.id)
                             .contextMenu {
+                                SaveToMenu(title: MetaPreview(
+                                    id: entry.item.metaID, type: entry.item.type, name: entry.item.title,
+                                    poster: entry.item.poster, background: entry.item.background))
                                 Button("Remove from Continue Watching", systemImage: "eye.slash") {
                                     library.removeFromContinueWatching(metaID: entry.item.metaID)
                                 }
@@ -112,7 +115,7 @@ private struct ContinueWatchingCard: View {
     }
 }
 
-/// One half of My List, newest first: series, or everything else.
+/// One half of Watch Later, newest first: series, or everything else.
 struct MyListRow: View {
     enum Shelf { case series, movies }
 
@@ -126,7 +129,7 @@ struct MyListRow: View {
         let titles = shelf == .series ? library.savedSeries : library.savedMovies
         if !titles.isEmpty {
             VStack(alignment: .leading, spacing: Metrics.headerSpacing) {
-                Text(shelf == .series ? "My List · Series" : "My List · Movies")
+                Text(shelf == .series ? "Watch Later · Series" : "Watch Later · Movies")
                     .font(.sectionTitle)
                     .padding(.horizontal, Metrics.gutter)
                 ScrollView(.horizontal) {
@@ -160,7 +163,7 @@ struct MyListRow: View {
     }
 }
 
-/// My List as grids, series first, then the user's own lists in the order they were made.
+/// Watch Later as grids, series first, then the user's own lists in the order they were made.
 struct MyListView: View {
     @Environment(LibraryStore.self) private var library
     @State private var renaming: TitleList?
@@ -170,18 +173,18 @@ struct MyListView: View {
         Group {
             if library.saved.isEmpty && library.lists.isEmpty {
                 ContentUnavailableView(
-                    "Nothing on My List",
+                    "Nothing in Watch Later",
                     systemImage: "plus",
-                    description: Text("Add a title with the + button on its page.")
+                    description: Text("The + button saves to Watch Later. Hold a poster to choose a list.")
                 )
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 32) {
                         if !library.savedSeries.isEmpty {
-                            section(library.savedSeries) { Text("Series") }
+                            section(library.savedSeries) { Text("Watch Later · Series") }
                         }
                         if !library.savedMovies.isEmpty {
-                            section(library.savedMovies) { Text("Movies") }
+                            section(library.savedMovies) { Text("Watch Later · Movies") }
                         }
                         ForEach(library.lists) { list in
                             section(list.titles) { listMenu(list) }
@@ -194,7 +197,7 @@ struct MyListView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.canvas)
-        .navigationTitle("My List")
+        .navigationTitle("My Lists")
         .alert("Rename List", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("Name", text: $name)
             Button("Rename") {
@@ -268,19 +271,14 @@ struct ListsMenu: View {
 
     var body: some View {
         Menu {
-            ForEach(library.lists) { list in
-                Toggle(list.name, isOn: Binding(
-                    get: { library.isInList(title.id, list: list.id) },
-                    set: { _ in library.toggle(title, inList: list.id) }
-                ))
-            }
+            ListMembershipActions(title: title)
             Button("New List…", systemImage: "plus") {
                 name = ""
                 isNaming = true
             }
         } label: {
             // Not a bulleted list: "Choose a Source" sits beside it with one.
-            Label("Add to a List", systemImage: "rectangle.stack.badge.plus")
+            Label("Save to", systemImage: "rectangle.stack.badge.plus")
         }
         .menuIndicator(.hidden)
         .buttonStyle(GlassIconButtonStyle())
@@ -292,6 +290,35 @@ struct ListsMenu: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("\(title.name) goes on it.")
+        }
+    }
+}
+
+/// A poster's long press uses the same memberships as the detail page's list button.
+struct SaveToMenu: View {
+    let title: MetaPreview
+
+    var body: some View {
+        Menu("Save to", systemImage: "rectangle.stack.badge.plus") {
+            ListMembershipActions(title: title)
+        }
+    }
+}
+
+private struct ListMembershipActions: View {
+    let title: MetaPreview
+    @Environment(LibraryStore.self) private var library
+
+    var body: some View {
+        Toggle("Watch Later", isOn: Binding(
+            get: { library.isSaved(title.id) },
+            set: { _ in library.toggleSaved(title) }
+        ))
+        ForEach(library.lists) { list in
+            Toggle(list.name, isOn: Binding(
+                get: { library.isInList(title.id, list: list.id) },
+                set: { _ in library.toggle(title, inList: list.id) }
+            ))
         }
     }
 }

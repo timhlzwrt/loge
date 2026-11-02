@@ -226,5 +226,6 @@ struct PosterTile: View {
         .clipShape(.rect(cornerRadius: Metrics.posterRadius))
         .accessibilityElement()
         .accessibilityLabel(meta.name)
+        .contextMenu { SaveToMenu(title: meta) }
     }
 }
