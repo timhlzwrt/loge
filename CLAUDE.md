@@ -43,15 +43,19 @@ xcodebuild -project MediaApp.xcodeproj -scheme MediaApp -destination 'generic/pl
 # also: 'generic/platform=tvOS Simulator' and 'platform=macOS'
 Tools/build-ipa.sh [iOS|tvOS]                       # unsigned .ipa files in .build/ipa
 Tools/install-tv.sh                                 # build tvOS, install on the Apple TV via atvloadly
-Tools/run-device.sh [--console]                     # build, install, launch on the USB iPhone/iPad
+Tools/run-device.sh [--console|--no-launch]         # build, install, launch on the iPhone/iPad
+DEVICE=<udid> Tools/nightly-deploy.sh --install     # nightly install of main on both (launchd)
 ```
 
 `run-device.sh` signs with the free Personal Team signed in to Xcode (Settings > Accounts);
 the phone needs Developer Mode on (Settings > Privacy & Security) and the developer trusted
 once (Settings > General > VPN & Device Management). Free installs expire after 7 days.
 
-Devices are installed without a paid account: Sideloadly (iPhone/iPad) and atvloadly
-(Apple TV) sign the `.ipa` files with a free Apple ID and refresh them before the 7 days run out.
+Devices are installed without a paid account. `nightly-deploy.sh` runs at 02:30 from launchd
+in its own checkout (`.build/nightly` of the main repo): when origin/main moved it installs a
+Release build on the Apple TV via `install-tv.sh` and on the iPhone over Wi-Fi via
+`run-device.sh`, and it reinstalls the iPhone after 5 days so the free signature never lapses.
+It logs to `~/Library/Logs/Loge-nightly.log` and shows a notification when an install fails.
 atvloadly runs on the home Proxmox server (CT 107, `http://192.168.178.115:5533`, set up in the
 separate infrastructure repo); it re-signs every night 03:00–06:30, and `install-tv.sh` uploads a
 new build to it. A free Apple ID allows 3 sideloaded apps at once across Xcode, Sideloadly and

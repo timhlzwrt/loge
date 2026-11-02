@@ -52,9 +52,11 @@ HLS, header-protected, broken, torrent).
 
 ## Getting it onto devices
 
-There's no paid developer account. `Tools/build-ipa.sh` writes unsigned `.ipa`
-files to `.build/ipa`; Sideloadly (iPhone/iPad) and atvloadly (Apple TV) sign
-them with a free Apple ID and refresh them before the seven days run out.
+There's no paid developer account. `Tools/nightly-deploy.sh` installs the latest
+`main` every night: on the iPhone over Wi-Fi with Xcode's free Personal Team, and on
+the Apple TV through atvloadly, which re-signs it before the seven days run out. Set
+it up once with `DEVICE=<udid> Tools/nightly-deploy.sh --install`.
+`Tools/build-ipa.sh` writes unsigned `.ipa` files to `.build/ipa` for sideloading by hand.
 
 ## What's where
 

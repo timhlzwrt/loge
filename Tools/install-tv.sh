@@ -36,10 +36,10 @@ fi
 ipa=${IPA:-.build/ipa/Loge-tvOS.ipa}
 [[ -n ${IPA:-} ]] || Tools/build-ipa.sh tvOS
 
-# atvloadly keeps one record per app and device, named after the uploaded file; it changes when
-# the install finishes.
-record='[.[] | select(.device_class == "AppleTV" and .ipa_name == $name)] | first'
-before=$(api "$server/api/apps" | jq -c --arg name "${ipa:t}" "$record")
+# atvloadly keeps one record per app and device; it changes when the install finishes.
+bundle_id=$(unzip -p "$ipa" 'Payload/*.app/Info.plist' | plutil -extract CFBundleIdentifier raw -)
+record='[.[] | select(.device_class == "AppleTV" and .bundle_identifier == $id)] | first'
+before=$(api "$server/api/apps" | jq -c --arg id "$bundle_id" "$record")
 
 echo "Uploading $(du -h "$ipa" | cut -f1) to $server…"
 api -F "file=@$ipa" -F "account=$account" "$server/api/install" | jq -r '"Installing on \(.device)…"'
@@ -50,7 +50,7 @@ for _ in {1..120}; do
     [[ $installing == 0 ]] && break
 done
 
-after=$(api "$server/api/apps" | jq -c --arg name "${ipa:t}" "$record")
+after=$(api "$server/api/apps" | jq -c --arg id "$bundle_id" "$record")
 # A failed install only leaves its reason in the log.
 if [[ $after == null || $after == "$before" ]]; then
     echo "The install failed or did not finish; atvloadly's log at $server says why." >&2
