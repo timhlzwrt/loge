@@ -104,7 +104,10 @@ public final class AddonStore {
                 group.addTask {
                     do {
                         let client = try AddonClient(manifestURL: addon.manifestURL)
-                        return (addon.id, .success(try await loadManifest(client)))
+                        // Awaited on its own line, as in SourcesView: wrapped directly in
+                        // `.success(...)`, Release builds lost the task group's result.
+                        let manifest = try await loadManifest(client)
+                        return (addon.id, .success(manifest))
                     } catch {
                         return (addon.id, .failure(error))
                     }
