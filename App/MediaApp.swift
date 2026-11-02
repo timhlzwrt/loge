@@ -1,5 +1,8 @@
 import MediaCore
 import SwiftUI
+#if os(tvOS)
+import TVServices
+#endif
 
 @main
 struct MediaApp: App {
@@ -34,6 +37,18 @@ struct MediaApp: App {
         // Artwork is fetched through the shared session; the default cache is too
         // small to keep a screen of posters, so scrolling back re-downloads them.
         URLCache.shared = URLCache(memoryCapacity: 64 * 1024 * 1024, diskCapacity: 512 * 1024 * 1024)
+
+        #if os(tvOS)
+        // Top Shelf feasibility test: the extension shows this if the App Group is shared.
+        if let group = AppGroup.identifier {
+            let marker = "Loge wrote this \(Date.now.formatted(date: .omitted, time: .shortened))"
+            UserDefaults(suiteName: group)?.set(marker, forKey: AppGroup.testKey)
+            if let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group) {
+                try? marker.write(to: container.appending(path: AppGroup.testFile), atomically: true, encoding: .utf8)
+            }
+        }
+        TVTopShelfContentProvider.topShelfContentDidChange()
+        #endif
     }
 
     var body: some Scene {

@@ -18,7 +18,9 @@ targets:
   MediaApp:
     type: application
     supportedDestinations: [iOS, tvOS, macOS]
-    sources: [App]
+    sources:
+      - App
+      - TopShelf/AppGroup.swift
     # Merged with the generated Info.plist; holds keys that have no build setting.
     info:
       path: App/Info.plist
@@ -29,6 +31,8 @@ targets:
       - package: MediaCore
       - package: MPVKit
         product: MPVKit
+      - target: TopShelf
+        destinationFilters: [tvOS]
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
@@ -51,6 +55,27 @@ targets:
     scheme:
       testTargets:
         - MediaAppUITests
+
+  # Feasibility test: does a sideloaded Top Shelf extension share an App Group with the app?
+  TopShelf:
+    type: tv-app-extension
+    platform: tvOS
+    sources: [TopShelf]
+    # XcodeGen writes this file from the properties below.
+    info:
+      path: TopShelf/Info.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.tv-top-shelf
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ContentProvider
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: li.tjh.MediaApp.TopShelf
+        PRODUCT_NAME: TopShelf
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: 1
+        SWIFT_VERSION: "6.0"
 
   # Manual UI checks: a remote driver for the Apple TV simulator and on-demand player tests.
   MediaAppUITests:
