@@ -65,9 +65,13 @@ struct SettingsView: View {
 
             TraktSection()
 
+            TMDBSection()
+
             PlaybackSettingsSection()
 
             AccentSettingsSection()
+
+            TMDBCreditsSection()
         }
         #if !os(tvOS)
         .scrollContentBackground(.hidden)

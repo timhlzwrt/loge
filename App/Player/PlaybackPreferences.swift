@@ -4,6 +4,7 @@ import SwiftUI
 /// The user's preferred audio and subtitle languages, stored as ISO 639-1 codes.
 enum PlaybackPreferences {
     static let audioKey = "audioLanguage"
+    static let defaultAudioLanguage = "en"
     static let subtitleKey = "subtitleLanguage"
     static let subtitleScaleKey = "subtitleScale"
     static let maximumSourceSizeKey = "maximumAutomaticSourceGigabytes"
@@ -27,7 +28,7 @@ enum PlaybackPreferences {
 }
 
 struct PlaybackSettingsSection: View {
-    @AppStorage(PlaybackPreferences.audioKey) private var audioLanguage = ""
+    @AppStorage(PlaybackPreferences.audioKey) private var audioLanguage = PlaybackPreferences.defaultAudioLanguage
     @AppStorage(PlaybackPreferences.subtitleKey) private var subtitleLanguage = ""
     @AppStorage(PlaybackPreferences.maximumSourceSizeKey) private var maximumSourceGigabytes = PlaybackPreferences.defaultMaximumSourceGigabytes
 

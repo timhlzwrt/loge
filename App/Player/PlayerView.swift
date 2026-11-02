@@ -38,11 +38,13 @@ struct PlayerView: View {
     @Environment(PlaybackSession.self) private var session
     #if os(tvOS)
     @FocusState private var surfaceFocused: Bool
+    @FocusState private var skipFocused: Bool
     @State private var scrubStart: Double?
     /// Info, Subtitles and Audio, shown by swiping down.
     @State private var isPanelShown = false
     #endif
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dismiss) private var dismiss
 
     private var player: MPVPlayer? { session.player }
 
@@ -81,11 +83,14 @@ struct PlayerView: View {
                             scrubPreview: scrubPreview?.image,
                             isMenuOpen: $isMenuOpen,
                             adjustingTiming: $adjustingTiming,
-                            onClose: { session.end() },
+                            onClose: closePlayback,
                             onChooseSource: chooseSource(for: current),
                             onInteract: showControls
                         )
                         .transition(.opacity)
+                    }
+                    if let skip = player.availableSkip, player.status != .ended {
+                        skipOffer(skip, player: player)
                     }
                     #if os(tvOS)
                     if isPanelShown {
@@ -107,6 +112,15 @@ struct PlayerView: View {
         .onDisappear {
             scrubPreview = nil
             session.screenDidDisappear()
+        }
+        .onChange(of: session.current) { _, _ in
+            scrubPosition = nil
+            scrubPreview = nil
+            adjustingTiming = nil
+            #if os(tvOS)
+            scrubStart = nil
+            #endif
+            showControls()
         }
         .onChange(of: scrubPosition) { _, position in
             guard let position, let current = session.current else { return }
@@ -171,7 +185,9 @@ struct PlayerView: View {
             showControls()
         }
         // Menu closes the panel first; without it, Menu leaves the player as usual.
-        .onExitCommand(perform: isPanelShown ? { isPanelShown = false } : nil)
+        .onExitCommand {
+            if isPanelShown { isPanelShown = false } else { closePlayback() }
+        }
         .onChange(of: isPanelShown) { _, shown in
             isMenuOpen = shown
             if !shown { surfaceFocused = true }
@@ -210,7 +226,7 @@ struct PlayerView: View {
         // Hiding the controls removes the menus; if one had focus, nothing would be
         // left to receive remote presses.
         .onChange(of: controlsVisible) { _, visible in
-            if !visible { surfaceFocused = true }
+            if !visible && !skipFocused { surfaceFocused = true }
         }
         .background {
             RemoteSwipeReader(
@@ -258,7 +274,7 @@ struct PlayerView: View {
         })
         .simultaneousGesture(DragGesture(minimumDistance: 40).onEnded { value in
             if value.translation.height > 120 && abs(value.translation.width) < 80 {
-                session.end()
+                closePlayback()
             }
         })
         #endif
@@ -312,6 +328,44 @@ struct PlayerView: View {
         #endif
     }
 
+    private func skipOffer(_ skip: PlaybackChapter.Skip, player: MPVPlayer) -> some View {
+        Button(skip.kind.rawValue) {
+            player.seek(to: skip.end)
+            showControls()
+        }
+        .font(.subheadline.weight(.semibold))
+        .frame(minHeight: 44)
+        .buttonStyle(.glass)
+        .buttonBorderShape(.capsule)
+        #if os(tvOS)
+        .focused($skipFocused)
+        .onChange(of: skipFocused) { _, focused in if focused { showControls() } }
+        .onDisappear { if !isPanelShown { surfaceFocused = true } }
+        #endif
+        // Keep the offer visible while transport controls hide, clear of their bars and Up Next.
+        .padding(.horizontal, 24)
+        .padding(.bottom, skipBottomPadding(player))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+    }
+
+    private func skipBottomPadding(_ player: MPVPlayer) -> CGFloat {
+        let hasNextOffer = session.next != nil && showsNextEpisode(player)
+        #if os(tvOS)
+        return hasNextOffer ? 320 : (controlsVisible ? 200 : 48)
+        #elseif os(macOS)
+        return hasNextOffer || adjustingTiming != nil ? 240 : (controlsVisible ? 100 : 32)
+        #else
+        return hasNextOffer ? 240 : (controlsVisible ? 160 : 32)
+        #endif
+    }
+
+    private func closePlayback() {
+        session.end()
+        // Dismiss the presenting cover/window as well as clearing the session. This
+        // also works when its presentation binding is already false during teardown.
+        dismiss()
+    }
+
     private func showControls() {
         controlsVisible = true
         lastInteraction = .now
@@ -336,7 +390,7 @@ struct PlayerView: View {
                 Button("Choose another source", action: choose)
                     .padding(.top, 8)
             }
-            Button("Close") { session.end() }
+            Button("Close", action: closePlayback)
                 .padding(.top, 8)
         }
         .multilineTextAlignment(.center)

@@ -80,6 +80,7 @@ struct PlayerControls: View {
                     .frame(width: 44, height: 44)
                     .buttonStyle(.glass)
                     .buttonBorderShape(.circle)
+                    .simultaneousGesture(DragGesture(minimumDistance: 0).onChanged { _ in onInteract() })
                 Text(title)
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(2)

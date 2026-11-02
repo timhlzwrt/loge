@@ -97,7 +97,7 @@ struct AddonClientTests {
         #expect(streams.count == 2)
         #expect(streams[0].url != nil)
         #expect(streams[0].behaviorHints?.proxyHeaders?.request?["User-Agent"] == "Example/1.0")
-        #expect(streams[1].url == nil && streams[1].infoHash != nil)
+        #expect(streams[1].url == nil && streams[1].playbackURL == nil)
         #expect(streams[0].subtitles == [Subtitle(id: "s1", url: "https://debrid.example/subs/en.srt", lang: "eng")])
         #expect(streams[1].subtitles == nil)
     }
@@ -121,5 +121,22 @@ struct AddonClientTests {
         var external = streams[0]
         external.url = "magnet:?xt=urn:btih:0123"
         #expect(external.playbackURL == nil)
+    }
+
+    @Test func rejectsTorrentDescriptorsEvenWithDirectLinks() throws {
+        for descriptor in [#""infoHash":"0123""#, #""fileIdx":0"#] {
+            let json = "{\"url\":\"https://example.com/video.mkv\",\(descriptor)}"
+            let source = try JSONDecoder().decode(StreamSource.self, from: Data(json.utf8))
+            #expect(source.playbackURL == nil)
+        }
+    }
+
+    @Test func rejectsNonMediaPlaybackURLs() throws {
+        for string in ["magnet:?xt=urn:btih:0123", "file:///tmp/video.mp4", "https:///video.mp4",
+                       "https://example.com/movie.TORRENT?download=1", "ftp://example.com/video.mkv"] {
+            let url = try #require(URL(string: string))
+            #expect(!StreamSource.isDirectPlaybackURL(url))
+        }
+        #expect(StreamSource.isDirectPlaybackURL(URL(string: "https://example.com/video.mkv")!))
     }
 }

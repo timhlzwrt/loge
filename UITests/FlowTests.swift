@@ -67,7 +67,12 @@ final class FlowTests: XCTestCase {
         movie.tap()
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'IMDb '")).firstMatch
             .waitForExistence(timeout: 15))
-        XCTAssertTrue(app.links["Letterboxd"].exists || app.buttons["Letterboxd"].exists)
+        let reviews = app.links["Letterboxd reviews"]
+        for _ in 0..<5 {
+            if reviews.exists && reviews.isHittable { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(reviews.exists || app.buttons["Letterboxd reviews"].exists)
         screenshot("builtin-movie-ratings")
     }
 
@@ -170,6 +175,24 @@ final class FlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["Season"].waitForExistence(timeout: 5),
                       "Closing the player didn't return to the details screen")
         screenshot("after-close")
+    }
+
+    @MainActor
+    func testPlaybackTimelineAdvances() {
+        startPlayback(series: "Slow Horses")
+        XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 20))
+        let slider = app.sliders["Playback position"]
+        XCTAssertTrue(slider.waitForExistence(timeout: 5))
+        let initial = slider.value as? String
+        XCTAssertNotNil(initial)
+        // Pause keeps the controls visible after the auto-hide deadline and samples the real clock.
+        sleep(3)
+        if !app.buttons["Pause"].exists { app.tap() }
+        app.buttons["Pause"].tap()
+        XCTAssertNotEqual(slider.value as? String, initial, "Timeline stayed frozen during playback")
+        screenshot("advancing-timeline")
+        app.buttons["Close"].tap()
+        XCTAssertTrue(app.buttons["Season"].waitForExistence(timeout: 5))
     }
 
     @MainActor
@@ -651,13 +674,14 @@ final class FlowTests: XCTestCase {
     @MainActor
     private func installTestAddonIfNeeded(name: String = "Test Streams", manifestURL: String = "http://127.0.0.1:8765/manifest.json") {
         openTab("Settings")
-        guard !app.staticTexts[name].waitForExistence(timeout: 5) else { return }
+        let installedName = name == "Test Streams" ? ProcessInfo.processInfo.environment["PLAYBACK_TEST_ADDON_NAME"] ?? name : name
+        guard !app.staticTexts[installedName].waitForExistence(timeout: 5) else { return }
         let field = app.textFields["Manifest URL"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         field.tap()
         let url = name == "Test Streams" ? ProcessInfo.processInfo.environment["PLAYBACK_TEST_ADDON_URL"] ?? manifestURL : manifestURL
         field.typeText(url + "\n")
-        XCTAssertTrue(app.staticTexts[name].waitForExistence(timeout: 10), "Test addon didn't install")
+        XCTAssertTrue(app.staticTexts[installedName].waitForExistence(timeout: 10), "Test addon didn't install")
     }
 
     @MainActor

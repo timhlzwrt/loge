@@ -3,7 +3,7 @@ name: MediaApp
 options:
   bundleIdPrefix: li.tjh
   deploymentTarget:
-    iOS: "27.0"
+    iOS: "26.0"
     tvOS: "27.0"
     macOS: "27.0"
 
@@ -38,6 +38,7 @@ targets:
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         # Landscape for full-screen video; portrait for browsing.
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
         MARKETING_VERSION: "0.1"
         CURRENT_PROJECT_VERSION: 1
         SWIFT_VERSION: "6.0"
