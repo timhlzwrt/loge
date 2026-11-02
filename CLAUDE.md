@@ -103,6 +103,7 @@ Phase 4 and 2 November: TMDB metadata, filmographies and festival collections (P
 devices get a Release build of main every night (`nightly-deploy.sh`); sources load in
 Release builds again (an optimizer bug lost the task group's result); festival queries take
 about a second instead of timing out.
+Phase 3: History (My Lists > History), every played or marked-watched item by day.
 
 Decisions: MPVKit player (vendored with an AVFoundation video output); addons added as manual
 manifest URLs; cross-device sync via Trakt (not iCloud), with the user's own Trakt app keys
@@ -115,7 +116,6 @@ Next, in plan order:
 1. Phase 2 leftovers: tvOS Top Shelf with Continue Watching needs an App Group shared with an
    extension, which free (personal team) signing likely doesn't allow; confirm before building.
    tvOS swipe-to-scrub and Mac screens beyond Home need checking by hand.
-2. Phase 3: watch history screen.
 
 Open from the 2 November list (the rest shipped in PR #9):
 
