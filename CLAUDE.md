@@ -110,6 +110,18 @@ Next, in plan order:
 2. Phase 3: watch history screen.
 3. Phase 4, onto devices: fix the iPhone Release orientation warning, then sideload.
 
+Open from the 2 November list (the rest shipped in PR #9):
+
+- Check on real devices: the player's Close button always closes, the timeline advances
+  (it showed 0:00 throughout), intro/recap/credits skip offers seek correctly (tvOS focus
+  too), and English is picked as the default audio. Fixed in code, never tried on hardware.
+- Reviews: critic and Letterboxd reviews are only outbound links; show review text in the app.
+  Letterboxd's API excludes personal projects, so it needs another source.
+- Festivals: pages list recorded Wikidata prize winners (up to 40), not the full latest
+  edition's winners; find a fuller source.
+- Directors: the row is a hand-picked five, not a popularity ranking; consider TMDB's
+  popular people filtered to directing. Person pages could also filter acting vs. directing.
+
 Untested so far: playback and Picture in Picture on tvOS and macOS, HDR output and tvOS display
 matching (need real hardware), Trakt against the live API, tvOS swipe-to-scrub, Mac screens
 beyond Home, the scrub preview on screen. iPhone simulators report Picture in Picture as unsupported; use an iPad simulator.
