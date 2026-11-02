@@ -8,12 +8,18 @@ public struct Person: Sendable, Hashable, Identifiable {
 
     public var name: String
     public var roles: [Role]
+    public var tmdbID: Int?
+    public var portraitURL: String?
+    public var character: String?
 
-    public var id: String { name }
+    public var id: String { tmdbID.map { "tmdb:\($0)" } ?? name }
 
-    public init(name: String, roles: [Role]) {
+    public init(name: String, roles: [Role], tmdbID: Int? = nil, portraitURL: String? = nil, character: String? = nil) {
         self.name = name
         self.roles = roles
+        self.tmdbID = tmdbID
+        self.portraitURL = portraitURL
+        self.character = character
     }
 
     /// The titles among name-search results that credit this person, newest first, plus the

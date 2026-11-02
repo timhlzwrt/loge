@@ -45,6 +45,17 @@ final class MPVPlayer {
     private(set) var position: Double = 0
     private(set) var duration: Double?
     private(set) var tracks: [Track] = []
+    private(set) var chapters: [PlaybackChapter] = []
+    private(set) var communitySegments: [PlaybackSegment] = []
+
+    var availableSkip: PlaybackChapter.Skip? {
+        PlaybackChapter.skip(at: position, chapters: chapters, duration: duration)
+            ?? communitySegments.compactMap { $0.skip(at: position, duration: duration) }.first
+    }
+
+    func setCommunitySegments(_ segments: [PlaybackSegment]) {
+        communitySegments = segments
+    }
     private(set) var speed = 1.0
     private(set) var isZoomedToFill = false
     /// The playing video's frame rate and dynamic range, for Apple TV to switch the display to.
@@ -158,6 +169,7 @@ final class MPVPlayer {
     @ObservationIgnored private var pendingSeeks: [SeekOperation] = []
     @ObservationIgnored private var activeSeek: (id: UInt64, operation: SeekOperation, started: Bool)?
     @ObservationIgnored private var seekTimeout: Task<Void, Never>?
+    @ObservationIgnored private var progressRefresh: Task<Void, Never>?
 
     init() {
         // mpv_create only fails when allocation fails.
@@ -206,10 +218,23 @@ final class MPVPlayer {
         mpv_observe_property(handle, 0, "time-pos", MPV_FORMAT_DOUBLE)
         mpv_observe_property(handle, 0, "duration", MPV_FORMAT_DOUBLE)
         mpv_observe_property(handle, 0, "track-list", MPV_FORMAT_NODE)
+        mpv_observe_property(handle, 0, "chapter-list", MPV_FORMAT_NODE)
         // Video format is read through its sub-properties when it changes.
         mpv_observe_property(handle, 0, "video-params", MPV_FORMAT_NONE)
 
         startEventThread()
+        // Keep the timeline fresh even if a source stops emitting property-change events.
+        // Async reads keep a stalled network source off the main actor.
+        progressRefresh = Task { [weak self] in
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(1)) } catch { return }
+                guard let self, !isShutDown else { return }
+                if case .loaded = loadState {
+                    check(mpv_get_property_async(handle, 0, "time-pos", MPV_FORMAT_DOUBLE), "time-pos")
+                    check(mpv_get_property_async(handle, 0, "duration", MPV_FORMAT_DOUBLE), "duration")
+                }
+            }
+        }
     }
 
     isolated deinit {
@@ -229,6 +254,10 @@ final class MPVPlayer {
         subtitleLanguage: String? = nil
     ) {
         guard !isShutDown else { return }
+        guard StreamSource.isDirectPlaybackURL(url) else {
+            loadState = .failed("only direct HTTP or HTTPS video sources are supported")
+            return
+        }
         trackOperations = []
         trackError = nil
         playbackInfo = PlaybackInfo()
@@ -237,6 +266,9 @@ final class MPVPlayer {
         position = 0
         duration = nil
         tracks = []
+        chapters = []
+        communitySegments = []
+        exactPosition = 0
         if let activeTrackOperation {
             // Finish or abort the old file's subtitle load before issuing the next loadfile.
             pendingLoad = { [weak self] in
@@ -395,6 +427,8 @@ final class MPVPlayer {
     func shutDown() {
         guard !isShutDown else { return }
         isShutDown = true
+        progressRefresh?.cancel()
+        progressRefresh = nil
         cancelSeeks()
         trackOperations = []
         pendingLoad = nil
@@ -415,6 +449,7 @@ final class MPVPlayer {
         case integer(String, Int64)
         case string(String, String)
         case tracks([Track])
+        case chapters([PlaybackChapter])
         case videoFormat(VideoFormat?)
     }
 
@@ -476,6 +511,10 @@ final class MPVPlayer {
                 guard property.format == MPV_FORMAT_NODE, let data = property.data else { return .tracks([]) }
                 return .tracks(readTracks(data.load(as: mpv_node.self)))
             }
+            if name == "chapter-list" {
+                guard property.format == MPV_FORMAT_NODE, let data = property.data else { return .chapters([]) }
+                return .chapters(readChapters(data.load(as: mpv_node.self)))
+            }
             if name == "video-params" {
                 return .videoFormat(readVideoFormat(handle))
             }
@@ -519,6 +558,33 @@ final class MPVPlayer {
         return VideoFormat(width: width, height: height,
                            frameRate: string("container-fps").flatMap(Double.init),
                            dynamicRange: dynamicRange)
+    }
+
+    private nonisolated static func readChapters(_ node: mpv_node) -> [PlaybackChapter] {
+        guard node.format == MPV_FORMAT_NODE_ARRAY, let list = node.u.list?.pointee,
+              list.num > 0, let values = list.values else { return [] }
+        return (0..<Int(list.num)).compactMap { index in
+            let entry = values[index]
+            guard entry.format == MPV_FORMAT_NODE_MAP, let fields = entry.u.list?.pointee,
+                  fields.num > 0, let keys = fields.keys, let values = fields.values else { return nil }
+            var title: String?
+            var start: Double?
+            for field in 0..<Int(fields.num) {
+                guard let key = keys[field] else { continue }
+                switch String(cString: key) {
+                case "title" where values[field].format == MPV_FORMAT_STRING:
+                    title = values[field].u.string.map { String(cString: $0) }
+                case "time" where values[field].format == MPV_FORMAT_DOUBLE:
+                    start = values[field].u.double_
+                case "time" where values[field].format == MPV_FORMAT_INT64:
+                    start = Double(values[field].u.int64)
+                default: break
+                }
+            }
+            guard let start else { return nil }
+            // Untitled chapters still end the preceding intro or recap.
+            return PlaybackChapter(title: title ?? "", start: start)
+        }
     }
 
     private nonisolated static func readTracks(_ node: mpv_node) -> [Track] {
@@ -598,7 +664,8 @@ final class MPVPlayer {
         case .double("time-pos", let value):
             // mpv reports every frame; whole seconds are enough for the UI and
             // avoid redrawing the controls 24+ times a second.
-            exactPosition = value ?? 0
+            guard let value, value.isFinite, value >= 0 else { return }
+            exactPosition = value
             let seconds = exactPosition.rounded(.down)
             if seconds != position {
                 position = seconds
@@ -606,7 +673,9 @@ final class MPVPlayer {
             // The clock extrapolates elapsed time; its rate changes only with state or speed.
             return
         case .double("duration", let value):
-            duration = value
+            if let value, value.isFinite, value > 0 { duration = value }
+        case .chapters(let value):
+            if value != chapters { chapters = value }
         case .tracks(let value):
             if value != tracks { tracks = value }
         case .videoFormat(let value):

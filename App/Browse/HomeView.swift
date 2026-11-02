@@ -20,6 +20,8 @@ struct HomeView: View {
                 ForEach(sources.prefix(3)) { CatalogRow(source: $0) }
                 GenreRow()
                 ForEach(sources.dropFirst(3)) { CatalogRow(source: $0) }
+                DiscoveryCollectionRow(title: "Film Festivals", collections: FilmCollection.festivals)
+                DiscoveryCollectionRow(title: "Popular Directors", collections: FilmCollection.directors)
             }
             .padding(.bottom, 32)
             .id(refreshID)
@@ -78,12 +80,16 @@ private func prefetchArtwork(of sources: [CatalogSource]) async {
 /// Like the TV app: the focused poster's backdrop fills the screen and its
 /// details sit above the rows, so browsing doesn't require opening anything.
 private struct TVHome: View {
+    @Environment(TMDBAccount.self) private var tmdb
     let sources: [CatalogSource]
     @State private var focused: MetaPreview?
+    @State private var focusedCollection: FilmCollection?
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            Artwork(url: focused?.featuredBackground)
+            Artwork(url: focusedCollection == nil ? focused?.featuredBackground : nil)
+                .id(focusedCollection?.id)
+                .opacity(focusedCollection == nil ? 1 : 0)
                 .ignoresSafeArea()
                 .overlay {
                     // Darken the left and bottom, where the text and rows sit.
@@ -100,29 +106,62 @@ private struct TVHome: View {
                     .frame(height: 400, alignment: .bottomLeading)
                     .padding(.horizontal, Metrics.gutter)
                     .padding(.bottom, 40)
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 24) {
-                        ContinueWatchingRow { focused = $0 }
-                        MyListRow(shelf: .series) { focused = $0 }
-                        MyListRow(shelf: .movies) { focused = $0 }
-                        ForEach(sources.prefix(3)) { source in
-                            CatalogRow(source: source, isPrimary: source == sources.first) { focused = $0 }
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 24) {
+                            ContinueWatchingRow {
+                                focused = $0
+                                focusedCollection = nil
+                            }
+                            MyListRow(shelf: .series) {
+                                focused = $0
+                                focusedCollection = nil
+                            }
+                            MyListRow(shelf: .movies) {
+                                focused = $0
+                                focusedCollection = nil
+                            }
+                            ForEach(sources.prefix(3)) { source in
+                                CatalogRow(source: source, isPrimary: source == sources.first) {
+                                    focused = $0
+                                    focusedCollection = nil
+                                }
+                            }
+                            GenreRow()
+                            ForEach(sources.dropFirst(3)) { source in
+                                CatalogRow(source: source) {
+                                    focused = $0
+                                    focusedCollection = nil
+                                }
+                            }
+                            DiscoveryCollectionRow(title: "Film Festivals", collections: FilmCollection.festivals) {
+                                focusedCollection = $0
+                                proxy.scrollTo("festival-row", anchor: .top)
+                            }
+                            .id("festival-row")
+                            DiscoveryCollectionRow(title: "Popular Directors", collections: FilmCollection.directors) {
+                                focusedCollection = $0
+                                proxy.scrollTo("director-row", anchor: .top)
+                            }
+                            .id("director-row")
                         }
-                        GenreRow()
-                        ForEach(sources.dropFirst(3)) { source in
-                            CatalogRow(source: source) { focused = $0 }
-                        }
+                        .scrollTargetLayout()
+                        .padding(.bottom, 60)
                     }
-                    .scrollTargetLayout()
-                    .padding(.bottom, 60)
+                    // Moving focus down a row scrolls by whole rows, so the focused row keeps its title.
+                    .scrollTargetBehavior(.viewAligned)
                 }
-                // Moving focus down a row scrolls by whole rows, so the focused row keeps its title.
-                .scrollTargetBehavior(.viewAligned)
             }
         }
         .background(Color.canvas)
         .task {
             await prefetchArtwork(of: sources)
+        }
+        .task(id: "\(tmdb.revision):\(focused?.id ?? "")") {
+            guard tmdb.isConfigured, let title = focused else { return }
+            do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
+            // Opening the focused title reuses this response; its page owns retry/error UI.
+            _ = try? await tmdb.details(imdbID: title.id, type: title.type)
         }
     }
 
@@ -130,7 +169,20 @@ private struct TVHome: View {
         // The clear base keeps the header's height while nothing is focused yet.
         ZStack(alignment: .bottomLeading) {
             Color.clear
-            if let focused {
+            if let focusedCollection {
+                HStack(spacing: 32) {
+                    CollectionArtwork(collection: focusedCollection)
+                        .frame(width: focusedCollection.isFestival ? Metrics.posterWidth * 1.4 : Metrics.personSize,
+                               height: Metrics.personSize * 1.25)
+                        .clipShape(.rect(cornerRadius: Metrics.posterRadius))
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text(focusedCollection.name).font(.system(size: 64, weight: .bold))
+                        Text(focusedCollection.isFestival ? "\(focusedCollection.subtitle) winners" : "Directed films")
+                            .font(.metaLine)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } else if let focused {
                 details(focused)
             }
         }
@@ -155,6 +207,7 @@ private struct TVHome: View {
 #else
 /// Swipeable highlights from the popular movies and series, edge to edge, with page dots underneath.
 private struct FeaturedCarousel: View {
+    @Environment(TMDBAccount.self) private var tmdb
     let movies: CatalogSource
     let series: CatalogSource
     @State private var items: [MetaPreview] = []
@@ -195,6 +248,16 @@ private struct FeaturedCarousel: View {
         }
         .task(id: currentID) {
             await prefetchPages(after: currentID)
+        }
+        .task(id: "\(tmdb.revision):\(currentID ?? items.first?.id ?? "")") {
+            guard tmdb.isConfigured else { return }
+            do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
+            let index = items.firstIndex { $0.id == currentID } ?? 0
+            for title in items.dropFirst(index).prefix(2) {
+                guard !Task.isCancelled else { return }
+                // Keep speculative work small; opening the page retries failed requests.
+                _ = try? await tmdb.details(imdbID: title.id, type: title.type)
+            }
         }
     }
 
@@ -300,12 +363,13 @@ private struct FeaturedPage: View {
                 Label(isStarted ? "Resume" : "Play", systemImage: "play.fill")
             }
             .buttonStyle(PrimaryButtonStyle())
-            Button(library.isSaved(meta.id) ? "Remove from My List" : "Add to My List",
+            Button(library.isSaved(meta.id) ? "Remove from Watch Later" : "Add to Watch Later",
                    systemImage: library.isSaved(meta.id) ? "checkmark" : "plus") {
                 library.toggleSaved(meta)
             }
             .buttonStyle(GlassIconButtonStyle())
             .contentTransition(.symbolEffect(.replace))
+            .contextMenu { SaveToMenu(title: meta) }
         }
     }
 

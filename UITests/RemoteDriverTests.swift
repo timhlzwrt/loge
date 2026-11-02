@@ -25,6 +25,13 @@ final class RemoteDriverTests: XCTestCase {
         try "".write(to: doneURL, atomically: true, encoding: .utf8)
 
         let app = XCUIApplication()
+        if let credentialPath = ProcessInfo.processInfo.environment["TMDB_TEST_TOKEN_FILE"] {
+            app.launchArguments += ["--tmdb-ui-test"]
+            app.launchEnvironment["TMDB_TEST_TOKEN_FILE"] = credentialPath
+            for key in ["TMDB_TEST_PERSON_ID", "TMDB_TEST_PERSON_NAME"] {
+                app.launchEnvironment[key] = ProcessInfo.processInfo.environment[key]
+            }
+        }
         app.launch()
 
         var executed = 0

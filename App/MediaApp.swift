@@ -6,10 +6,23 @@ struct MediaApp: App {
     @State private var addonStore: AddonStore
     @State private var library: LibraryStore
     @State private var trakt: TraktAccount
+    @State private var tmdb: TMDBAccount
     @State private var playback: PlaybackSession
     @AppStorage(Accent.storageKey) private var accent = Accent.white
 
     init() {
+        #if DEBUG
+        // UI checks use a temporary file and memory-only account; no credential enters launch logs or Keychain.
+        if ProcessInfo.processInfo.arguments.contains("--tmdb-ui-test"),
+           let path = ProcessInfo.processInfo.environment["TMDB_TEST_TOKEN_FILE"],
+           let token = try? String(contentsOfFile: path, encoding: .utf8) {
+            _tmdb = State(initialValue: TMDBAccount(temporaryReadAccessToken: token))
+        } else {
+            _tmdb = State(initialValue: TMDBAccount())
+        }
+        #else
+        _tmdb = State(initialValue: TMDBAccount())
+        #endif
         let addonStore = AddonStore()
         let library = LibraryStore()
         _addonStore = State(initialValue: addonStore)
@@ -25,7 +38,7 @@ struct MediaApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
+            initialBrowseView
                 #if os(macOS)
                 // Also corrects a too-small frame the system restored from an earlier launch.
                 .frame(minWidth: 900, minHeight: 600)
@@ -34,6 +47,7 @@ struct MediaApp: App {
                 .environment(library)
                 .environment(playback)
                 .environment(trakt)
+                .environment(tmdb)
                 .preferredColorScheme(.dark)
                 // White unless the user picks another accent: artwork carries the colour.
                 .tint(accent.color)
@@ -61,6 +75,26 @@ struct MediaApp: App {
         }
         #endif
     }
+
+    @ViewBuilder
+    private var initialBrowseView: some View {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--tmdb-ui-test"),
+           let value = ProcessInfo.processInfo.environment["TMDB_TEST_PERSON_ID"],
+           let id = Int(value), id > 0 {
+            BrowseStack {
+                PersonView(route: PersonRoute(person: Person(
+                    name: ProcessInfo.processInfo.environment["TMDB_TEST_PERSON_NAME"] ?? "Person",
+                    roles: [.director], tmdbID: id)))
+            }
+        } else {
+            RootView()
+        }
+        #else
+        RootView()
+        #endif
+    }
+
 }
 
 struct RootView: View {
@@ -100,7 +134,7 @@ struct RootView: View {
                 BrowseStack { SearchView() }
             }
             #endif
-            tab("My List", systemImage: "plus") {
+            tab("My Lists", systemImage: "plus") {
                 BrowseStack { MyListView() }
             }
             #if os(macOS)
