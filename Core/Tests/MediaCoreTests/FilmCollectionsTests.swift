@@ -10,11 +10,24 @@ struct FilmCollectionsTests {
         #expect(query.contains("pq:P585 ?when"))
         #expect(query.contains("ORDER BY DESC(?date)"))
         #expect(query.contains("LIMIT 40"))
+        #expect(query.contains("hint:optimizer \"None\""))
         let request = FilmCollectionClient.request(for: .cannes)
         let url = try #require(request.url)
         let components = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
         #expect(components.queryItems?.first { $0.name == "query" }?.value == query)
         #expect(request.timeoutInterval == 30)
+    }
+
+    /// Wikidata's planner once took over a minute on these; the app gives up after 30 seconds.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["WIKIDATA_LIVE"] != nil))
+    func everyCollectionLoadsFromWikidata() async throws {
+        let client = FilmCollectionClient()
+        for collection in FilmCollection.allCases {
+            let started = Date.now
+            let films = try await client.films(in: collection)
+            #expect(!films.isEmpty, "\(collection) returned nothing")
+            #expect(Date.now.timeIntervalSince(started) < 15, "\(collection) took too long")
+        }
     }
 
     @Test func directorQueryUsesFilmCreditsNotNameSearch() {
