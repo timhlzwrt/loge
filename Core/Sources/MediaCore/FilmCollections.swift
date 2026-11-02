@@ -144,13 +144,15 @@ public enum FilmCollection: String, CaseIterable, Sendable, Hashable, Identifiab
         let relation: String
         if isFestival {
             // Awards may be recorded on the film, its director, or the award's winner statement.
+            // Each pattern starts from the award, and the optimizer is off below so Wikidata keeps
+            // that order: left to choose, it joined every IMDb ID first and ran past 60 seconds.
             let award = self == .locarno ? "?award" : "wd:\(entity)"
             let selection = self == .locarno ? "VALUES ?award { wd:\(entity) wd:Q30894009 }" : ""
             relation = """
             \(selection)
-            { ?film p:P166 ?statement. ?statement ps:P166 \(award); pq:P585 ?when. }
+            { ?statement ps:P166 \(award); pq:P585 ?when. ?film p:P166 ?statement. }
             UNION
-            { ?recipient p:P166 ?statement. ?statement ps:P166 \(award); pq:P1686 ?film; pq:P585 ?when. }
+            { ?statement ps:P166 \(award); pq:P1686 ?film; pq:P585 ?when. }
             UNION
             { \(award) p:P1346 ?statement.
               ?statement ps:P1346 ?winner; pq:P585 ?when.
@@ -167,6 +169,7 @@ public enum FilmCollection: String, CaseIterable, Sendable, Hashable, Identifiab
         }
         return """
         SELECT ?imdb ?filmLabel (\(isFestival ? "MAX" : "MIN")(?when) AS ?date) WHERE {
+            \(isFestival ? "hint:Query hint:optimizer \"None\"." : "")
             { \(relation) }
             ?film wdt:P345 ?imdb.
             FILTER(STRSTARTS(?imdb, "tt"))
