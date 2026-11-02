@@ -180,9 +180,6 @@ struct MyListView: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 32) {
-                        if !library.progress.isEmpty {
-                            historyLink
-                        }
                         if !library.savedSeries.isEmpty {
                             section(library.savedSeries) { Text("Watch Later · Series") }
                         }
@@ -192,9 +189,10 @@ struct MyListView: View {
                         ForEach(library.lists) { list in
                             section(list.titles) { listMenu(list) }
                         }
+                        if !library.progress.isEmpty {
+                            historySection
+                        }
                     }
-                    // Keeps History at the leading edge when no wider list fills the row.
-                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.bottom, 24)
                 }
                 .scrollClipDisabled()
@@ -240,23 +238,50 @@ struct MyListView: View {
         }
     }
 
-    /// "History ›", styled like the list titles below it.
-    private var historyLink: some View {
-        NavigationLink(value: HistoryRoute()) {
-            HStack(spacing: 6) {
+    /// The latest history as a row of stills, opening the whole history like a catalog row's "›".
+    private var historySection: some View {
+        let recent = library.history.prefix(12)
+        return VStack(alignment: .leading, spacing: Metrics.headerSpacing) {
+            Group {
+                #if os(tvOS)
+                // On tvOS the row ends in a "See All" tile instead, which focus reaches naturally.
                 Text("History")
-                Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.bold))
-                    .foregroundStyle(.secondary)
+                #else
+                NavigationLink(value: HistoryRoute()) {
+                    HStack(spacing: 4) {
+                        Text("History")
+                        Image(systemName: "chevron.right")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Shows everything you've watched")
+                #endif
             }
             .font(.sectionTitle)
+            .padding(.horizontal, Metrics.gutter)
+            ScrollView(.horizontal) {
+                LazyHStack(alignment: .top, spacing: Metrics.rowSpacing) {
+                    ForEach(recent, id: \.item.id) { entry in
+                        HistoryCardLink(entry: entry, when: HistoryView.dayTitle(entry.updatedAt, short: true))
+                            .frame(width: Metrics.historyCardWidth)
+                    }
+                    #if os(tvOS)
+                    NavigationLink(value: HistoryRoute()) {
+                        Label("See All", systemImage: "clock")
+                            .font(.headline)
+                            .frame(width: Metrics.historyCardWidth, height: Metrics.historyCardWidth * 9 / 16)
+                            .background(.white.opacity(0.06))
+                    }
+                    .buttonStyle(.card)
+                    #endif
+                }
+                .padding(.horizontal, Metrics.gutter)
+            }
+            .scrollIndicators(.hidden)
+            .scrollClipDisabled()
         }
-        #if !os(tvOS)
-        .foregroundStyle(.white)
-        .buttonStyle(.plain)
-        #endif
-        .fixedSize()
-        .padding(.horizontal, Metrics.gutter)
     }
 
     /// "Horror ⌄": a list's name doubles as the way to rename or delete it.

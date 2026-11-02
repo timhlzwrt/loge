@@ -24,12 +24,14 @@ struct HistoryView: View {
                     LazyVStack(alignment: .leading, spacing: 32) {
                         ForEach(days, id: \.day) { day in
                             VStack(alignment: .leading, spacing: Metrics.headerSpacing) {
-                                Text(Self.title(for: day.day))
+                                Text(Self.dayTitle(day.day))
                                     .font(.sectionTitle)
-                                // Room for the focus lift on tvOS.
-                                VStack(alignment: .leading, spacing: Metrics.rowSpacing) {
+                                LazyVGrid(
+                                    columns: [GridItem(.adaptive(minimum: Metrics.historyCardWidth), spacing: Metrics.rowSpacing, alignment: .top)],
+                                    alignment: .leading, spacing: 28
+                                ) {
                                     ForEach(day.entries, id: \.item.id) { entry in
-                                        row(entry)
+                                        HistoryCardLink(entry: entry, when: entry.updatedAt.formatted(date: .omitted, time: .shortened))
                                     }
                                 }
                             }
@@ -46,26 +48,6 @@ struct HistoryView: View {
         .navigationTitle("History")
     }
 
-    private func row(_ entry: WatchProgress) -> some View {
-        let item = entry.item
-        return NavigationLink(value: MetaPreview(
-            id: item.metaID, type: item.type, name: item.title, poster: item.poster, background: item.background
-        )) {
-            HistoryRow(entry: entry)
-        }
-        #if os(tvOS)
-        .buttonStyle(.borderless)
-        #else
-        .buttonStyle(.plain)
-        #endif
-        .contextMenu {
-            // Also clears the watched mark: history is the same progress that marks it.
-            Button("Remove from History", systemImage: "eye.slash") {
-                library.markUnwatched([item.id])
-            }
-        }
-    }
-
     /// Entries are already newest first, so each day's run of them stays together.
     private static func days(_ history: [WatchProgress]) -> [(day: Date, entries: [WatchProgress])] {
         var days: [(day: Date, entries: [WatchProgress])] = []
@@ -80,59 +62,92 @@ struct HistoryView: View {
         return days
     }
 
-    private static func title(for day: Date) -> String {
+    /// "Today", "Yesterday", "Saturday 24 October"; short drops the weekday, for card captions.
+    static func dayTitle(_ date: Date, short: Bool = false) -> String {
         let calendar = Calendar.current
-        if calendar.isDateInToday(day) { return "Today" }
-        if calendar.isDateInYesterday(day) { return "Yesterday" }
-        let format = Date.FormatStyle.dateTime.weekday(.wide).day().month(.wide)
-        return calendar.isDate(day, equalTo: .now, toGranularity: .year)
-            ? day.formatted(format)
-            : day.formatted(format.year())
+        if calendar.isDateInToday(date) { return "Today" }
+        if calendar.isDateInYesterday(date) { return "Yesterday" }
+        var format = short ? Date.FormatStyle.dateTime.day().month(.abbreviated) : .dateTime.weekday(.wide).day().month(.wide)
+        if !calendar.isDate(date, equalTo: .now, toGranularity: .year) {
+            format = format.year()
+        }
+        return date.formatted(format)
     }
 }
 
-/// The still beside the title, the episode and how far it got.
-private struct HistoryRow: View {
+/// A history entry that opens its title, with removal on a long press.
+struct HistoryCardLink: View {
     let entry: WatchProgress
+    /// When it was watched, in the caption: a time within a day's group, a day elsewhere.
+    let when: String
+
+    @Environment(LibraryStore.self) private var library
 
     var body: some View {
         let item = entry.item
-        HStack(spacing: Metrics.rowSpacing) {
+        NavigationLink(value: MetaPreview(
+            id: item.metaID, type: item.type, name: item.title, poster: item.poster, background: item.background
+        )) {
+            HistoryCard(entry: entry, when: when)
+        }
+        #if os(tvOS)
+        // Lifts just the still on focus, with the text below it, like the episode cards.
+        .buttonStyle(.borderless)
+        #else
+        .buttonStyle(.plain)
+        #endif
+        .contextMenu {
+            // Also clears the watched mark: history is the same progress that marks it.
+            Button("Remove from History", systemImage: "eye.slash") {
+                library.markUnwatched([item.id])
+            }
+        }
+    }
+}
+
+/// Laid out like the episode cards on a title's page, with the show's name added.
+private struct HistoryCard: View {
+    let entry: WatchProgress
+    let when: String
+
+    var body: some View {
+        let item = entry.item
+        VStack(alignment: .leading, spacing: 3) {
+            // Stills are often missing, so a still that fails falls back to the backdrop, then the poster.
             Artwork(url: item.thumbnail ?? item.background, fallbacks: [item.background, item.poster].compactMap { $0 })
                 .overlay { WatchProgressBar(progress: entry) }
-                .frame(width: Metrics.historyStillWidth, height: Metrics.historyStillWidth * 9 / 16)
+                .aspectRatio(16 / 9, contentMode: .fit)
                 .clipShape(.rect(cornerRadius: Metrics.cardRadius))
                 #if os(tvOS)
                 .hoverEffect(.highlight)
                 #endif
-            VStack(alignment: .leading, spacing: 4) {
-                Text(item.title)
-                    .font(.cardTitle)
-                    .lineLimit(1)
-                if let episode = episodeLine {
-                    Text(episode)
-                        .font(.synopsis)
-                        .lineLimit(1)
-                }
-                Text(statusLine)
+                .padding(.bottom, 9)
+            Text([item.episodeCode, when].compactMap { $0 }.joined(separator: " · "))
+                .font(Self.captionFont)
+                .textCase(.uppercase)
+                .tracking(0.6)
+                .foregroundStyle(.secondary)
+            Text(item.title)
+                .font(Self.titleFont)
+                .lineLimit(1)
+            if let episodeTitle = item.episodeTitle {
+                Text(episodeTitle)
                     .font(.metaLine)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
-            Spacer(minLength: 0)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(.rect)
         .accessibilityElement(children: .combine)
     }
 
-    /// "S1 E2 · Trust Fall".
-    private var episodeLine: String? {
-        let parts = [entry.item.episodeCode, entry.item.episodeTitle].compactMap { $0 }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
-    }
-
-    /// "Watched · 21:14", or "23 min left · 21:14".
-    private var statusLine: String {
-        let state = entry.isFinished ? "Watched" : "\(max(Int((entry.duration - entry.position) / 60), 1)) min left"
-        return "\(state) · \(entry.updatedAt.formatted(date: .omitted, time: .shortened))"
-    }
+    // The episode cards' fonts, so both read as one kind of card.
+    #if os(tvOS)
+    private static let captionFont = Font.system(size: 17, weight: .semibold)
+    private static let titleFont = Font.system(size: 21, weight: .semibold)
+    #else
+    private static let captionFont = Font.caption.weight(.semibold)
+    private static let titleFont = Font.headline
+    #endif
 }

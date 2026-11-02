@@ -14,8 +14,8 @@ enum Metrics {
     /// Continue Watching stills.
     static let cardWidth: CGFloat = 354
     static let episodeWidth: CGFloat = 375
-    /// History rows' stills, beside their text.
-    static let historyStillWidth: CGFloat = 300
+    /// History cards: their width in My Lists' row, the narrowest column of History's grid.
+    static let historyCardWidth: CGFloat = 375
     // tvOS already insets content by its own safe area margins.
     static let gutter: CGFloat = 0
     static let rowSpacing: CGFloat = 40
@@ -31,7 +31,7 @@ enum Metrics {
     static let posterWidth: CGFloat = 132
     static let cardWidth: CGFloat = 232
     static let episodeWidth: CGFloat = 232
-    static let historyStillWidth: CGFloat = 160
+    static let historyCardWidth: CGFloat = 232
     static let gutter: CGFloat = 32
     static let rowSpacing: CGFloat = 16
     static let headerSpacing: CGFloat = 16
@@ -45,7 +45,7 @@ enum Metrics {
     static let posterWidth: CGFloat = isPad ? 160 : 112
     static let cardWidth: CGFloat = isPad ? 320 : 270
     static let episodeWidth: CGFloat = isPad ? 320 : 240
-    static let historyStillWidth: CGFloat = isPad ? 200 : 136
+    static let historyCardWidth: CGFloat = isPad ? 240 : 170
     static let gutter: CGFloat = isPad ? 32 : 20
     static let rowSpacing: CGFloat = 12
     static let headerSpacing: CGFloat = 12
