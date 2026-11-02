@@ -397,7 +397,10 @@ struct SourcesView: View {
             for provider in providers where results[provider.id] == nil {
                 group.addTask {
                     do {
-                        return (provider.id, .success(try await provider.streams(type: route.type, id: route.id)))
+                        // Awaited on its own line: wrapped directly in `.success(...)`, the Release
+                        // build never delivered the result and the list kept loading.
+                        let streams = try await provider.streams(type: route.type, id: route.id)
+                        return (provider.id, .success(streams))
                     } catch {
                         return (provider.id, .failure(error))
                     }
