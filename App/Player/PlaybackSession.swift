@@ -94,6 +94,7 @@ final class PlaybackSession {
 
     private func stopPlayback() {
         guard let player else { return }
+        recordConnectionSpeed()
         recordProgress()
         scrobble(.stop)
         tasks.forEach { $0.cancel() }
@@ -182,6 +183,7 @@ final class PlaybackSession {
 
     private func load(_ request: PlaybackRequest) {
         guard let player else { return }
+        recordConnectionSpeed()
         let episodesChanged = request.item?.metaID != current?.item?.metaID
         skipLookup?.cancel()
         skipLookup = nil
@@ -315,6 +317,14 @@ final class PlaybackSession {
               let player, let duration = player.duration
         else { return }
         player.seek(to: max(fraction * duration - 5, 0))
+    }
+
+    /// Before the file changes, which starts a new measurement. Files served from this
+    /// machine, such as the test addon's, say nothing about the network.
+    private func recordConnectionSpeed() {
+        guard let speed = player?.measuredDownloadSpeed, let host = current?.url.host(),
+              !["127.0.0.1", "localhost", "::1"].contains(host) else { return }
+        ConnectionSpeed.record(speed)
     }
 
     private func recordProgress() {

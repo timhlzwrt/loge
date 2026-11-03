@@ -233,4 +233,26 @@ public struct StreamDetails: Sendable, Equatable {
     /// is listed under "Other".
     public static let listedResolutions: [Resolution] = [.ultraHD, .fullHD, .hd]
 
+    /// The share of the measured download speed a source's average bitrate may use: busy
+    /// scenes run well above a file's average, and Wi-Fi speed wanders.
+    public static let connectionHeadroom = 0.75
+
+    /// The best source the connection keeps up with: the highest resolution, then one the
+    /// debrid service holds, then the highest bitrate, among sources whose bitrate is known
+    /// and within `connectionHeadroom` of `connectionSpeed` (bits per second). Nil when no
+    /// listed source is too much for the connection, since then there's nothing to steer
+    /// away from, or when none fits.
+    public static func recommendedIndex(in sources: [StreamDetails], connectionSpeed: Double) -> Int? {
+        let limit = connectionSpeed * connectionHeadroom
+        guard limit > 0, sources.contains(where: { ($0.listedBitrate ?? 0) > limit }) else { return nil }
+        return sources.indices
+            .filter { sources[$0].listedBitrate.map { $0 <= limit } == true }
+            .max { lhs, rhs in
+                let (a, b) = (sources[lhs], sources[rhs])
+                if a.resolution != b.resolution { return (a.resolution?.rawValue ?? 0) < (b.resolution?.rawValue ?? 0) }
+                if (a.isCached != false) != (b.isCached != false) { return a.isCached == false }
+                return (a.listedBitrate ?? 0) < (b.listedBitrate ?? 0)
+            }
+    }
+
 }

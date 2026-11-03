@@ -492,6 +492,22 @@ final class FlowTests: XCTestCase {
         app.buttons["Close"].tap()
     }
 
+    /// With a measured speed below some sources' bitrates, the best one that fits is marked
+    /// but not played.
+    @MainActor
+    func testSourcesRecommendOneForTheConnection() {
+        app.terminate()
+        app.launchArguments = ["-connectionSpeed", "32000000"]
+        app.launch()
+        installTestAddonIfNeeded()
+        openSeries("Lanterns")
+        episodeCard().tap()
+        let recommended = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'recommended'")).firstMatch
+        XCTAssertTrue(recommended.waitForExistence(timeout: 15), "No source recommended")
+        XCTAssertFalse(app.buttons["Pause"].exists, "The recommended source started by itself")
+        screenshot("source-recommended")
+    }
+
     @MainActor
     func testSourceBitrateFilteringAndSorting() {
         installTestAddonIfNeeded()
@@ -502,14 +518,17 @@ final class FlowTests: XCTestCase {
         screenshot("source-bitrates")
         app.buttons["Sort & Filter"].tap()
         screenshot("source-sort-menu")
+        app.buttons["Sort by"].tap()
         app.buttons["Lower bitrate"].tap()
         app.buttons["Sort & Filter"].tap()
+        app.buttons["Maximum bitrate"].tap()
         app.buttons["Up to 25 Mbps"].tap()
-        XCTAssertTrue(app.staticTexts["Up to 25 Mbps reported bitrate. Unknown bitrates stay visible."].exists)
+        XCTAssertTrue(app.staticTexts["Up to 25 Mbps, estimated from the size where not reported. Unknown bitrates stay visible."].exists)
         XCTAssertFalse(higherRate.exists)
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label MATCHES '.*23[,.]6 Mbps.*'")).firstMatch.exists)
         screenshot("source-bitrate-filter")
         app.buttons["Sort & Filter"].tap()
+        app.buttons["Maximum bitrate"].tap()
         app.buttons["Any bitrate"].tap()
         XCTAssertTrue(higherRate.exists)
     }
