@@ -44,8 +44,8 @@ jobs:
       # Warnings fail the build, matching the "no warnings" rule in CLAUDE.md.
       - run: >
           xcodebuild build
-          -project MediaApp.xcodeproj
-          -scheme MediaApp
+          -project loge.xcodeproj
+          -scheme loge
           -destination '${{ matrix.destination }}'
           -derivedDataPath .build/xcode
           SWIFT_TREAT_WARNINGS_AS_ERRORS=YES

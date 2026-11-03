@@ -1,12 +1,12 @@
-# Loge: implementation overview
+# loge: implementation overview
 
-Updated 2 November 2026. See [HANDOFF.md](HANDOFF.md) for the latest batch, verification and remaining work. Loge is a private SwiftUI streaming app for
-iPhone, iPad, Apple TV and Mac. `MediaApp` remains the project, scheme and bundle
+Updated 2 November 2026. See [HANDOFF.md](HANDOFF.md) for the latest batch, verification and remaining work. loge is a private SwiftUI streaming app for
+iPhone, iPad, Apple TV and Mac. `li.tjh.MediaApp` remains the bundle
 identifier so existing installations keep their data.
 
 ## Application and data flow
 
-`App/MediaApp.swift` creates five observable, main-actor owners and injects them
+`App/LogeApp.swift` creates five observable, main-actor owners and injects them
 through the SwiftUI environment: `AddonStore`, `LibraryStore`, `TraktAccount`
 `PlaybackSession` and `TMDBAccount`. Each browsing tab has its own navigation stack. Movies,
 series, catalog grids and source lists use typed navigation destinations.
@@ -157,7 +157,7 @@ old subtitle work cannot attach to a replacement file.
 
 ## Verification workflow
 
-Run `swift test` in `Core`, then build the `MediaApp` scheme for
+Run `swift test` in `Core`, then build the `loge` scheme for
 `generic/platform=iOS Simulator`, `generic/platform=tvOS Simulator` and
 `platform=macOS`. Use `SWIFT_TREAT_WARNINGS_AS_ERRORS=YES` to catch Swift warnings.
 Run `xcodegen generate` after adding/removing Swift source files.

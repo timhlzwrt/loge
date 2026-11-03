@@ -6,9 +6,9 @@ import XCTest
 /// test runs never wait on it:
 ///
 ///     mkdir -p /tmp/remote && : > /tmp/remote/commands
-///     TEST_RUNNER_REMOTE_DIR=/tmp/remote xcodebuild test -scheme MediaApp \
+///     TEST_RUNNER_REMOTE_DIR=/tmp/remote xcodebuild test -scheme loge \
 ///       -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)' \
-///       -only-testing:MediaAppUITests/RemoteDriverTests
+///       -only-testing:logeUITests/RemoteDriverTests
 ///
 /// Then append one command per line to `$REMOTE_DIR/commands`:
 /// `up`, `down`, `left`, `right`, `select`, `hold-select`, `menu`, `playpause`,

@@ -1,4 +1,4 @@
-import MediaCore
+import LogeCore
 import SwiftUI
 
 /// Unfinished movies and episodes, most recent first. Selecting one goes straight

@@ -1,4 +1,4 @@
-import MediaCore
+import LogeCore
 import SwiftUI
 
 /// A titled, horizontally scrolling row of posters from one addon catalog.

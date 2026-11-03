@@ -1,4 +1,4 @@
-import MediaCore
+import LogeCore
 import SwiftUI
 
 /// Provider links rather than unlicensed review excerpts or inferred critic scores.

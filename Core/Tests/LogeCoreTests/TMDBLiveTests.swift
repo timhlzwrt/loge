@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import MediaCore
+@testable import LogeCore
 
 /// Opt-in checks use a temporary credential file; no credential belongs in fixtures or logs.
 struct TMDBLiveTests {

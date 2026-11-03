@@ -1,7 +1,91 @@
-import MediaCore
+import LogeCore
 import SwiftUI
 
+/// A short index of settings pages, each row showing where that setting stands, so the
+/// addon form and account keys don't make one long scroll.
 struct SettingsView: View {
+    @Environment(AddonStore.self) private var store
+    @Environment(TraktAccount.self) private var trakt
+    @Environment(TMDBAccount.self) private var tmdb
+    @AppStorage(Accent.storageKey) private var accent = Accent.white
+
+    var body: some View {
+        List {
+            Section {
+                NavigationLink {
+                    AddonsSettingsView()
+                } label: {
+                    LabeledContent("Addons", value: addonSummary)
+                }
+                NavigationLink {
+                    SettingsPage("Trakt") { TraktSection() }
+                } label: {
+                    LabeledContent("Trakt", value: traktSummary)
+                }
+                NavigationLink {
+                    SettingsPage("TMDB") { TMDBSection() }
+                } label: {
+                    LabeledContent("TMDB", value: tmdb.isConfigured ? "Connected" : "Off")
+                }
+            }
+
+            PlaybackSettingsSection()
+
+            Section {
+                NavigationLink {
+                    SettingsPage("Accent Color") { AccentSettingsSection() }
+                } label: {
+                    LabeledContent("Accent Color", value: accent.name)
+                }
+            }
+
+            AboutSection()
+        }
+        #if !os(tvOS)
+        .scrollContentBackground(.hidden)
+        #endif
+        .background(Color.canvas)
+        .navigationTitle("Settings")
+    }
+
+    private var addonSummary: String {
+        switch store.addons.count {
+        case 0: "None"
+        case 1: "1 installed"
+        case let count: "\(count) installed"
+        }
+    }
+
+    private var traktSummary: String {
+        switch trakt.state {
+        case .signedIn(let username): username
+        case .awaitingApproval: "Signing in"
+        case .signedOut: "Off"
+        }
+    }
+}
+
+/// One settings page: its sections on the app's canvas.
+struct SettingsPage<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: Content
+
+    init(_ title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        List { content }
+            #if !os(tvOS)
+            .scrollContentBackground(.hidden)
+            #endif
+            .background(Color.canvas)
+            .navigationTitle(title)
+    }
+}
+
+private struct AddonsSettingsView: View {
     @Environment(AddonStore.self) private var store
     @State private var manifestURL = ""
     @State private var isInstalling = false
@@ -63,21 +147,12 @@ struct SettingsView: View {
                 }
             }
 
-            TraktSection()
-
-            TMDBSection()
-
-            PlaybackSettingsSection()
-
-            AccentSettingsSection()
-
-            TMDBCreditsSection()
         }
         #if !os(tvOS)
         .scrollContentBackground(.hidden)
         #endif
         .background(Color.canvas)
-        .navigationTitle("Settings")
+        .navigationTitle("Addons")
         #if os(iOS)
         .toolbar { EditButton() }
         #endif

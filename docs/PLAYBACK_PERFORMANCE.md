@@ -18,7 +18,7 @@ but never used to reject an episode as oversized. Explicit pack totals receive a
 When a limit is enabled, unknown-size series sources require a manual choice. A
 remembered episode URL therefore waits for fresh source metadata instead of
 bypassing the limit. If
-no eligible source exists for the next episode, Loge does not start one automatically.
+no eligible source exists for the next episode, loge does not start one automatically.
 
 File size is not bitrate: duration, variable bitrate, audio tracks and container
 overhead differ. The cap is a control over automatic choices, not a claim that every
@@ -60,7 +60,7 @@ headers or addon configuration.
 Use the same file and playback position when comparing results. Note whether drop
 counts grow during the hitch, whether the buffer approaches zero, and whether the
 problem changes with subtitles enabled. On Apple TV, also check the system's Match
-Frame Rate setting; Loge already requests the video's display criteria. These mpv
+Frame Rate setting; loge already requests the video's display criteria. These mpv
 counters do not measure the TV's actual presentation cadence. Simulator playback
 cannot verify hardware 4K decode performance, HDR output or HDMI refresh switching.
 

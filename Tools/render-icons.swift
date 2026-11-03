@@ -1,7 +1,7 @@
 // Renders every app icon and Apple TV top-shelf image into App/Assets.xcassets.
 // Run from the repository root: swift Tools/render-icons.swift
 //
-// The mark is Loge's "l", a white stroke with a turned foot on the app's charcoal canvas.
+// The mark is loge's "l", a white stroke with a turned foot on the app's charcoal canvas.
 
 import CoreGraphics
 import Foundation

@@ -4,8 +4,8 @@ import XCTest
 /// Details' Cast & Crew and Information against live Cinemeta, on request like `FlowTests`:
 ///
 ///     TEST_RUNNER_UI_FLOWS=1 TEST_RUNNER_SCREENSHOT_DIR=/tmp/shots xcodebuild test \
-///       -scheme MediaApp -destination 'platform=iOS Simulator,name=iPhone 18 Pro' \
-///       -only-testing:MediaAppUITests/DetailsFlowTests
+///       -scheme loge -destination 'platform=iOS Simulator,name=iPhone 18 Pro' \
+///       -only-testing:logeUITests/DetailsFlowTests
 final class DetailsFlowTests: XCTestCase {
     private var app: XCUIApplication!
 

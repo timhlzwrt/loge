@@ -1,4 +1,4 @@
-import MediaCore
+import LogeCore
 import SwiftUI
 
 /// Resolve one selected credit; numeric TMDB identities never enter playback or saved lists.
@@ -99,10 +99,6 @@ struct TMDBTitleView: View {
                 Link("View title on TMDB", destination: profileURL)
                     .font(.metaLine)
                     .frame(minHeight: 44)
-                #else
-                Text("TMDB · \(profileURL.absoluteString)")
-                    .font(.metaLine)
-                    .foregroundStyle(.secondary)
                 #endif
             }
             .frame(maxWidth: .infinity, alignment: .leading)

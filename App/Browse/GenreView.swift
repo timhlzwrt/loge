@@ -1,4 +1,4 @@
-import MediaCore
+import LogeCore
 import SwiftUI
 
 /// Movie genres on Home, each a still from a defining film with the genre's name over it.
