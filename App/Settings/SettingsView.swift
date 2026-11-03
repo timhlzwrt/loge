@@ -181,7 +181,8 @@ struct AddonsSettingsView: View {
     }
 
     private func install() {
-        guard !isInstalling else { return }
+        // Return in the empty field submits too; that is not a wrong URL, just no URL yet.
+        guard !isInstalling, !manifestURL.trimmingCharacters(in: .whitespaces).isEmpty else { return }
         isInstalling = true
         installError = nil
         Task {
