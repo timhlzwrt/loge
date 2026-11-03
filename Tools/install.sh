@@ -60,7 +60,8 @@ nightly_device=$(/usr/libexec/PlistBuddy -c "Print :EnvironmentVariables:DEVICE"
 install_phone() {
     local udid=${1%%$'\t'*} name=${1#*$'\t'}
     echo "== $name"
-    if DEVICE=$udid CONFIGURATION=Release Tools/run-device.sh; then
+    # Not launched: a locked phone refuses, which would read as a failed install.
+    if DEVICE=$udid CONFIGURATION=Release Tools/run-device.sh --no-launch; then
         [[ -n $head && $udid == "$nightly_device" ]] && echo "$head" >"$state/iOS"
     else
         failed+=("$name")
