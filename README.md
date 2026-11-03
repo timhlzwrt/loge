@@ -29,7 +29,22 @@ Only direct HTTP(S) streams play. Torrents and magnet links are not supported.
 loge isn't in the App Store. You sign it yourself with a free Apple ID; no paid developer
 account is needed.
 
-### iPhone and iPad: SideStore
+### iPhone and iPad: iloader (works now)
+
+Since October 2026, SideStore and AltStore can't sign in to Apple from the phone (error
+`-80045`) after a change on Apple's servers. Until they're fixed, sign loge from a computer:
+
+1. Download `loge-iOS.ipa` from the
+   [latest release](https://github.com/timhlzwrt/loge/releases/latest).
+2. Open [iloader](https://iloader.app) on a Mac, Windows or Linux computer, sign in with your
+   Apple ID and plug in the phone.
+3. Choose **Import IPA** and pick the downloaded file.
+
+The free signature lasts 7 days: import again each week, which also brings you the newest
+build. If iloader says the maximum number of certificates is reached, revoke only ones you
+don't use elsewhere; apps signed with a revoked certificate stop opening.
+
+### iPhone and iPad: SideStore (once its sign-in works again)
 
 1. Set up [SideStore](https://sidestore.io) once, following its guide.
 2. In SideStore, open **Sources**, tap **+** and add:
@@ -49,6 +64,12 @@ SideStore doesn't run on tvOS. Download `loge-tvOS.ipa` from the
 [latest release](https://github.com/timhlzwrt/loge/releases/latest) and install it with a
 computer-based sideloader such as [Sideloadly](https://sideloadly.io). The free signature
 lasts 7 days, so reinstall or refresh it each week.
+
+### Building your own (with a Mac and Xcode)
+
+With Xcode signed in to your Apple ID, `Tools/install.sh` builds loge and installs it on a
+connected iPhone, iPad or, through [atvloadly](https://github.com/bitxeno/atvloadly) (set
+`ATVLOADLY` to its address), an Apple TV. Xcode's own signing isn't affected by the sign-in problem above.
 
 ### Mac
 
