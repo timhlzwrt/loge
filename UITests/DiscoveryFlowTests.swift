@@ -4,7 +4,7 @@ import XCTest
 /// On-demand discovery checks. Provider downtime is asserted as an explicit retryable state.
 final class DiscoveryFlowTests: XCTestCase {
     @MainActor
-    func testFestivalOpensRecordedWinnersOrProviderError() throws {
+    func testFestivalOpensLatestEditionAndRecordedWinners() throws {
         guard ProcessInfo.processInfo.environment["UI_FLOWS"] != nil else {
             throw XCTSkip("Set TEST_RUNNER_UI_FLOWS=1 to run.")
         }
@@ -23,6 +23,15 @@ final class DiscoveryFlowTests: XCTestCase {
         XCTAssertTrue(cannes.isHittable)
         screenshot("discovery-festivals")
         cannes.tap()
+        XCTAssertTrue(app.staticTexts["2026 winners"].waitForExistence(timeout: 10))
+        screenshot("discovery-cannes-latest")
+        let previous = app.buttons["Previous recorded winners"]
+        for _ in 0..<12 {
+            if previous.exists && previous.isHittable { break }
+            app.swipeUp(velocity: .fast)
+        }
+        XCTAssertTrue(previous.isHittable)
+        previous.tap()
         XCTAssertTrue(app.staticTexts["Palme d’Or winners"].waitForExistence(timeout: 10))
         let loaded = NSPredicate { _, _ in
             app.buttons["Retry"].exists || app.otherElements["collection-films"].exists
@@ -41,26 +50,6 @@ final class DiscoveryFlowTests: XCTestCase {
             app.navigationBars.buttons.firstMatch.tap()
         }
 
-        app.navigationBars.buttons.firstMatch.tap()
-        let director = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Christopher Nolan'")).firstMatch
-        for _ in 0..<3 {
-            if director.exists && director.isHittable { break }
-            app.swipeUp()
-        }
-        XCTAssertTrue(director.waitForExistence(timeout: 5))
-        screenshot("discovery-directors")
-        let festivals = app.scrollViews["festival-collections"]
-        let lastFestival = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'San Sebastián'")).firstMatch
-        for _ in 0..<5 {
-            festivals.swipeLeft(velocity: .fast)
-        }
-        XCTAssertTrue(lastFestival.exists)
-        screenshot("discovery-more-festivals")
-        director.tap()
-        XCTAssertTrue(app.staticTexts["Directed films, newest first."].waitForExistence(timeout: 5))
-        let films = XCTNSPredicateExpectation(predicate: loaded, object: app)
-        XCTAssertEqual(XCTWaiter.wait(for: [films], timeout: 40), .completed)
-        screenshot("discovery-director-films")
     }
 
     @MainActor

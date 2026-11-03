@@ -4,8 +4,8 @@
 
 The user confirmed on 2026-11-02 that the current app work belongs in
 `/Users/tjh/Developer/MediaApp/.claude/worktrees/todo-batch`.
-The handoff branch is `codex/tmdb-discovery-handoff`, based on current `main`
-(which includes `claude/todo-batch` at `4243d49`).
+The current development branch is `codex/remaining-features`, based on `main` at
+`661ccc1` (including History, the tvOS browse fix, and PR #12).
 The top-level checkout was an older base and must not be used for app edits or builds.
 Before editing, after resuming, and before building/installing: run `Tools/check-checkout.sh`
 (it must succeed), then run `pwd`,

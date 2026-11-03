@@ -13,7 +13,7 @@ struct DiscoveryCollectionRow: View {
             Text(title)
                 .font(.sectionTitle)
                 .padding(.horizontal, Metrics.gutter)
-            ScrollView(.horizontal) {
+            HorizontalShelf(title) {
                 HStack(alignment: .top, spacing: Metrics.rowSpacing) {
                     ForEach(collections) { collection in
                         Group {
@@ -41,9 +41,8 @@ struct DiscoveryCollectionRow: View {
                 #if os(tvOS)
                 .padding(.vertical, 20)
                 #endif
+                .padding(.horizontal, Metrics.gutter)
             }
-            .contentMargins(.horizontal, Metrics.gutter, for: .scrollContent)
-            .scrollIndicators(.hidden)
             .scrollClipDisabled()
             .accessibilityIdentifier(collections.first?.isFestival == true ? "festival-collections" : "director-collections")
         }
@@ -114,6 +113,20 @@ struct CollectionArtwork: View {
 
 struct FilmCollectionView: View {
     let collection: FilmCollection
+    var client = FilmCollectionClient.shared
+
+    var body: some View {
+        if collection.isFestival {
+            FestivalAwardsView(collection: collection, client: client)
+        } else {
+            RecordedCollectionView(collection: collection, client: client)
+        }
+    }
+}
+
+struct RecordedCollectionView: View {
+    let collection: FilmCollection
+    var client = FilmCollectionClient.shared
     @State private var films: [CollectionFilm] = []
     @State private var phase = Phase.loading
     @State private var failureMessage = "Couldn’t load this collection."
@@ -170,7 +183,7 @@ struct FilmCollectionView: View {
         .task(id: phase) {
             guard phase == .loading else { return }
             do {
-                let loaded = try await FilmCollectionClient.shared.films(in: collection)
+                let loaded = try await client.films(in: collection)
                 try Task.checkCancellation()
                 films = loaded
                 phase = .loaded
