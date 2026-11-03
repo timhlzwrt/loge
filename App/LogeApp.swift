@@ -210,6 +210,7 @@ private struct BrowseStack<Content: View>: View {
                 .navigationDestination(for: HistoryRoute.self) { _ in HistoryView() }
                 .navigationDestination(for: FilmCollection.self) { FilmCollectionView(collection: $0) }
                 .navigationDestination(for: DiscoveryCatalogs.Genre.self) { GenreView(genre: $0) }
+                .navigationDestination(for: FestivalRoute.self) { $0.destination }
         }
     }
 }
