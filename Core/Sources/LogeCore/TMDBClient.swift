@@ -99,6 +99,12 @@ public struct TMDBPersonDetails: Sendable, Equatable, Identifiable {
     }
 }
 
+public enum TMDBCreditRole: String, CaseIterable, Sendable {
+    case acting = "Acting"
+    case directing = "Directing"
+    case otherCrew = "Other crew"
+}
+
 /// A filmography entry retains its TMDB identity until an IMDb ID is explicitly resolved.
 public struct TMDBCreditTitle: Sendable, Hashable, Identifiable {
     public var tmdbID: Int
@@ -109,12 +115,13 @@ public struct TMDBCreditTitle: Sendable, Hashable, Identifiable {
     public var overview: String?
     public var releaseDate: String?
     public var roles: [String]
+    public var creditRoles: Set<TMDBCreditRole>
 
     public var id: String { "\(type):\(tmdbID)" }
 
     public init(tmdbID: Int, type: String, name: String, posterURL: String? = nil,
                 backgroundURL: String? = nil, overview: String? = nil, releaseDate: String? = nil,
-                roles: [String] = []) {
+                roles: [String] = [], creditRoles: Set<TMDBCreditRole> = []) {
         self.tmdbID = tmdbID
         self.type = type
         self.name = name
@@ -123,6 +130,7 @@ public struct TMDBCreditTitle: Sendable, Hashable, Identifiable {
         self.overview = overview
         self.releaseDate = releaseDate
         self.roles = roles
+        self.creditRoles = creditRoles
     }
 }
 
@@ -190,7 +198,7 @@ public struct TMDBClient: Sendable {
         return id
     }
 
-    private func fetch<Response: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> Response {
+    func fetch<Response: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> Response {
         try Task.checkCancellation()
         guard !readAccessToken.isEmpty,
               readAccessToken.rangeOfCharacter(from: .whitespacesAndNewlines.union(.controlCharacters)) == nil else {
@@ -390,13 +398,18 @@ private struct CombinedCreditsResponse: Decodable {
             } else {
                 role = nonempty(credit.job) ?? nonempty(credit.department) ?? "Crew"
             }
+            // Only the Director job counts as directing, not camera or assistant-director credits.
+            let creditRole: TMDBCreditRole = isCast ? .acting
+                : (nonempty(credit.job) == "Director" ? .directing : .otherCrew)
             let title = TMDBCreditTitle(
                 tmdbID: tmdbID, type: type, name: name,
                 posterURL: imageURL(credit.poster_path, size: "w500"),
                 backgroundURL: imageURL(credit.backdrop_path, size: "w1280"),
                 overview: nonempty(credit.overview),
-                releaseDate: fullDate(isMovie ? credit.release_date : credit.first_air_date), roles: [role])
+                releaseDate: fullDate(isMovie ? credit.release_date : credit.first_air_date),
+                roles: [role], creditRoles: [creditRole])
             if let index = indices[title.id] {
+                titles[index].creditRoles.insert(creditRole)
                 if !titles[index].roles.contains(role) { titles[index].roles.append(role) }
                 if titles[index].posterURL == nil { titles[index].posterURL = title.posterURL }
                 if titles[index].backgroundURL == nil { titles[index].backgroundURL = title.backgroundURL }
@@ -434,7 +447,7 @@ private func nonempty(_ value: String?) -> String? {
     return trimmed.isEmpty ? nil : trimmed
 }
 
-private func imageURL(_ path: String?, size: String) -> String? {
+func imageURL(_ path: String?, size: String) -> String? {
     guard let path = nonempty(path), path.hasPrefix("/"), !path.hasPrefix("//"),
           !path.contains(".."), !path.contains("?"), !path.contains("#"), path.count > 1 else { return nil }
     return URL(string: "https://image.tmdb.org/t/p/\(size)\(path)")?.absoluteString

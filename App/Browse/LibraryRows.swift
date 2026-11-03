@@ -16,7 +16,7 @@ struct ContinueWatchingRow: View {
                 Text("Continue Watching")
                     .font(.sectionTitle)
                     .padding(.horizontal, Metrics.gutter)
-                ScrollView(.horizontal) {
+                HorizontalShelf("Continue Watching") {
                     LazyHStack(alignment: .top, spacing: Metrics.rowSpacing) {
                         ForEach(entries, id: \.item.id) { entry in
                             NavigationLink(value: SourcesRoute(item: entry.item, title: title(for: entry.item), autoplay: true)) {
@@ -40,7 +40,6 @@ struct ContinueWatchingRow: View {
                     }
                     .padding(.horizontal, Metrics.gutter)
                 }
-                .scrollIndicators(.hidden)
                 .scrollClipDisabled()
                 #if os(tvOS)
                 // Home opens on what's being watched rather than on the sidebar.
@@ -129,7 +128,7 @@ struct MyListRow: View {
                 Text("Watch Later")
                     .font(.sectionTitle)
                     .padding(.horizontal, Metrics.gutter)
-                ScrollView(.horizontal) {
+                HorizontalShelf("Watch Later") {
                     LazyHStack(spacing: Metrics.rowSpacing) {
                         ForEach(titles) { meta in
                             NavigationLink(value: meta) {
@@ -148,7 +147,6 @@ struct MyListRow: View {
                     .padding(.vertical, 20)
                     #endif
                 }
-                .scrollIndicators(.hidden)
                 .scrollClipDisabled()
             }
             .onChange(of: focusedID) {
@@ -262,7 +260,7 @@ struct MyListView: View {
             }
             .font(.sectionTitle)
             .padding(.horizontal, Metrics.gutter)
-            ScrollView(.horizontal) {
+            HorizontalShelf("history") {
                 LazyHStack(alignment: .top, spacing: Metrics.rowSpacing) {
                     ForEach(recent, id: \.item.id) { entry in
                         HistoryCardLink(entry: entry, when: HistoryView.dayTitle(entry.updatedAt, short: true))
@@ -280,7 +278,6 @@ struct MyListView: View {
                 }
                 .padding(.horizontal, Metrics.gutter)
             }
-            .scrollIndicators(.hidden)
             .scrollClipDisabled()
         }
     }

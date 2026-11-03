@@ -5,6 +5,12 @@ public struct PlaybackSegment: Sendable, Equatable {
     public var start: Double
     public var end: Double
 
+    public init(kind: PlaybackChapter.SkipKind, start: Double, end: Double) {
+        self.kind = kind
+        self.start = start
+        self.end = end
+    }
+
     public func skip(at position: Double, duration: Double?) -> PlaybackChapter.Skip? {
         guard position.isFinite, position >= start, position < end,
               let duration, duration.isFinite, end <= duration else { return nil }
