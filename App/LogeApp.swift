@@ -13,7 +13,9 @@ struct LogeApp: App {
     init() {
         #if DEBUG
         // UI checks use a temporary file and memory-only account; no credential enters launch logs or Keychain.
-        if ProcessInfo.processInfo.arguments.contains("--tmdb-ui-test"),
+        if ProcessInfo.processInfo.arguments.contains("--discovery-ui-test") {
+            _tmdb = State(initialValue: TMDBAccount(temporaryReadAccessToken: "offline-ui-fixture", session: DiscoveryFixture.session))
+        } else if ProcessInfo.processInfo.arguments.contains("--tmdb-ui-test"),
            let path = ProcessInfo.processInfo.environment["TMDB_TEST_TOKEN_FILE"],
            let token = try? String(contentsOfFile: path, encoding: .utf8) {
             _tmdb = State(initialValue: TMDBAccount(temporaryReadAccessToken: token))
@@ -52,6 +54,10 @@ struct LogeApp: App {
                 // White unless the user picks another accent: artwork carries the colour.
                 .tint(accent.color)
                 .task {
+                    #if DEBUG
+                    if ProcessInfo.processInfo.arguments.contains("--discovery-ui-test")
+                        || ProcessInfo.processInfo.arguments.contains("--playback-ui-test") { return }
+                    #endif
                     await addonStore.refreshManifests()
                     // Needs the addons to look up titles started on other devices.
                     await trakt.pullProgress()
@@ -79,7 +85,15 @@ struct LogeApp: App {
     @ViewBuilder
     private var initialBrowseView: some View {
         #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("--tmdb-ui-test"),
+        if ProcessInfo.processInfo.arguments.contains("--playback-ui-test") {
+            PlaybackFixtureView()
+        } else if ProcessInfo.processInfo.arguments.contains("--discovery-ui-test") {
+            BrowseStack { DiscoveryFixture.screen }
+        } else if ProcessInfo.processInfo.arguments.contains("--person-role-ui-test") {
+            BrowseStack {
+                PersonView(route: PersonRoute(person: Person(name: "Filmography check", roles: [.director])))
+            }
+        } else if ProcessInfo.processInfo.arguments.contains("--tmdb-ui-test"),
            let value = ProcessInfo.processInfo.environment["TMDB_TEST_PERSON_ID"],
            let id = Int(value), id > 0 {
             BrowseStack {

@@ -83,7 +83,7 @@ final class TMDBFilmographyTests: XCTestCase {
         defer { app.terminate() }
         let home = app.tabBars.buttons["Home"].firstMatch
         (home.exists ? home : app.buttons["Home"].firstMatch).tap()
-        let director = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Christopher Nolan'")).firstMatch
+        let director = app.scrollViews["popular-directors"].buttons.firstMatch
         for _ in 0..<22 {
             if director.exists && director.isHittable { break }
             app.swipeUp(velocity: .fast)

@@ -20,7 +20,7 @@ struct HomeView: View {
                 GenreRow()
                 ForEach(sources.dropFirst(3)) { CatalogRow(source: $0) }
                 DiscoveryCollectionRow(title: "Film Festivals", collections: FilmCollection.festivals)
-                DiscoveryCollectionRow(title: "Popular Directors", collections: FilmCollection.directors)
+                PopularDirectorsRow()
             }
             .padding(.bottom, 32)
             .id(refreshID)
@@ -82,10 +82,12 @@ private func prefetchArtwork(of sources: [CatalogSource]) async {
 private final class HomeFocus {
     var title: MetaPreview?
     var collection: FilmCollection?
+    var director: TMDBPopularDirector?
 
     func show(_ title: MetaPreview) {
         self.title = title
         collection = nil
+        director = nil
     }
 }
 
@@ -119,14 +121,20 @@ private struct TVHome: View {
                                 CatalogRow(source: source, onFocus: focus.show)
                             }
                             DiscoveryCollectionRow(title: "Film Festivals", collections: FilmCollection.festivals) {
+                                focus.director = nil
                                 focus.collection = $0
                                 proxy.scrollTo("festival-row", anchor: .top)
                             }
                             .id("festival-row")
-                            DiscoveryCollectionRow(title: "Popular Directors", collections: FilmCollection.directors) {
-                                focus.collection = $0
+                            PopularDirectorsRow(onFocus: { director in
+                                focus.collection = nil
+                                focus.director = director
                                 proxy.scrollTo("director-row", anchor: .top)
-                            }
+                            }, onFallbackFocus: { collection in
+                                focus.director = nil
+                                focus.collection = collection
+                                proxy.scrollTo("director-row", anchor: .top)
+                            })
                             .id("director-row")
                         }
                         .scrollTargetLayout()
@@ -149,7 +157,7 @@ private struct TVHomeBackdrop: View {
     let focus: HomeFocus
 
     var body: some View {
-        let url = focus.collection == nil ? focus.title?.featuredBackground : nil
+        let url = focus.collection == nil && focus.director == nil ? focus.title?.featuredBackground : nil
         ZStack {
             // Each backdrop is its own view, so the crossfade blends two layers on the GPU.
             // Animating one image view's content instead redrew both images on the CPU every frame.
@@ -157,7 +165,7 @@ private struct TVHomeBackdrop: View {
                 .id(url)
                 .transition(.opacity)
         }
-        .opacity(focus.collection == nil ? 1 : 0)
+        .opacity(focus.collection == nil && focus.director == nil ? 1 : 0)
         .ignoresSafeArea()
         .overlay {
             // Darken the left and bottom, where the text and rows sit.
@@ -178,7 +186,17 @@ private struct TVHomeHeader: View {
         // The clear base keeps the header's height while nothing is focused yet.
         ZStack(alignment: .bottomLeading) {
             Color.clear
-            if let collection = focus.collection {
+            if let director = focus.director {
+                HStack(spacing: 32) {
+                    Artwork(url: director.portraitURL)
+                        .frame(width: Metrics.personSize, height: Metrics.personSize * 1.25)
+                        .clipShape(.rect(cornerRadius: Metrics.posterRadius))
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text(director.name).font(.system(size: 64, weight: .bold))
+                        Text("Director").font(.metaLine).foregroundStyle(.secondary)
+                    }
+                }
+            } else if let collection = focus.collection {
                 HStack(spacing: 32) {
                     CollectionArtwork(collection: collection)
                         .frame(width: collection.isFestival ? Metrics.posterWidth * 1.4 : Metrics.personSize,
@@ -227,6 +245,9 @@ private struct FeaturedCarousel: View {
     let series: CatalogSource
     @State private var items: [MetaPreview] = []
     @State private var currentID: MetaPreview.ID?
+    #if os(macOS)
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    #endif
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
@@ -244,7 +265,11 @@ private struct FeaturedCarousel: View {
         }
         .scrollTargetBehavior(.paging)
         .scrollPosition(id: $currentID)
+        #if os(macOS)
+        .scrollIndicators(.never)
+        #else
         .scrollIndicators(.hidden)
+        #endif
         .frame(height: height)
         // Landscape safe areas must not expose the neighboring page's content.
         .clipped()
@@ -286,12 +311,31 @@ private struct FeaturedCarousel: View {
     private var pageDots: some View {
         HStack(spacing: 7) {
             ForEach(items) { meta in
+                #if os(macOS)
+                Button {
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.22)) {
+                        currentID = meta.id
+                    }
+                } label: {
+                    Circle()
+                        .fill(meta.id == (currentID ?? items.first?.id) ? AnyShapeStyle(.tint) : AnyShapeStyle(.white.opacity(0.35)))
+                        .frame(width: 7, height: 7)
+                        .padding(6)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Show \(meta.name)")
+                .help(meta.name)
+                #else
                 Circle()
                     .fill(meta.id == (currentID ?? items.first?.id) ? AnyShapeStyle(.tint) : AnyShapeStyle(.white.opacity(0.35)))
                     .frame(width: 7, height: 7)
+                #endif
             }
         }
+        #if !os(macOS)
         .accessibilityHidden(true)
+        #endif
     }
 
     #if os(iOS)

@@ -1,7 +1,7 @@
 import Foundation
 
 /// A small editorial selection; directors are not a measured popularity ranking.
-public enum FilmCollection: String, CaseIterable, Sendable, Hashable, Identifiable {
+public enum FilmCollection: String, Codable, CaseIterable, Sendable, Hashable, Identifiable {
     case cannes, berlin, venice, sundance, toronto, locarno, sanSebastian
     case nolan, spielberg, scorsese, tarantino, miyazaki
 
@@ -196,6 +196,12 @@ public actor FilmCollectionClient {
 
     private let session: URLSession
     private var cache: [FilmCollection: (loadedAt: Date, films: [CollectionFilm])] = [:]
+    private struct FilmKey: Hashable, Sendable {
+        let name: String
+        let festivalYear: Int
+    }
+    private var filmCache: [FilmKey: (loadedAt: Date, film: MetaPreview?)] = [:]
+    private var filmRequests: [FilmKey: Task<MetaPreview?, Error>] = [:]
 
     public init(session: URLSession = .shared) { self.session = session }
 
@@ -211,6 +217,61 @@ public actor FilmCollectionClient {
         let films = try Self.decode(data)
         cache[collection] = (.now, films)
         return films
+    }
+
+    /// A festival title only opens directly when the catalog has one plausible, exact match.
+    public func film(named name: String, festivalYear: Int) async throws -> MetaPreview? {
+        try Task.checkCancellation()
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, (1900...9998).contains(festivalYear) else { return nil }
+        let key = FilmKey(name: Self.normalizedTitle(name), festivalYear: festivalYear)
+        if let cached = filmCache[key], Date.now.timeIntervalSince(cached.loadedAt) < 6 * 60 * 60 {
+            return cached.film
+        }
+        if let request = filmRequests[key] {
+            let match = try await request.value
+            try Task.checkCancellation()
+            return match
+        }
+        // Leaving the grid must not cancel a lookup its detail destination is also awaiting.
+        let request = Task {
+            guard let source = DiscoveryCatalogs.search.first(where: { $0.catalog.type == "movie" }) else {
+                throw Failure.unavailable
+            }
+            let client = try AddonClient(manifestURL: source.manifestURL, session: session)
+            let candidates = try await client.catalog(type: source.catalog.type, id: source.catalog.id,
+                                                      extra: [(name: "search", value: name)])
+            var matches: [String: MetaPreview] = [:]
+            for candidate in candidates {
+                guard candidate.type == "movie", candidate.id.wholeMatch(of: /tt\d+/) != nil,
+                      Self.normalizedTitle(candidate.name) == key.name,
+                      let release = candidate.releaseInfo, release.prefix(4).wholeMatch(of: /\d{4}/) != nil,
+                      let year = Int(release.prefix(4)), (festivalYear - 1...festivalYear + 1).contains(year),
+                      release.dropFirst(4).first?.isNumber != true else { continue }
+                matches[candidate.id] = candidate
+            }
+            return matches.count == 1 ? matches.values.first : nil
+        }
+        filmRequests[key] = request
+        do {
+            let match = try await request.value
+            filmRequests.removeValue(forKey: key)
+            if filmCache.count >= 256,
+               let oldest = filmCache.min(by: { $0.value.loadedAt < $1.value.loadedAt })?.key {
+                filmCache.removeValue(forKey: oldest)
+            }
+            filmCache[key] = (.now, match)
+            try Task.checkCancellation()
+            return match
+        } catch {
+            filmRequests.removeValue(forKey: key)
+            throw error
+        }
+    }
+
+    private static func normalizedTitle(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
     }
 
     static func request(for collection: FilmCollection) -> URLRequest {

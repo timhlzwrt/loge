@@ -9,15 +9,16 @@ three platforms. Not published anywhere and not meant to be.
 Only the bundle ID (`li.tjh.MediaApp`) and Keychain service names keep the old
 working name, so saved data and sign-ins carry over between builds.
 
-Home includes festival winner collections and an editorial selection of directors,
-using Wikidata's recorded film relationships (which may be incomplete or delayed).
+Home includes dated festival award collections and TMDB popularity-ranked directors.
+Historical collections use Wikidata's recorded film relationships, which may be incomplete or delayed.
 Connect TMDB in Settings with an API Read Access Token to add English movie/series
 details, cast portraits, character names and director/writer credits. The token is
 validated before being saved in this device's Keychain. Metadata addons remain the
 fallback and supply series episodes and IMDb ratings; IMDb playback and saved-list
 IDs stay unchanged. Connected actor/director pages use TMDB's full combined movie and TV credits,
-with filters, sorting and biographies. Credits without an IMDb mapping stay visible
-as information-only titles; IMDb IDs are resolved only when opening a credit.
+with movie/series and acting/directing/other crew filters, sorting and biographies.
+Credits without an IMDb mapping stay visible as information-only titles; IMDb IDs
+are resolved only when opening a credit.
 TMDB responses are cached in bounded device memory; Home preloads the current/next
 featured title, and title pages warm the first actor and director. Legacy credits
 without a TMDB person ID still fall back to catalog search.
@@ -37,11 +38,15 @@ files are rejected. There is no peer-to-peer playback backend.
 
 - [ ] Continue Watching in the Apple TV's Top Shelf. On hold: sideloaded with a free Apple ID,
   the extension and its App Group install, but tvOS never launches the extension.
-- [ ] Review text in the app. Reviews are links to IMDb and Letterboxd for now; Letterboxd's
-  API excludes personal projects, so the text needs another source.
-- [ ] Complete festival winner lists. Wikidata's records stop short of the latest editions.
-- [ ] Popular Directors ranked by popularity instead of hand-picked, and person pages that
-  separate acting from directing.
+- [x] Review text in the app, using TMDB member reviews with full-text reading and pagination.
+  IMDb critic and Letterboxd links remain available.
+- [x] Latest festival editions: 278 dated 2026 awards and mentions across all seven festivals,
+  with poster grids, award filters and direct title opening for unique recent catalog matches.
+  The full awards list and historical Wikidata winners remain available.
+- [x] Popular Directors ranked by TMDB popularity, supplementing the popular feed with
+  the existing director identities so an actor-heavy feed does not empty the shelf.
+  Without TMDB, the editorial fallback is labeled Selected Directors.
+- [x] Person pages that separate acting, directing and other crew credits.
 
 Not planned: downloads. The interface stays English-only for now.
 
