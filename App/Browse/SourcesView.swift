@@ -1,4 +1,4 @@
-import MediaCore
+import LogeCore
 import SwiftUI
 
 /// A movie or episode whose sources should be listed.
@@ -39,17 +39,47 @@ struct SourcesView: View {
     #endif
     /// Chosen in the sheet, to play once it has closed.
     @State private var pendingPlay: Entry?
+    @State private var isAddingAddon = false
     @Environment(PlaybackSession.self) private var playback
 
     var body: some View {
         let providers = store.addons.streamProviders(type: route.type, id: route.id)
         Group {
             if providers.isEmpty {
-                ContentUnavailableView(
-                    "No stream addons",
-                    systemImage: "play.slash",
-                    description: Text("Install an addon that provides streams in Settings.")
-                )
+                // Installing one here, rather than a pointer to Settings, so the title is still
+                // open once there's something to play it with.
+                ContentUnavailableView {
+                    Label("No playback addons", systemImage: "play.slash")
+                } description: {
+                    Text("Add a Stremio addon that provides streams to watch \(route.title).")
+                } actions: {
+                    Button("Add Addon") { isAddingAddon = true }
+                        .buttonStyle(.glassProminent)
+                        .foregroundStyle(.black)
+                }
+                #if os(iOS)
+                .overlay(alignment: .topTrailing) {
+                    if isChoosing {
+                        Button("Close", systemImage: "xmark") { dismiss() }
+                            .labelStyle(.iconOnly)
+                            .font(.body.weight(.semibold))
+                            .frame(width: 44, height: 44)
+                            .buttonStyle(.glass)
+                            .buttonBorderShape(.circle)
+                            .padding([.top, .trailing], 16)
+                    }
+                }
+                #endif
+                .sheet(isPresented: $isAddingAddon) {
+                    NavigationStack {
+                        AddonsSettingsView()
+                            .toolbar {
+                                ToolbarItem(placement: .confirmationAction) {
+                                    Button("Done") { isAddingAddon = false }
+                                }
+                            }
+                    }
+                }
             } else {
                 content(providers)
             }
@@ -287,9 +317,21 @@ struct SourcesView: View {
             }
             .pickerStyle(.menu)
         } label: {
-            Label("Sort & Filter", systemImage: "line.3.horizontal.decrease")
-                .frame(minHeight: 44)
+            // Says how the list is ordered now, rather than only that it can be.
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.up.arrow.down")
+                Text(sourceOrder.rawValue)
+                if maximumBitrate > 0 {
+                    Text("· up to \(maximumBitrate) Mbps")
+                }
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .font(.subheadline.weight(.medium))
+            .frame(minHeight: 44)
         }
+        .accessibilityLabel("Sort & Filter")
         .accessibilityValue("\(sourceOrder.rawValue), then \(secondaryOrder.rawValue), \(maximumBitrate == 0 ? "any bitrate" : "up to \(maximumBitrate) Mbps")")
     }
 
@@ -530,8 +572,9 @@ private struct SourceGroupView<Content: View>: View {
     #endif
 }
 
-/// One source: the release type, then codec, HDR and audio, with the size on the right.
-/// Files the debrid service doesn't hold yet are dimmed, since they usually stall.
+/// One source: the release type with its best dynamic range, then codec and audio, with
+/// the size on the right and the bitrate under it. Files the debrid service doesn't hold
+/// yet are dimmed, since they usually stall.
 private struct StreamRow: View {
     let entry: SourcesView.Entry
     let isLastPlayed: Bool
@@ -540,44 +583,54 @@ private struct StreamRow: View {
         let details = entry.details
         let isCold = details.isCached == false
         HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(titleFont)
+            VStack(alignment: .leading, spacing: 2) {
+                // HDR is what tells two otherwise equal 4K files apart, so it sits by the title.
+                let range = Text(details.dynamicRange.first.map { "  \($0)" } ?? "").font(summaryFont.weight(.semibold))
+                Text("\(Text(title).font(titleFont))\(range)")
                     .lineLimit(1)
-                if let summary = [details.summary, isCold ? "not cached" : nil].compactMap({ $0 }).joined(separator: " · ").nilIfEmpty {
+                if let summary = summary(details) {
                     Text(summary)
                         .font(summaryFont)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
+                if isLastPlayed || isCold {
+                    Text(isLastPlayed ? "Last played" : "Not cached, may be slow to start")
+                        .font(summaryFont.weight(.medium))
+                        .foregroundStyle(isLastPlayed ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                }
             }
             Spacer(minLength: 8)
             if details.bitrateLabel != nil || details.sizeLabel != nil {
                 VStack(alignment: .trailing, spacing: 2) {
+                    if let size = details.sizeLabel {
+                        Text(size)
+                            .font(sizeFont.weight(.semibold).monospacedDigit())
+                    }
                     if let bitrate = details.bitrateLabel {
                         Text(bitrate)
+                            .font(summaryFont.monospacedDigit())
+                            .foregroundStyle(.secondary)
                             .accessibilityLabel(details.bitrate == nil ? "about \(bitrate.dropFirst())" : bitrate)
                     }
-                    if let size = details.sizeLabel { Text(size) }
                 }
-                .font(sizeFont.monospacedDigit())
-                .foregroundStyle(.secondary)
                 .fixedSize(horizontal: true, vertical: false)
             }
-            Image(systemName: "checkmark")
-                .font(sizeFont.weight(.semibold))
-                .frame(width: 18)
-                .opacity(isLastPlayed ? 1 : 0)
-                .accessibilityLabel("Last played")
-                .accessibilityHidden(!isLastPlayed)
         }
-        .opacity(isCold ? 0.45 : 1)
+        .opacity(isCold ? 0.55 : 1)
         #if !os(tvOS)
         .padding(.horizontal, 16)
+        .padding(.vertical, 10)
         .frame(minHeight: rowHeight)
         #endif
         .contentShape(.rect)
         .accessibilityElement(children: .combine)
+    }
+
+    /// Codec and audio; the dynamic range is already beside the title.
+    private func summary(_ details: StreamDetails) -> String? {
+        let audio = details.audio.isEmpty ? nil : details.audio.joined(separator: " ")
+        return [details.codec, audio].compactMap { $0 }.joined(separator: " · ").nilIfEmpty
     }
 
     /// The release type, the resolution when that's all an addon says, or the addon's own

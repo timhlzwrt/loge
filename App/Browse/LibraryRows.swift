@@ -1,4 +1,4 @@
-import MediaCore
+import LogeCore
 import SwiftUI
 
 /// Unfinished movies and episodes, most recent first. Selecting one goes straight
@@ -115,21 +115,18 @@ private struct ContinueWatchingCard: View {
     }
 }
 
-/// One half of Watch Later, newest first: series, or everything else.
+/// Watch Later, newest first, series and movies together as they were saved.
 struct MyListRow: View {
-    enum Shelf { case series, movies }
-
-    let shelf: Shelf
     var onFocus: (MetaPreview) -> Void = { _ in }
 
     @Environment(LibraryStore.self) private var library
     @FocusState private var focusedID: MetaPreview.ID?
 
     var body: some View {
-        let titles = shelf == .series ? library.savedSeries : library.savedMovies
+        let titles = library.saved
         if !titles.isEmpty {
             VStack(alignment: .leading, spacing: Metrics.headerSpacing) {
-                Text(shelf == .series ? "Watch Later · Series" : "Watch Later · Movies")
+                Text("Watch Later")
                     .font(.sectionTitle)
                     .padding(.horizontal, Metrics.gutter)
                 ScrollView(.horizontal) {
@@ -163,7 +160,7 @@ struct MyListRow: View {
     }
 }
 
-/// Watch Later as grids, series first, then the user's own lists in the order they were made.
+/// Watch Later as a grid, then the user's own lists in the order they were made.
 struct MyListView: View {
     @Environment(LibraryStore.self) private var library
     @State private var renaming: TitleList?
@@ -173,18 +170,15 @@ struct MyListView: View {
         Group {
             if library.saved.isEmpty && library.lists.isEmpty && library.progress.isEmpty {
                 ContentUnavailableView(
-                    "Nothing in Watch Later",
-                    systemImage: "plus",
-                    description: Text("The + button saves to Watch Later. Hold a poster to choose a list.")
+                    "Nothing saved yet",
+                    systemImage: "bookmark",
+                    description: Text("Tap Watch Later on a title to save it here, or Lists to start a list of your own.")
                 )
             } else {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 32) {
-                        if !library.savedSeries.isEmpty {
-                            section(library.savedSeries) { Text("Watch Later · Series") }
-                        }
-                        if !library.savedMovies.isEmpty {
-                            section(library.savedMovies) { Text("Watch Later · Movies") }
+                    VStack(alignment: .leading, spacing: 36) {
+                        if !library.saved.isEmpty {
+                            section(library.saved) { Text("Watch Later") }
                         }
                         ForEach(library.lists) { list in
                             section(list.titles) { listMenu(list) }
@@ -193,6 +187,7 @@ struct MyListView: View {
                             historySection
                         }
                     }
+                    .padding(.top, 12)
                     .padding(.bottom, 24)
                 }
                 .scrollClipDisabled()
@@ -212,11 +207,17 @@ struct MyListView: View {
 
     private func section(_ titles: [MetaPreview], @ViewBuilder header: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: Metrics.headerSpacing) {
-            header()
-                .font(.sectionTitle)
-                .padding(.horizontal, Metrics.gutter)
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                header()
+                    .font(.sectionTitle)
+                Text(titles.count, format: .number)
+                    .font(.metaLine)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("\(titles.count) \(titles.count == 1 ? "title" : "titles")")
+            }
+            .padding(.horizontal, Metrics.gutter)
             if titles.isEmpty {
-                Text("Add titles with the list button on their page.")
+                Text("Add titles with the Lists button on their page.")
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, Metrics.gutter)
             } else {
@@ -313,24 +314,29 @@ struct MyListView: View {
 /// Puts a title on the user's own lists, or starts a new list with it.
 struct ListsMenu: View {
     let title: MetaPreview
+    var isBare = false
 
     @Environment(LibraryStore.self) private var library
     @State private var isNaming = false
     @State private var name = ""
 
     var body: some View {
-        Menu {
-            ListMembershipActions(title: title)
-            Button("New List…", systemImage: "plus") {
-                name = ""
-                isNaming = true
+        VStack(spacing: 6) {
+            Menu {
+                ListMembershipActions(title: title)
+                Button("New List…", systemImage: "plus") {
+                    name = ""
+                    isNaming = true
+                }
+            } label: {
+                // Not a bulleted list: "Choose a Source" sits beside it with one.
+                Label("Save to", systemImage: "rectangle.stack.badge.plus")
             }
-        } label: {
-            // Not a bulleted list: "Choose a Source" sits beside it with one.
-            Label("Save to", systemImage: "rectangle.stack.badge.plus")
+            .menuIndicator(.hidden)
+            .buttonStyle(GlassIconButtonStyle(isBare: isBare))
+            IconCaption("Lists")
+                .accessibilityHidden(true)
         }
-        .menuIndicator(.hidden)
-        .buttonStyle(GlassIconButtonStyle())
         .alert("New List", isPresented: $isNaming) {
             TextField("Name", text: $name)
             Button("Create") {

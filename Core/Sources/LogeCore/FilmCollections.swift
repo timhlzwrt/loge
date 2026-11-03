@@ -218,7 +218,7 @@ public actor FilmCollectionClient {
         components.queryItems = [.init(name: "query", value: collection.query), .init(name: "format", value: "json")]
         var request = URLRequest(url: components.url!, cachePolicy: .useProtocolCachePolicy, timeoutInterval: 30)
         request.setValue("application/sparql-results+json", forHTTPHeaderField: "Accept")
-        request.setValue("Loge/0.1 (private film discovery client)", forHTTPHeaderField: "User-Agent")
+        request.setValue("loge/0.1 (private film discovery client)", forHTTPHeaderField: "User-Agent")
         return request
     }
 

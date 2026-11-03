@@ -1,4 +1,4 @@
-import MediaCore
+import LogeCore
 import SwiftUI
 
 /// Signs this device in to Trakt, which carries watch progress between devices.
@@ -51,8 +51,6 @@ struct TraktSection: View {
                 Text(errorMessage)
                     .foregroundStyle(.red)
             }
-        } header: {
-            Text("Trakt")
         } footer: {
             if trakt.credentials == nil {
                 Text("Create an app at trakt.tv/oauth/applications with the redirect URI urn:ietf:wg:oauth:2.0:oob, then enter its keys here.")

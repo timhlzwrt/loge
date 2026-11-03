@@ -1,6 +1,6 @@
 import Foundation
 
-/// One catalog feed, either managed by Loge or supplied by an installed addon.
+/// One catalog feed, either managed by loge or supplied by an installed addon.
 public struct CatalogSource: Sendable, Hashable, Identifiable {
     public let manifestURL: String
     public let catalog: AddonManifest.Catalog

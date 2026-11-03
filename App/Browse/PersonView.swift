@@ -1,4 +1,4 @@
-import MediaCore
+import LogeCore
 import SwiftUI
 
 /// A person picked on a title's details or a discovery shelf.
@@ -186,7 +186,6 @@ struct PersonView: View {
             }
             .pickerStyle(.segmented)
             HStack {
-                Text("Credits provided by TMDB").font(.metaLine).foregroundStyle(.secondary)
                 Spacer()
                 Menu {
                     Picker("Sort", selection: $sort) {
@@ -332,6 +331,19 @@ struct PeopleRow: View {
     let title: MetaPreview
 
     var body: some View {
+        #if os(tvOS)
+        // The remote moves between tiles, so the TV keeps them even without photos.
+        tiles
+        #else
+        if people.contains(where: { $0.portraitURL != nil }) {
+            tiles
+        } else {
+            CreditsList(people: people, title: title)
+        }
+        #endif
+    }
+
+    private var tiles: some View {
         VStack(alignment: .leading, spacing: Metrics.headerSpacing) {
             Text("Cast & Crew")
                 .font(.sectionTitle)
@@ -359,6 +371,57 @@ struct PeopleRow: View {
         }
     }
 }
+
+#if !os(tvOS)
+/// Names only, one per line as a film's credits read, for when no one has a photo: a row
+/// of initials in grey circles said more about what was missing than about who was in it.
+private struct CreditsList: View {
+    let people: [Person]
+    let title: MetaPreview
+    @Environment(TMDBAccount.self) private var tmdb
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Metrics.headerSpacing) {
+            Text("Cast & Crew")
+                .font(.sectionTitle)
+            Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 16, verticalSpacing: 4) {
+                line("Starring", role: .actor)
+                line("Director", role: .director)
+                line("Writer", role: .writer)
+            }
+            .font(.synopsis)
+            if !tmdb.isConfigured {
+                Text("Connect TMDB in Settings for photos and character names.")
+                    .font(.footnote)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.horizontal, Metrics.gutter)
+    }
+
+    @ViewBuilder
+    private func line(_ label: String, role: Person.Role) -> some View {
+        let credited = people.filter { $0.roles.contains(role) }
+        if !credited.isEmpty {
+            GridRow {
+                Text(label)
+                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(credited) { person in
+                        NavigationLink(value: PersonRoute(person: person, title: title)) {
+                            Text(person.name)
+                                .foregroundStyle(.white.opacity(0.88))
+                                .frame(minHeight: 32, alignment: .leading)
+                                .contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+}
+#endif
 
 /// TMDB portraits fall back to initials when no photo is available.
 private struct PersonTile: View {

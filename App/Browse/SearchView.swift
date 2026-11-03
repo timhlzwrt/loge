@@ -1,4 +1,4 @@
-import MediaCore
+import LogeCore
 import SwiftUI
 
 struct SearchView: View {
@@ -44,6 +44,7 @@ struct SearchView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.canvas)
+        .navigationTitle("Search")
         #if os(iOS)
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Movies and series")
         #else
@@ -78,15 +79,39 @@ struct SearchView: View {
             }
             .pickerStyle(.segmented)
             .fixedSize()
-            Menu {
-                Picker("Genre", selection: $genre) {
-                    Text("All Genres").tag(String?.none)
-                    ForEach(genres, id: \.self) { Text($0).tag(Optional($0)) }
+            // With nothing typed the genre list below is the way in, so only a chosen genre
+            // shows here, as something to remove; while searching, a menu narrows the results.
+            if let genre {
+                Button {
+                    self.genre = nil
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(genre)
+                        Image(systemName: "xmark")
+                            .font(.caption.weight(.bold))
+                    }
+                    #if !os(tvOS)
+                    .padding(.horizontal, 14)
+                    .frame(minHeight: 32)
+                    .background(.white.opacity(0.12), in: .capsule)
+                    #endif
                 }
-            } label: {
-                Label(genre ?? "All Genres", systemImage: "line.3.horizontal.decrease.circle")
+                #if !os(tvOS)
+                .buttonStyle(.plain)
+                #endif
+                .accessibilityLabel("\(genre), remove genre")
+                .fixedSize()
+            } else if !query.isEmpty {
+                Menu {
+                    Picker("Genre", selection: $genre) {
+                        Text("Any Genre").tag(String?.none)
+                        ForEach(genres, id: \.self) { Text($0).tag(Optional($0)) }
+                    }
+                } label: {
+                    Label("Genre", systemImage: "line.3.horizontal.decrease.circle")
+                }
+                .fixedSize()
             }
-            .fixedSize()
             Spacer(minLength: 0)
         }
         .labelsHidden()
@@ -101,14 +126,29 @@ struct SearchView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Genres")
                 .font(.headline)
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: Metrics.posterWidth * 1.4), alignment: .leading)],
-                      alignment: .leading, spacing: 12) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: Metrics.posterWidth * 1.4), spacing: 24, alignment: .leading)],
+                      alignment: .leading, spacing: 0) {
                 ForEach(genres, id: \.self) { genre in
-                    Button(genre) { self.genre = genre }
+                    Button { self.genre = genre } label: {
+                        HStack {
+                            Text(genre)
+                            Spacer(minLength: 8)
+                            #if !os(tvOS)
+                            Image(systemName: "chevron.right")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                            #endif
+                        }
                         #if !os(tvOS)
-                        .buttonStyle(.plain)
+                        .padding(.vertical, 12)
+                        .overlay(alignment: .bottom) { Rectangle().fill(.quaternary).frame(height: 0.5) }
+                        .contentShape(.rect)
                         #endif
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    #if !os(tvOS)
+                    .buttonStyle(.plain)
+                    #endif
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         }

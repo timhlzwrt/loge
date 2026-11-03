@@ -1,4 +1,4 @@
-import MediaCore
+import LogeCore
 import SwiftUI
 
 /// A whole catalog as a grid, loading further pages as it scrolls and, where the

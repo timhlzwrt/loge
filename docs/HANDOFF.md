@@ -1,4 +1,4 @@
-# Loge handoff — 2 November 2026
+# loge handoff — 2 November 2026
 
 ## Start here
 
@@ -50,12 +50,12 @@ Local logs/screenshots were written under `/tmp/loge-rich-*` and may not survive
 Tools/check-checkout.sh
 xcodegen generate
 swift test --package-path Core
-xcodebuild -project MediaApp.xcodeproj -scheme MediaApp -destination 'generic/platform=iOS Simulator' -derivedDataPath .build/xcode -jobs 2 SWIFT_TREAT_WARNINGS_AS_ERRORS=YES build
+xcodebuild -project loge.xcodeproj -scheme loge -destination 'generic/platform=iOS Simulator' -derivedDataPath .build/xcode -jobs 2 SWIFT_TREAT_WARNINGS_AS_ERRORS=YES build
 ```
 
 Use `generic/platform=tvOS Simulator` and `platform=macOS` for the other builds. Keep simulators sequential and builds modest (`-jobs 2`); the user explicitly requested this.
 
-For optional live checks, create a private temporary token file yourself, never in the repo, and set `TMDB_TEST_TOKEN_FILE` for Core tests. For UI tests use `TEST_RUNNER_UI_FLOWS=1`, `TEST_RUNNER_TMDB_TEST_TOKEN_FILE=<temporary file>` and `-only-testing:MediaAppUITests/TMDBFilmographyTests`. The DEBUG-only bootstrap reads the file into an in-memory account and never saves it to Keychain. RemoteDriverTests accepts the same file plus optional `TEST_RUNNER_TMDB_TEST_PERSON_ID`/`TEST_RUNNER_TMDB_TEST_PERSON_NAME` for a deterministic person-page entry. These debug entry points are absent from Release behavior.
+For optional live checks, create a private temporary token file yourself, never in the repo, and set `TMDB_TEST_TOKEN_FILE` for Core tests. For UI tests use `TEST_RUNNER_UI_FLOWS=1`, `TEST_RUNNER_TMDB_TEST_TOKEN_FILE=<temporary file>` and `-only-testing:logeUITests/TMDBFilmographyTests`. The DEBUG-only bootstrap reads the file into an in-memory account and never saves it to Keychain. RemoteDriverTests accepts the same file plus optional `TEST_RUNNER_TMDB_TEST_PERSON_ID`/`TEST_RUNNER_TMDB_TEST_PERSON_NAME` for a deterministic person-page entry. These debug entry points are absent from Release behavior.
 
 The token supplied in chat was used only for checks. Its temporary file and explicit REPL credential binding were removed. Do not copy credentials from chat into source, fixtures, commands, PR text, logs or memory. The user connected TMDB on their own device; no replacement token is committed.
 

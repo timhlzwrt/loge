@@ -34,12 +34,12 @@ fi
 
 xcodegen generate --quiet
 xcodebuild build -quiet \
-    -project MediaApp.xcodeproj -scheme MediaApp -configuration "$configuration" \
+    -project loge.xcodeproj -scheme loge -configuration "$configuration" \
     -destination "id=$device" -derivedDataPath .build/xcode \
     -allowProvisioningUpdates -allowProvisioningDeviceRegistration \
     CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM="$team"
 
-app=.build/xcode/Build/Products/$configuration-iphoneos/Loge.app
+app=.build/xcode/Build/Products/$configuration-iphoneos/loge.app
 xcrun devicectl device install app --device "$device" "$app"
 [[ ${1:-} == --no-launch ]] && exit 0
 launch=(--terminate-existing)

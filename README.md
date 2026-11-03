@@ -1,4 +1,4 @@
-# Loge
+# loge
 
 A private streaming app for my own iPhone, iPad, Apple TV and Mac. Managed Home
 shelves, search, title details and IMDb scores work out of the box through
@@ -6,8 +6,8 @@ Cinemeta. Add a Stremio playback addon to watch its streams with mpv.
 Native SwiftUI, one app target for all
 three platforms. Not published anywhere and not meant to be.
 
-The Xcode project, scheme and bundle ID still use the working name `MediaApp`,
-so saved data carries over between builds.
+Only the bundle ID (`li.tjh.MediaApp`) and Keychain service names keep the old
+working name, so saved data and sign-ins carry over between builds.
 
 Home includes festival winner collections and an editorial selection of directors,
 using Wikidata's recorded film relationships (which may be incomplete or delayed).
@@ -52,7 +52,7 @@ Needs Xcode and [XcodeGen](https://github.com/yonaskolb/XcodeGen).
 ```sh
 xcodegen generate              # after adding or removing files
 (cd Core && swift test)        # Core unit tests
-xcodebuild -project MediaApp.xcodeproj -scheme MediaApp \
+xcodebuild -project loge.xcodeproj -scheme loge \
   -destination 'generic/platform=iOS Simulator' -derivedDataPath .build/xcode build
 ```
 
@@ -75,7 +75,7 @@ it up once with `DEVICE=<udid> Tools/nightly-deploy.sh --install`.
 
 | Path            | What's in it                                                        |
 | --------------- | ------------------------------------------------------------------- |
-| `Core/`         | `MediaCore` package: addon client, routing, addon and library stores |
+| `Core/`         | `LogeCore` package: addon client, routing, addon and library stores |
 | `App/Browse/`   | Home, catalog rows, details, sources, search                        |
 | `App/Player/`   | mpv player, controls, next-episode countdown                        |
 | `App/Settings/` | Addons and playback language preferences                            |

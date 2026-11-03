@@ -74,6 +74,12 @@ public enum DiscoveryCatalogs {
             "https://images.metahub.space/background/medium/\(stillID)/img"
         }
 
+        /// The same still at 480 × 270, about 20 KB against the full one's megabyte, to show
+        /// while that loads.
+        public var stillPreview: String {
+            "https://images.metahub.space/background/small/\(stillID)/img"
+        }
+
         /// What's being watched now, from Cinemeta.
         public var popular: CatalogSource {
             source(type: "movie", id: "top", title: "Popular \(name)", genre: name)

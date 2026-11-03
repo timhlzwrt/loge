@@ -7,8 +7,8 @@ import XCTest
 /// Track switching also uses the generated MOV server on port 8766; see docs/REVIEW_VALIDATION.md.
 ///
 ///     TEST_RUNNER_UI_FLOWS=1 TEST_RUNNER_SCREENSHOT_DIR=/tmp/shots xcodebuild test \
-///       -scheme MediaApp -destination 'platform=iOS Simulator,name=iPhone 18 Pro' \
-///       -only-testing:MediaAppUITests/FlowTests
+///       -scheme loge -destination 'platform=iOS Simulator,name=iPhone 18 Pro' \
+///       -only-testing:logeUITests/FlowTests
 final class FlowTests: XCTestCase {
     private var app: XCUIApplication!
 
@@ -101,6 +101,24 @@ final class FlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["batman"].exists)
         XCTAssertFalse(app.buttons["batmanzzqxjvw"].exists)
         screenshot("search-recent")
+    }
+
+    @MainActor
+    func testSearchGenreCanBeRemovedAndNarrowsTypedSearches() {
+        openTab("Search")
+        XCTAssertFalse(app.buttons["Genre"].exists, "The genre list is the way in before typing")
+        app.buttons["Drama"].firstMatch.tap()
+        let chip = app.buttons["Drama, remove genre"]
+        XCTAssertTrue(chip.waitForExistence(timeout: 5))
+        screenshot("search-genre-chip")
+        chip.tap()
+        XCTAssertTrue(app.staticTexts["Genres"].waitForExistence(timeout: 5))
+
+        let field = app.searchFields.firstMatch
+        field.tap()
+        field.typeText("heat")
+        XCTAssertTrue(app.buttons["Genre"].waitForExistence(timeout: 5))
+        screenshot("search-typed-genre-menu")
     }
 
     @MainActor

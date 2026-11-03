@@ -1,4 +1,4 @@
-import MediaCore
+import LogeCore
 import SwiftUI
 
 /// Provider links rather than unlicensed review excerpts or inferred critic scores.
@@ -19,15 +19,13 @@ struct ReviewsSection: View {
                         .font(.subheadline)
                 }
                 #else
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 24) { links(critics: critics) }
-                    VStack(alignment: .leading, spacing: 8) { links(critics: critics) }
+                VStack(spacing: 0) {
+                    reviewLink("Critic reviews", source: "IMDb", destination: critics)
+                    if let letterboxd = ReviewLinks.letterboxd(imdbID: preview.id, type: preview.type) {
+                        Divider()
+                        reviewLink("Member reviews", source: "Letterboxd", destination: letterboxd)
+                    }
                 }
-                .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.85))
-                Text("Opens the review provider in your browser.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
                 #endif
             }
             .padding(.horizontal, Metrics.gutter)
@@ -35,16 +33,25 @@ struct ReviewsSection: View {
     }
 
     #if !os(tvOS)
-    @ViewBuilder
-    private func links(critics: URL) -> some View {
-        Link("Critic reviews · IMDb", destination: critics)
-            .frame(minHeight: 44)
-            .underline()
-        if let letterboxd = ReviewLinks.letterboxd(imdbID: preview.id, type: preview.type) {
-            Link("Letterboxd reviews", destination: letterboxd)
-                .frame(minHeight: 44)
-                .underline()
+    /// A row whose arrow says it leaves the app, in place of an underlined link and a note.
+    private func reviewLink(_ title: String, source: String, destination: URL) -> some View {
+        Link(destination: destination) {
+            HStack {
+                Text(title)
+                    .foregroundStyle(.white.opacity(0.88))
+                Spacer()
+                Text(source)
+                    .foregroundStyle(.secondary)
+                Image(systemName: "arrow.up.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .font(.synopsis)
+            .frame(minHeight: 48)
+            .contentShape(.rect)
         }
+        .buttonStyle(.plain)
+        .accessibilityHint("Opens \(source) in your browser")
     }
     #endif
 }

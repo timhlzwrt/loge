@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import MediaCore
+@testable import LogeCore
 
 @MainActor
 struct LibraryStoreTests {
@@ -154,16 +154,14 @@ struct LibraryStoreTests {
         #expect(!LibraryStore(defaults: defaults).isSaved("tt1"))
     }
 
-    @Test func myListFromOlderBuildsSplitsIntoShowsAndMovies() {
+    @Test func myListFromOlderBuildsLoadsUnchanged() {
         // As older builds wrote it: one list, no custom lists alongside.
         let json = #"[{"id":"tt9","type":"series","name":"Show","poster":"https://img/9"},{"id":"tt1","type":"movie","name":"Movie"},{"id":"ch1","type":"channel","name":"Channel"}]"#
         defaults.set(Data(json.utf8), forKey: "savedTitles")
 
         let store = LibraryStore(defaults: defaults)
         #expect(store.saved.map(\.id) == ["tt9", "tt1", "ch1"])
-        #expect(store.savedSeries.map(\.id) == ["tt9"])
-        #expect(store.savedMovies.map(\.id) == ["tt1", "ch1"])
-        #expect(store.savedSeries.first?.poster == "https://img/9")
+        #expect(store.saved.first?.poster == "https://img/9")
         #expect(store.lists.isEmpty)
 
         // Adding a custom list leaves My List as it was.

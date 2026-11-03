@@ -1,4 +1,4 @@
-import MediaCore
+import LogeCore
 import SwiftUI
 
 /// The user's preferred audio and subtitle languages, stored as ISO 639-1 codes.
@@ -38,18 +38,28 @@ struct PlaybackSettingsSection: View {
                 Text("File default").tag("")
                 ForEach(PlaybackPreferences.languages, id: \.code) { Text($0.name).tag($0.code) }
             }
+            #if os(tvOS)
+            // tvOS draws pickers as segmented strips, too narrow for 25 language names.
+            .pickerStyle(.navigationLink)
+            #endif
             Picker("Subtitles", selection: $subtitleLanguage) {
                 Text("Off").tag("")
                 ForEach(PlaybackPreferences.languages, id: \.code) { Text($0.name).tag($0.code) }
             }
+            #if os(tvOS)
+            .pickerStyle(.navigationLink)
+            #endif
             Picker("Automatic series source limit", selection: $maximumSourceGigabytes) {
                 Text("No limit").tag(0)
                 ForEach([10, 25, 50, 100], id: \.self) { Text("\($0) GB per episode").tag($0) }
             }
+            #if os(tvOS)
+            .pickerStyle(.navigationLink)
+            #endif
         } header: {
             Text("Playback")
         } footer: {
-            Text("Languages apply when a file has a matching track. The size limit applies only to series, including Up Next. Episodes above the limit or without a known video size require a manual choice. Movies are unrestricted. A season pack's total size is not an episode's file size.")
+            Text("Languages apply when a file has a matching track. The size limit applies to series episodes, including Up Next; larger episodes, or ones of unknown size, are left for you to choose.")
                 .foregroundStyle(.secondary)
         }
     }

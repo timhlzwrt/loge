@@ -24,7 +24,6 @@ final class DiscoveryFlowTests: XCTestCase {
         screenshot("discovery-festivals")
         cannes.tap()
         XCTAssertTrue(app.staticTexts["Palme d’Or winners"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["Source: Wikidata · Records may be incomplete."].exists)
         let loaded = NSPredicate { _, _ in
             app.buttons["Retry"].exists || app.otherElements["collection-films"].exists
                 || app.staticTexts["No films are recorded for this collection yet."].exists

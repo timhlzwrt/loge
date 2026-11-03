@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import MediaCore
+@testable import LogeCore
 
 struct AddonRoutingTests {
     let cinemeta = InstalledAddon(
