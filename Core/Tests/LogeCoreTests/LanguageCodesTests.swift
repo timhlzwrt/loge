@@ -1,5 +1,5 @@
 import Testing
-@testable import MediaCore
+@testable import LogeCore
 
 struct LanguageCodesTests {
     @Test func includesTerminologyAndBibliographicCodes() {

@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import MediaCore
+@testable import LogeCore
 
 struct TMDBClientTests {
     private func client(_ scenario: String = "valid") -> TMDBClient {

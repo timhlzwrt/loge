@@ -1,4 +1,4 @@
-name: MediaApp
+name: loge
 
 options:
   bundleIdPrefix: li.tjh
@@ -8,14 +8,14 @@ options:
     macOS: "27.0"
 
 packages:
-  MediaCore:
+  LogeCore:
     path: Core
   # MPVKit with a patched Libmpv; see Vendor/MPVKit/README.md.
   MPVKit:
     path: Vendor/MPVKit
 
 targets:
-  MediaApp:
+  loge:
     type: application
     supportedDestinations: [iOS, tvOS, macOS]
     sources: [App]
@@ -26,14 +26,15 @@ targets:
         # Picture in Picture keeps playing once the app is in the background.
         UIBackgroundModes: [audio]
     dependencies:
-      - package: MediaCore
+      - package: LogeCore
       - package: MPVKit
         product: MPVKit
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
         # Bundle ID stays li.tjh.MediaApp so saved addons and library carry over.
-        PRODUCT_NAME: Loge
+        PRODUCT_BUNDLE_IDENTIFIER: li.tjh.MediaApp
+        PRODUCT_NAME: loge
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         # Landscape for full-screen video; portrait for browsing.
@@ -50,15 +51,15 @@ targets:
         CODE_SIGN_IDENTITY[sdk=macosx*]: "-"
     scheme:
       testTargets:
-        - MediaAppUITests
+        - logeUITests
 
   # Manual UI checks: a remote driver for the Apple TV simulator and on-demand player tests.
-  MediaAppUITests:
+  logeUITests:
     type: bundle.ui-testing
     supportedDestinations: [iOS, tvOS]
     sources: [UITests]
     dependencies:
-      - target: MediaApp
+      - target: loge
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES

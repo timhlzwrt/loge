@@ -20,16 +20,16 @@ xcodegen generate --quiet
 
 for platform in $platforms; do
     sdk=${sdks[$platform]}
-    rm -f "$out/Loge-$platform.ipa"
+    rm -f "$out/loge-$platform.ipa"
     xcodebuild build -quiet \
-        -project MediaApp.xcodeproj -scheme MediaApp -configuration Release \
+        -project loge.xcodeproj -scheme loge -configuration Release \
         -destination "generic/platform=$platform" -derivedDataPath .build/xcode \
         CODE_SIGNING_ALLOWED=NO
 
     staging=$(mktemp -d)
     mkdir "$staging/Payload"
-    cp -R ".build/xcode/Build/Products/Release-$sdk/Loge.app" "$staging/Payload/"
-    (cd "$staging" && zip -qry "$OLDPWD/$out/Loge-$platform.ipa" Payload)
+    cp -R ".build/xcode/Build/Products/Release-$sdk/loge.app" "$staging/Payload/"
+    (cd "$staging" && zip -qry "$OLDPWD/$out/loge-$platform.ipa" Payload)
     rm -rf "$staging"
 done
 

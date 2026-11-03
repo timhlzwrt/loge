@@ -100,7 +100,7 @@ Screenshots are in `/tmp/loge-pip-ipad-final`.
 The reported after-close failure was not reproduced in the simulator. These
 checks do not establish crash-free behavior on the user's physical iPhone.
 The user confirmed it quits to the Home Screen. Read-only `devicectl` searches
-of the paired iPhone's crash logs returned no Loge or MediaApp reports; a
+of the paired iPhone's crash logs returned no loge or MediaApp reports; a
 current device crash report is still needed to identify that exact failure.
 Final iPhone timing-layout and search regressions passed, as did the final
 tvOS/macOS builds and all 68 Core tests. The Xcode metadata warning remains.
@@ -120,7 +120,7 @@ returned 10,000 matches. That is about 36–37 times faster for this isolated
 lookup, not for app startup or playback overall. Build it alongside Core:
 
 ```sh
-swiftc -swift-version 6 -O -parse-as-library Core/Sources/MediaCore/*.swift Tools/benchmark-resume.swift -o /tmp/loge-performance-benchmark
+swiftc -swift-version 6 -O -parse-as-library Core/Sources/LogeCore/*.swift Tools/benchmark-resume.swift -o /tmp/loge-performance-benchmark
 /tmp/loge-performance-benchmark
 ```
 

@@ -1,16 +1,17 @@
-# MediaApp
+# loge
 
-Loge: a private, never-published Stremio-addon client for iPhone/iPad, Apple TV and Mac,
-in native SwiftUI. The project, scheme and bundle ID keep the working name `MediaApp`; only
-the product name is Loge, so saved data carries over. It browses catalogs from Stremio addons, shows details, lists streams and
+loge: a private, never-published Stremio-addon client for iPhone/iPad, Apple TV and Mac,
+in native SwiftUI. The project, scheme, product and `LogeCore` package are all named loge; only the bundle ID
+(`li.tjh.MediaApp`), Keychain service names and log subsystem keep the old working name, so
+saved data and sign-ins carry over. It browses catalogs from Stremio addons, shows details, lists streams and
 plays them with mpv. The look follows the Strand app: charcoal canvas, artwork-led, white
 accent, system font, no cards/gradients/badges.
 
 ## Layout
 
 - `project.yml` — XcodeGen spec; the `.xcodeproj` is generated and gitignored. One app target
-  (`MediaApp`) builds for iOS, tvOS and macOS; `MediaAppUITests` holds on-demand UI tests.
-- `Core/` — `MediaCore` Swift package, no UI: addon protocol client and models, routing
+  (`loge`) builds for iOS, tvOS and macOS; `logeUITests` holds on-demand UI tests.
+- `Core/` — `LogeCore` Swift package, no UI: addon protocol client and models, routing
   (which addon serves catalogs/meta/streams, in user order), `AddonStore` (installed
   addons), `LibraryStore` (watch progress, My List, remembered sources), language codes.
   All persistence is `UserDefaults` because tvOS can purge app files.
@@ -22,7 +23,9 @@ accent, system font, no cards/gradients/badges.
   (a second, silent mpv instance for timeline thumbnails), `PlayerView`,
   controls and menus, `PictureInPicture`, `NowPlaying`, next-episode countdown, tvOS remote
   swipe reader.
-- `App/Settings/` — addons (install/reorder/remove) and playback language preferences.
+- `App/Settings/` — an index of pages: addons (install/reorder/remove), Trakt, TMDB, accent;
+  playback preferences inline; About with version, credits and the Data Sources page
+  (all attribution lives there rather than under artwork).
 - `Tools/run-device.sh` — Debug build onto the connected iPhone/iPad with the free Personal Team.
 - `Tools/test-addon.py` — local stream addon at `http://127.0.0.1:8765/manifest.json` with
   test streams (MKV, HEVC, multi-track HLS, header-protected, broken, torrent).
@@ -39,7 +42,7 @@ accent, system font, no cards/gradients/badges.
 ```bash
 xcodegen generate                                   # after adding/removing files
 (cd Core && swift test)                             # Core unit tests
-xcodebuild -project MediaApp.xcodeproj -scheme MediaApp -destination 'generic/platform=iOS Simulator' -derivedDataPath .build/xcode build
+xcodebuild -project loge.xcodeproj -scheme loge -destination 'generic/platform=iOS Simulator' -derivedDataPath .build/xcode build
 # also: 'generic/platform=tvOS Simulator' and 'platform=macOS'
 Tools/build-ipa.sh [iOS|tvOS]                       # unsigned .ipa files in .build/ipa
 Tools/install-tv.sh                                 # build tvOS, install on the Apple TV via atvloadly
@@ -55,7 +58,7 @@ Devices are installed without a paid account. `nightly-deploy.sh` runs at 02:30 
 in its own checkout (`.build/nightly` of the main repo): when origin/main moved it installs a
 Release build on the Apple TV via `install-tv.sh` and on the iPhone over Wi-Fi via
 `run-device.sh`, and it reinstalls the iPhone after 5 days so the free signature never lapses.
-It logs to `~/Library/Logs/Loge-nightly.log` and shows a notification when an install fails.
+It logs to `~/Library/Logs/loge-nightly.log` and shows a notification when an install fails.
 atvloadly runs on the home Proxmox server (CT 107, `http://192.168.178.115:5533`, set up in the
 separate infrastructure repo); it re-signs every night 03:00–06:30, and `install-tv.sh` uploads a
 new build to it. A free Apple ID allows 3 sideloaded apps at once across Xcode, Sideloadly and
@@ -64,7 +67,7 @@ atvloadly.
 On-demand UI tests (need network and installed addons; skipped otherwise):
 
 ```bash
-TEST_RUNNER_UI_FLOWS=1 TEST_RUNNER_SCREENSHOT_DIR=/tmp/shots xcodebuild test -project MediaApp.xcodeproj -scheme MediaApp -destination 'platform=iOS Simulator,name=iPhone 18 Pro' -derivedDataPath .build/xcode -only-testing:MediaAppUITests/FlowTests
+TEST_RUNNER_UI_FLOWS=1 TEST_RUNNER_SCREENSHOT_DIR=/tmp/shots xcodebuild test -project loge.xcodeproj -scheme loge -destination 'platform=iOS Simulator,name=iPhone 18 Pro' -derivedDataPath .build/xcode -only-testing:logeUITests/FlowTests
 ```
 
 `UITests/RemoteDriverTests.swift` drives the Apple TV simulator's remote from a command file

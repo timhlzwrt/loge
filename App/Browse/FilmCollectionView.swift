@@ -1,4 +1,4 @@
-import MediaCore
+import LogeCore
 import SwiftUI
 
 struct DiscoveryCollectionRow: View {
@@ -93,10 +93,13 @@ struct CollectionArtwork: View {
     var body: some View {
         Group {
             if let logo = collection.logoAssetName {
+                // On the same quiet tile as missing artwork, so marks read as tappable like posters.
                 Image(logo, bundle: .main)
                     .resizable()
                     .scaledToFit()
                     .padding(20)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.white.opacity(0.06))
             } else {
                 Artwork(url: collection.artworkURL)
             }
@@ -200,18 +203,6 @@ struct FilmCollectionView: View {
                     heading
                 }
             }
-            #if os(tvOS)
-            Text(artworkCredit)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            #else
-            Link(artworkCredit, destination: collection.artworkCreditURL)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.leading)
-                .underline()
-                .frame(minHeight: 44, alignment: .leading)
-            #endif
         }
     }
 
@@ -219,10 +210,6 @@ struct FilmCollectionView: View {
         CollectionArtwork(collection: collection)
             .clipShape(.rect(cornerRadius: Metrics.posterRadius))
             .accessibilityHidden(true)
-    }
-
-    private var artworkCredit: String {
-        collection.isFestival ? "Logo: \(collection.artworkCredit)" : "Photo: \(collection.artworkCredit) · Cropped"
     }
 
     private var heading: some View {
@@ -237,9 +224,6 @@ struct FilmCollectionView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            Text("Source: Wikidata · Records may be incomplete.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
             #if !os(tvOS)
             if let url = collection.officialResultsURL {
                 Link(collection.officialResultsLabel, destination: url)

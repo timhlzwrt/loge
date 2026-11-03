@@ -1,5 +1,5 @@
 import ImageIO
-import MediaCore
+import LogeCore
 import SwiftUI
 
 extension Color {

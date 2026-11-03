@@ -1,4 +1,4 @@
-import MediaCore
+import LogeCore
 import SwiftUI
 
 /// A person picked on a title's details or a discovery shelf.
@@ -186,7 +186,6 @@ struct PersonView: View {
             }
             .pickerStyle(.segmented)
             HStack {
-                Text("Credits provided by TMDB").font(.metaLine).foregroundStyle(.secondary)
                 Spacer()
                 Menu {
                     Picker("Sort", selection: $sort) {

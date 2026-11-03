@@ -1,4 +1,4 @@
-import MediaCore
+import LogeCore
 import SwiftUI
 
 struct SearchView: View {

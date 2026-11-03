@@ -1,5 +1,5 @@
 import MediaPlayer
-import MediaCore
+import LogeCore
 
 #if os(macOS)
 import AppKit

@@ -4,7 +4,7 @@ import Foundation
 struct ResumeLookupBenchmark {
     @MainActor
     static func main() {
-        let suite = "LogePerformance-\(UUID().uuidString)"
+        let suite = "logePerformance-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         let store = LibraryStore(defaults: defaults)

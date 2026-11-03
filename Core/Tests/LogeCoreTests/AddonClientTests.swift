@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import MediaCore
+@testable import LogeCore
 
 struct AddonClientTests {
     let client = try! AddonClient(manifestURL: "https://addon.example/config123/manifest.json")

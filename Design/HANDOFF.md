@@ -49,7 +49,7 @@ Liquid Glass is available on every deployment target (27.0), so use the system A
 blur materials. Check the white primary button against the system's `.glassProminent` with a
 white tint; keep whichever looks like the mockup.
 
-## Navigation (`App/MediaApp.swift` → `RootView`)
+## Navigation (`App/LogeApp.swift` → `RootView`)
 
 - Tabs: **Home, My List, Settings, Search** (`role: .search`). My List is new as a tab; today it is
   only a row on Home (`MyListRow`). Keep the row on Home too.
@@ -103,7 +103,7 @@ Content:
 - No filter control, no sort control, no file names, no addon names, no explanatory footer.
 
 **Data needed (Phase 2 "readable sources list" in `CLAUDE.md`):** `StreamSource` has no parsed
-fields today. Add a parser in `MediaCore` (with tests in `Core/Tests`) that reads resolution,
+fields today. Add a parser in `LogeCore` (with tests in `Core/Tests`) that reads resolution,
 release type, video codec, HDR format, audio format/channels, size and cached state from
 `name`, `title` and `description`. `behaviorHints.filename` may be used as parser input only, never
 shown. Unparseable streams go to **Other** and show `cleanName`. Order within a group: largest

@@ -7,8 +7,8 @@ import XCTest
 /// Track switching also uses the generated MOV server on port 8766; see docs/REVIEW_VALIDATION.md.
 ///
 ///     TEST_RUNNER_UI_FLOWS=1 TEST_RUNNER_SCREENSHOT_DIR=/tmp/shots xcodebuild test \
-///       -scheme MediaApp -destination 'platform=iOS Simulator,name=iPhone 18 Pro' \
-///       -only-testing:MediaAppUITests/FlowTests
+///       -scheme loge -destination 'platform=iOS Simulator,name=iPhone 18 Pro' \
+///       -only-testing:logeUITests/FlowTests
 final class FlowTests: XCTestCase {
     private var app: XCUIApplication!
 

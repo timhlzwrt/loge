@@ -1,4 +1,4 @@
-import MediaCore
+import LogeCore
 import SwiftUI
 
 struct MetaDetailView: View {
@@ -204,9 +204,6 @@ struct MetaDetailView: View {
     private var tmdbStatus: some View {
         Group {
             switch tmdbState {
-            case .loaded:
-                Text("Details provided by TMDB")
-                    .accessibilityIdentifier("tmdb-details-source")
             case .failed(let message):
                 HStack {
                     Text(message + (loaded == nil ? "" : " Showing available addon details."))
@@ -214,7 +211,7 @@ struct MetaDetailView: View {
                 }
             case .loading:
                 Text("Loading TMDB details…")
-            case .disconnected:
+            case .loaded, .disconnected:
                 EmptyView()
             }
         }

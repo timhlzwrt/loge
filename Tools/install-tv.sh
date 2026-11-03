@@ -33,7 +33,7 @@ if [[ $tvs == 0 ]]; then
     exit 1
 fi
 
-ipa=${IPA:-.build/ipa/Loge-tvOS.ipa}
+ipa=${IPA:-.build/ipa/loge-tvOS.ipa}
 [[ -n ${IPA:-} ]] || Tools/build-ipa.sh tvOS
 
 # atvloadly keeps one record per app and device; it changes when the install finishes.
@@ -60,4 +60,4 @@ if [[ $(jq .refreshed_result <<<"$after") != true ]]; then
     echo "Install failed: $(jq -c .refreshed_error <<<"$after")" >&2
     exit 1
 fi
-jq -r '"Installed Loge \(.version) on \(.device), valid until \(.expiration_date[:16])."' <<<"$after"
+jq -r '"Installed loge \(.version) on \(.device), valid until \(.expiration_date[:16])."' <<<"$after"

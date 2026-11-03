@@ -10,12 +10,12 @@
 #   (the iPhone/iPad's identifier is in `xcrun devicectl list devices`)
 # Remove:                          Tools/nightly-deploy.sh --uninstall
 # Run now instead of waiting:      launchctl kickstart gui/$UID/li.tjh.loge.nightly
-# Log: ~/Library/Logs/Loge-nightly.log
+# Log: ~/Library/Logs/loge-nightly.log
 set -euo pipefail
 
 label=li.tjh.loge.nightly
 agent=~/Library/LaunchAgents/$label.plist
-log=~/Library/Logs/Loge-nightly.log
+log=~/Library/Logs/loge-nightly.log
 repo=$(git -C "${0:A:h}" rev-parse --path-format=absolute --git-common-dir)
 # The job builds in a checkout of its own so it never touches work in progress.
 checkout=${repo:h}/.build/nightly
@@ -61,7 +61,7 @@ uninstall_agent() {
 }
 
 notify() {
-    osascript -e "display notification \"$1\" with title \"Loge nightly\"" || true
+    osascript -e "display notification \"$1\" with title \"loge nightly\"" || true
 }
 
 deploy() {
