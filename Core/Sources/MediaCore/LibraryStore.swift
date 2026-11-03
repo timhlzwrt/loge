@@ -100,6 +100,13 @@ public struct UpNext: Sendable, Equatable {
     public var resumeAt: Double?
 }
 
+/// A named collection of titles, newest additions first.
+public struct SavedList: Codable, Sendable, Identifiable {
+    public var id: String
+    public var name: String
+    public var titles: [MetaPreview]
+}
+
 /// Watch progress and the user's saved titles, kept on this device.
 ///
 /// Persisted in `UserDefaults`, like `AddonStore`, because tvOS may purge an
@@ -115,9 +122,16 @@ public final class LibraryStore {
     private static let progressKey = "watchProgress"
     private static let savedKey = "savedTitles"
     private static let sourcesKey = "lastSources"
+    private static let listsKey = "customSavedLists"
+    public nonisolated static let watchLaterID = "watch-later"
 
     public private(set) var progress: [String: WatchProgress]
     public private(set) var saved: [MetaPreview]
+    public private(set) var customLists: [SavedList]
+
+    public var lists: [SavedList] {
+        [SavedList(id: Self.watchLaterID, name: "Watch Later", titles: saved)] + customLists
+    }
     /// Keyed by movie or series ID.
     public private(set) var sources: [String: RememberedSource]
 
@@ -127,6 +141,7 @@ public final class LibraryStore {
         self.defaults = defaults
         progress = Self.decode(defaults.data(forKey: Self.progressKey)) ?? [:]
         saved = Self.decode(defaults.data(forKey: Self.savedKey)) ?? []
+        customLists = Self.decode(defaults.data(forKey: Self.listsKey)) ?? []
         sources = Self.decode(defaults.data(forKey: Self.sourcesKey)) ?? [:]
     }
 
@@ -256,7 +271,7 @@ public final class LibraryStore {
         save(sources, forKey: Self.sourcesKey)
     }
 
-    // MARK: My List
+    // MARK: Saved lists
 
     public func isSaved(_ id: String) -> Bool {
         saved.contains { $0.id == id }
@@ -269,6 +284,56 @@ public final class LibraryStore {
             saved.insert(meta, at: 0)
         }
         save(saved, forKey: Self.savedKey)
+    }
+
+    public func contains(_ titleID: String, in listID: String) -> Bool {
+        if listID == Self.watchLaterID { return isSaved(titleID) }
+        return customLists.first { $0.id == listID }?.titles.contains { $0.id == titleID } == true
+    }
+
+    public func toggleSaved(_ meta: MetaPreview, in listID: String) {
+        if listID == Self.watchLaterID {
+            toggleSaved(meta)
+            return
+        }
+        guard let list = customLists.firstIndex(where: { $0.id == listID }) else { return }
+        if let title = customLists[list].titles.firstIndex(where: { $0.id == meta.id }) {
+            customLists[list].titles.remove(at: title)
+        } else {
+            customLists[list].titles.insert(meta, at: 0)
+        }
+        save(customLists, forKey: Self.listsKey)
+    }
+
+    @discardableResult
+    public func createList(name: String) -> String? {
+        guard let name = validListName(name) else { return nil }
+        let id = UUID().uuidString
+        customLists.append(SavedList(id: id, name: name, titles: []))
+        save(customLists, forKey: Self.listsKey)
+        return id
+    }
+
+    @discardableResult
+    public func renameList(_ id: String, to name: String) -> Bool {
+        guard let index = customLists.firstIndex(where: { $0.id == id }),
+              let name = validListName(name, excluding: id) else { return false }
+        customLists[index].name = name
+        save(customLists, forKey: Self.listsKey)
+        return true
+    }
+
+    public func deleteList(_ id: String) {
+        customLists.removeAll { $0.id == id }
+        save(customLists, forKey: Self.listsKey)
+    }
+
+    private func validListName(_ name: String, excluding id: String? = nil) -> String? {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty,
+              !lists.contains(where: { $0.id != id && $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame })
+        else { return nil }
+        return name
     }
 
     // MARK: Persistence

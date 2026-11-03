@@ -54,7 +54,7 @@ public struct AddonClient: Sendable {
 
     public func streams(type: String, id: String) async throws -> [StreamSource] {
         let response: StreamsResponse = try await fetch(resourceURL("stream", type: type, id: id))
-        return response.streams
+        return response.streams.filter { $0.playbackURL != nil }
     }
 
     /// - Parameter filename: The video's file name, which addons use to rank matches.

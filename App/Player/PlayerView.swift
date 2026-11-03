@@ -43,6 +43,7 @@ struct PlayerView: View {
     @State private var isPanelShown = false
     #endif
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dismiss) private var dismiss
 
     private var player: MPVPlayer? { session.player }
 
@@ -81,7 +82,7 @@ struct PlayerView: View {
                             scrubPreview: scrubPreview?.image,
                             isMenuOpen: $isMenuOpen,
                             adjustingTiming: $adjustingTiming,
-                            onClose: { session.end() },
+                            onClose: closePlayback,
                             onChooseSource: chooseSource(for: current),
                             onInteract: showControls
                         )
@@ -107,6 +108,15 @@ struct PlayerView: View {
         .onDisappear {
             scrubPreview = nil
             session.screenDidDisappear()
+        }
+        .onChange(of: session.current) { _, _ in
+            scrubPosition = nil
+            scrubPreview = nil
+            adjustingTiming = nil
+            #if os(tvOS)
+            scrubStart = nil
+            #endif
+            showControls()
         }
         .onChange(of: scrubPosition) { _, position in
             guard let position, let current = session.current else { return }
@@ -171,7 +181,9 @@ struct PlayerView: View {
             showControls()
         }
         // Menu closes the panel first; without it, Menu leaves the player as usual.
-        .onExitCommand(perform: isPanelShown ? { isPanelShown = false } : nil)
+        .onExitCommand {
+            if isPanelShown { isPanelShown = false } else { closePlayback() }
+        }
         .onChange(of: isPanelShown) { _, shown in
             isMenuOpen = shown
             if !shown { surfaceFocused = true }
@@ -258,7 +270,7 @@ struct PlayerView: View {
         })
         .simultaneousGesture(DragGesture(minimumDistance: 40).onEnded { value in
             if value.translation.height > 120 && abs(value.translation.width) < 80 {
-                session.end()
+                closePlayback()
             }
         })
         #endif
@@ -303,6 +315,13 @@ struct PlayerView: View {
         #endif
     }
 
+    private func closePlayback() {
+        session.end()
+        // Dismiss the presenting cover/window as well as clearing the session. This
+        // also works when its presentation binding is already false during teardown.
+        dismiss()
+    }
+
     private func showControls() {
         controlsVisible = true
         lastInteraction = .now
@@ -327,7 +346,7 @@ struct PlayerView: View {
                 Button("Choose another source", action: choose)
                     .padding(.top, 8)
             }
-            Button("Close") { session.end() }
+            Button("Close", action: closePlayback)
                 .padding(.top, 8)
         }
         .multilineTextAlignment(.center)

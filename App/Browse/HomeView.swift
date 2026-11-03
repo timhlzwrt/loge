@@ -16,6 +16,8 @@ struct HomeView: View {
                 ContinueWatchingRow()
                 MyListRow()
                 ForEach(sources) { CatalogRow(source: $0) }
+                DiscoveryCollectionRow(title: "Film Festivals", collections: FilmCollection.festivals)
+                DiscoveryCollectionRow(title: "Popular Directors", collections: FilmCollection.directors)
             }
             .padding(.bottom, 32)
             .id(refreshID)
@@ -43,10 +45,13 @@ struct HomeView: View {
 private struct TVHome: View {
     let sources: [CatalogSource]
     @State private var focused: MetaPreview?
+    @State private var focusedCollection: FilmCollection?
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            Artwork(url: focused?.background)
+            Artwork(url: focusedCollection == nil ? focused?.background : nil)
+                .id(focusedCollection?.id)
+                .opacity(focusedCollection == nil ? 1 : 0)
                 .ignoresSafeArea()
                 .overlay {
                     // Darken the left and bottom, where the text and rows sit.
@@ -63,19 +68,40 @@ private struct TVHome: View {
                     .frame(height: 400, alignment: .bottomLeading)
                     .padding(.horizontal, Metrics.gutter)
                     .padding(.bottom, 40)
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 24) {
-                        ContinueWatchingRow { focused = $0 }
-                        MyListRow { focused = $0 }
-                        ForEach(sources) { source in
-                            CatalogRow(source: source, isPrimary: source == sources.first) { focused = $0 }
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 24) {
+                            ContinueWatchingRow {
+                                focused = $0
+                                focusedCollection = nil
+                            }
+                            MyListRow {
+                                focused = $0
+                                focusedCollection = nil
+                            }
+                            ForEach(sources) { source in
+                                CatalogRow(source: source, isPrimary: source == sources.first) {
+                                    focused = $0
+                                    focusedCollection = nil
+                                }
+                            }
+                            DiscoveryCollectionRow(title: "Film Festivals", collections: FilmCollection.festivals) {
+                                focusedCollection = $0
+                                proxy.scrollTo("festival-row", anchor: .top)
+                            }
+                            .id("festival-row")
+                            DiscoveryCollectionRow(title: "Popular Directors", collections: FilmCollection.directors) {
+                                focusedCollection = $0
+                                proxy.scrollTo("director-row", anchor: .top)
+                            }
+                            .id("director-row")
                         }
+                        .scrollTargetLayout()
+                        .padding(.bottom, 60)
                     }
-                    .scrollTargetLayout()
-                    .padding(.bottom, 60)
+                    // Moving focus down a row scrolls by whole rows, so the focused row keeps its title.
+                    .scrollTargetBehavior(.viewAligned)
                 }
-                // Moving focus down a row scrolls by whole rows, so the focused row keeps its title.
-                .scrollTargetBehavior(.viewAligned)
             }
         }
         .background(Color.canvas)
@@ -85,7 +111,20 @@ private struct TVHome: View {
         // The clear base keeps the header's height while nothing is focused yet.
         ZStack(alignment: .bottomLeading) {
             Color.clear
-            if let focused {
+            if let focusedCollection {
+                HStack(spacing: 32) {
+                    CollectionArtwork(collection: focusedCollection)
+                        .frame(width: focusedCollection.isFestival ? Metrics.posterWidth * 1.4 : Metrics.personSize,
+                               height: Metrics.personSize * 1.25)
+                        .clipShape(.rect(cornerRadius: Metrics.posterRadius))
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text(focusedCollection.name).font(.system(size: 64, weight: .bold))
+                        Text(focusedCollection.isFestival ? "\(focusedCollection.subtitle) winners" : "Filmography")
+                            .font(.metaLine)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } else if let focused {
                 details(focused)
             }
         }
@@ -248,12 +287,13 @@ private struct FeaturedPage: View {
                 Label(isStarted ? "Resume" : "Play", systemImage: "play.fill")
             }
             .buttonStyle(PrimaryButtonStyle())
-            Button(library.isSaved(meta.id) ? "Remove from My List" : "Add to My List",
+            Button(library.isSaved(meta.id) ? "Remove from Watch Later" : "Add to Watch Later",
                    systemImage: library.isSaved(meta.id) ? "checkmark" : "plus") {
                 library.toggleSaved(meta)
             }
             .buttonStyle(GlassIconButtonStyle())
             .contentTransition(.symbolEffect(.replace))
+            .contextMenu { SaveToMenu(meta: meta) }
         }
     }
 

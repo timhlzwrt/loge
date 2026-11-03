@@ -1,5 +1,21 @@
 # MediaApp
 
+## Active checkout and preflight
+
+The user confirmed on 2026-11-02 that the current app work belongs in
+`/Users/tjh/Developer/MediaApp/.claude/worktrees/todo-batch`.
+The handoff branch is `codex/tmdb-discovery-handoff`, based on current `main`
+(which includes `claude/todo-batch` at `4243d49`).
+The top-level checkout was an older base and must not be used for app edits or builds.
+Before editing, after resuming, and before building/installing: run `Tools/check-checkout.sh`
+(it must succeed), then run `pwd`,
+`git status --short --branch`, `git worktree list`, and compare recent commits in
+candidate checkouts. Use the user-confirmed checkout and explicit working directories.
+Do not assume the current directory, branch name, or a newer timestamp proves which
+version is current. Preserve dirty work and resolve version mismatches before editing.
+Never replace a newer feature or persistence format with an older implementation.
+See `.cursor/rules/checkout-preflight.mdc`.
+
 Loge: a private, never-published Stremio-addon client for iPhone/iPad, Apple TV and Mac,
 in native SwiftUI. The project, scheme and bundle ID keep the working name `MediaApp`; only
 the product name is Loge, so saved data carries over. It browses catalogs from Stremio addons, shows details, lists streams and

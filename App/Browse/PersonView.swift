@@ -8,8 +8,7 @@ struct PersonRoute: Hashable {
     let title: MetaPreview
 }
 
-/// The movies and series a person is credited on. Without a people database this is a
-/// search by name, as Stremio does for cast links, narrowed to the titles that credit them.
+/// Playable titles still come from the catalog, narrowed to credits matching this person's name.
 struct PersonView: View {
     let route: PersonRoute
 
@@ -23,6 +22,22 @@ struct PersonView: View {
 
     var body: some View {
         ScrollView {
+            if let tmdbID = route.person.tmdbID {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Titles from catalog search. Results may be incomplete.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    #if !os(tvOS)
+                    Link("View profile on TMDB", destination: URL(string: "https://www.themoviedb.org/person/\(tmdbID)")!)
+                        .font(.subheadline)
+                        .underline()
+                        .frame(minHeight: 44)
+                    #endif
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, Metrics.gutter)
+                .padding(.top, 24)
+            }
             switch state {
             case .loading:
                 ProgressView()
@@ -114,7 +129,7 @@ struct PeopleRow: View {
                 .font(.sectionTitle)
                 .padding(.horizontal, Metrics.gutter)
             ScrollView(.horizontal) {
-                HStack(alignment: .top, spacing: Metrics.rowSpacing) {
+                LazyHStack(alignment: .top, spacing: Metrics.rowSpacing) {
                     ForEach(people) { person in
                         NavigationLink(value: PersonRoute(person: person, title: title)) {
                             PersonTile(person: person)
@@ -137,8 +152,7 @@ struct PeopleRow: View {
     }
 }
 
-/// Initials in a circle where a photo would be, since addons don't send any, then the
-/// name and, for crew, what they did. Actors need no label under "Cast & Crew".
+/// TMDB portraits fall back to initials when no photo is available.
 private struct PersonTile: View {
     let person: Person
     #if os(tvOS)
@@ -149,11 +163,18 @@ private struct PersonTile: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            Text(initials)
-                .font(Self.initialsFont)
-                .foregroundStyle(isFocused ? AnyShapeStyle(.black) : AnyShapeStyle(.secondary))
+            AsyncImage(url: person.portraitURL.flatMap(URL.init(string:))) { phase in
+                if let image = phase.image {
+                    image.resizable().scaledToFill()
+                } else {
+                    Text(initials)
+                        .font(Self.initialsFont)
+                        .foregroundStyle(isFocused ? AnyShapeStyle(.black) : AnyShapeStyle(.secondary))
+                }
+            }
                 .frame(width: Metrics.personSize, height: Metrics.personSize)
                 .background(.white.opacity(isFocused ? 1 : 0.08), in: .circle)
+                .clipShape(.circle)
                 #if os(tvOS)
                 // The circle turns white and lifts, as the glass buttons above it do.
                 .scaleEffect(isFocused ? 1.08 : 1)
@@ -164,6 +185,12 @@ private struct PersonTile: View {
                 Text(person.name)
                     .font(Self.nameFont)
                     .lineLimit(2)
+                if let character = person.character {
+                    Text(character)
+                        .font(Self.roleFont)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
                 if let roles {
                     Text(roles)
                         .font(Self.roleFont)
@@ -176,7 +203,7 @@ private struct PersonTile: View {
         .frame(width: Metrics.personSize * 1.3)
         .contentShape(.rect)
         .accessibilityElement()
-        .accessibilityLabel([person.name, roles].compactMap { $0 }.joined(separator: ", "))
+        .accessibilityLabel([person.name, person.character, roles].compactMap { $0 }.joined(separator: ", "))
     }
 
     /// "MM" for Matthew McConaughey.

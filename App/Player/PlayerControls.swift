@@ -59,6 +59,7 @@ struct PlayerControls: View {
             Text(title)
                 .font(.sectionTitle)
                 .lineLimit(1)
+            skipButton
             timeline
         }
         // Full width even before the timeline knows the duration, so the title doesn't start centred.
@@ -80,6 +81,7 @@ struct PlayerControls: View {
                     .frame(width: 44, height: 44)
                     .buttonStyle(.glass)
                     .buttonBorderShape(.circle)
+                    .simultaneousGesture(DragGesture(minimumDistance: 0).onChanged { _ in onInteract() })
                 Text(title)
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(2)
@@ -99,6 +101,9 @@ struct PlayerControls: View {
                 TimingPanel(player: player, kind: kind, onInteract: onInteract) { adjustingTiming = nil }
                     .frame(maxWidth: .infinity)
             } else {
+                skipButton
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .padding(.bottom, player.availableSkip == nil ? 0 : 12)
                 timeline
                 HStack {
                     Spacer()
@@ -166,6 +171,7 @@ struct PlayerControls: View {
     private var macBody: some View {
         VStack(spacing: 12) {
             Spacer()
+            skipButton
             if let kind = adjustingTiming {
                 TimingPanel(player: player, kind: kind, onInteract: onInteract) { adjustingTiming = nil }
             }
@@ -214,6 +220,20 @@ struct PlayerControls: View {
     #endif
 
     // MARK: Shared
+
+    @ViewBuilder
+    private var skipButton: some View {
+        if let skip = player.availableSkip {
+            Button(skip.kind.rawValue) {
+                player.seek(to: skip.end)
+                onInteract()
+            }
+            .font(.subheadline.weight(.semibold))
+            .padding(.horizontal, 16)
+            .frame(minHeight: 44)
+            .background(.black.opacity(0.7), in: .capsule)
+        }
+    }
 
     #if !os(tvOS)
     private var playPauseButton: some View {

@@ -110,6 +110,24 @@ Next, in plan order:
 2. Phase 3: watch history screen.
 3. Phase 4, onto devices: fix the iPhone Release orientation warning, then sideload.
 
+From using it (2026-11-01):
+
+- Player: lag while subtitles are on screen in HDR (maybe all playback); subtitles over HDR
+  make the picture look oversharpened (render them separately?); the audio timing menu
+  doesn't close.
+- Library: Continue Watching sometimes has no image; My List shows have no pictures; split
+  the watchlist into shows and movies automatically, plus custom lists.
+- Home: remove the "For You" heading; preload covers; better curated covers; add Letterboxd
+  popular and genre tiles (popular now and best of all time per genre).
+- Search: genre search and filtering.
+- Speed: faster first launch and loading in general; overall performance.
+- Settings: a customizable accent color instead of only white.
+- Picture in Picture subtitles: subtitles now draw in a layer over the video
+  (`avfoundation-composite-osd=no`) to stop the HDR lag and processing, so PiP shows none.
+  Bring them back with a libmpv patch that composites subtitles only for the PiP window.
+- Bitrate: sources rows show no bitrate because addons rarely report one; estimate it from
+  size and runtime, and allow sorting by bitrate combined with the other orders.
+
 Untested so far: playback and Picture in Picture on tvOS and macOS, HDR output and tvOS display
 matching (need real hardware), Trakt against the live API, tvOS swipe-to-scrub, Mac screens
 beyond Home, the scrub preview on screen. iPhone simulators report Picture in Picture as unsupported; use an iPad simulator.

@@ -29,6 +29,9 @@ struct ContinueWatchingRow: View {
                             #endif
                             .focused($focusedID, equals: entry.item.id)
                             .contextMenu {
+                                SaveToMenu(meta: MetaPreview(
+                                    id: entry.item.metaID, type: entry.item.type, name: entry.item.title,
+                                    poster: entry.item.poster, background: entry.item.background))
                                 Button("Remove from Continue Watching", systemImage: "eye.slash") {
                                     library.removeFromContinueWatching(metaID: entry.item.metaID)
                                 }
@@ -109,7 +112,7 @@ private struct ContinueWatchingCard: View {
     }
 }
 
-/// Titles the user added with the My List button, newest first.
+/// The default saved list, newest additions first.
 struct MyListRow: View {
     var onFocus: (MetaPreview) -> Void = { _ in }
 
@@ -119,7 +122,7 @@ struct MyListRow: View {
     var body: some View {
         if !library.saved.isEmpty {
             VStack(alignment: .leading, spacing: Metrics.headerSpacing) {
-                Text("My List")
+                Text("Watch Later")
                     .font(.sectionTitle)
                     .padding(.horizontal, Metrics.gutter)
                 ScrollView(.horizontal) {
@@ -153,23 +156,37 @@ struct MyListRow: View {
     }
 }
 
-/// Everything on My List as a grid, newest first.
+/// Saved collections, with Watch Later retaining titles saved by earlier versions.
 struct MyListView: View {
     @Environment(LibraryStore.self) private var library
+    @State private var selectedID = LibraryStore.watchLaterID
+    @State private var editor: ListEditor?
+    @State private var confirmingDelete = false
+
+    private var selected: SavedList {
+        library.lists.first { $0.id == selectedID } ?? library.lists[0]
+    }
 
     var body: some View {
-        Group {
-            if library.saved.isEmpty {
+        VStack(alignment: .leading, spacing: 16) {
+            Picker("List", selection: $selectedID) {
+                ForEach(library.lists) { list in
+                    Text(list.name).tag(list.id)
+                }
+            }
+            .padding(.horizontal, Metrics.gutter)
+
+            if selected.titles.isEmpty {
                 ContentUnavailableView(
-                    "Nothing on My List",
-                    systemImage: "plus",
-                    description: Text("Add a title with the + button on its page.")
+                    "Nothing in \(selected.name)",
+                    systemImage: "text.badge.plus",
+                    description: Text("Hold a poster to save it to a list. The + button saves to Watch Later.")
                 )
             } else {
                 ScrollView {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: Metrics.posterWidth), spacing: Metrics.rowSpacing)],
                               spacing: Metrics.rowSpacing) {
-                        ForEach(library.saved) { meta in
+                        ForEach(selected.titles) { meta in
                             NavigationLink(value: meta) {
                                 PosterTile(meta: meta, width: nil)
                             }
@@ -188,6 +205,102 @@ struct MyListView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.canvas)
-        .navigationTitle("My List")
+        .navigationTitle("My Lists")
+        .toolbar {
+            ToolbarItem {
+                Menu {
+                    Button("New List", systemImage: "plus") {
+                        editor = ListEditor(listID: nil, name: "")
+                    }
+                    if selected.id != LibraryStore.watchLaterID {
+                        Button("Rename List", systemImage: "pencil") {
+                            editor = ListEditor(listID: selected.id, name: selected.name)
+                        }
+                        Button("Delete List", systemImage: "trash", role: .destructive) {
+                            confirmingDelete = true
+                        }
+                    }
+                } label: {
+                    Label("Manage Lists", systemImage: "ellipsis.circle")
+                }
+            }
+        }
+        .sheet(item: $editor) { editor in
+            SavedListEditor(listID: editor.listID, name: editor.name) { id in
+                selectedID = id
+            }
+        }
+        .alert("Delete \(selected.name)?", isPresented: $confirmingDelete) {
+            Button("Delete List", role: .destructive) {
+                library.deleteList(selected.id)
+                selectedID = LibraryStore.watchLaterID
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Titles saved to other lists will stay there. Watch history is kept.")
+        }
+    }
+
+    private struct ListEditor: Identifiable {
+        let id = UUID()
+        let listID: String?
+        let name: String
+    }
+}
+
+private struct SavedListEditor: View {
+    let listID: String?
+    @State var name: String
+    var onSaved: (String) -> Void
+    @State private var hasError = false
+    @Environment(LibraryStore.self) private var library
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("List name", text: $name)
+                    .onSubmit(save)
+                if hasError {
+                    Text("Enter a name that isn't already used by another list.")
+                        .foregroundStyle(.red)
+                }
+                Button("Save", action: save)
+                #if os(tvOS)
+                Button("Cancel", role: .cancel) { dismiss() }
+                #endif
+            }
+            #if os(macOS)
+            .padding(20)
+            #endif
+            .navigationTitle(listID == nil ? "New List" : "Rename List")
+            #if !os(tvOS)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+            #endif
+        }
+        #if os(macOS)
+        .frame(width: 440, height: 260)
+        #endif
+    }
+
+    private func save() {
+        if let listID {
+            guard library.renameList(listID, to: name) else {
+                hasError = true
+                return
+            }
+            onSaved(listID)
+        } else {
+            guard let id = library.createList(name: name) else {
+                hasError = true
+                return
+            }
+            onSaved(id)
+        }
+        dismiss()
     }
 }

@@ -16,6 +16,50 @@ struct LibraryStoreTests {
         Video(id: "tt9:\(season):\(number)", season: season, episode: number)
     }
 
+    @Test func existingSavedTitlesRemainInWatchLater() throws {
+        let title = MetaPreview(id: "tt1", type: "movie", name: "Movie")
+        defaults.set(try JSONEncoder().encode([title]), forKey: "savedTitles")
+        let store = LibraryStore(defaults: defaults)
+        #expect(store.lists.first?.name == "Watch Later")
+        #expect(store.lists.first?.titles.map(\.id) == [title.id])
+        #expect(store.isSaved(title.id))
+    }
+
+    @Test func customListsPersistAndMembershipIsIndependent() throws {
+        let store = LibraryStore(defaults: defaults)
+        let first = MetaPreview(id: "tt1", type: "movie", name: "First")
+        let second = MetaPreview(id: "tt2", type: "movie", name: "Second")
+        let id = try #require(store.createList(name: "  Weekend  "))
+        store.toggleSaved(first, in: id)
+        store.toggleSaved(second, in: id)
+        store.toggleSaved(first)
+        #expect(store.customLists.first?.titles.map(\.id) == ["tt2", "tt1"])
+        #expect(store.renameList(id, to: "Favourites"))
+
+        let reloaded = LibraryStore(defaults: defaults)
+        #expect(reloaded.customLists.first?.name == "Favourites")
+        #expect(reloaded.contains(first.id, in: id))
+        reloaded.toggleSaved(first, in: id)
+        #expect(!reloaded.contains(first.id, in: id))
+        #expect(reloaded.isSaved(first.id))
+        reloaded.deleteList(id)
+        #expect(LibraryStore(defaults: defaults).customLists.isEmpty)
+        #expect(reloaded.isSaved(first.id))
+    }
+
+    @Test func listsRejectEmptyDuplicateAndReservedNames() throws {
+        let store = LibraryStore(defaults: defaults)
+        #expect(store.createList(name: " ") == nil)
+        #expect(store.createList(name: "watch later") == nil)
+        let id = try #require(store.createList(name: "Weekend"))
+        #expect(store.createList(name: "WEEKEND") == nil)
+        #expect(!store.renameList(id, to: "Watch Later"))
+        #expect(store.renameList(id, to: "Weekend"))
+        #expect(!store.renameList(LibraryStore.watchLaterID, to: "Other"))
+        store.deleteList(LibraryStore.watchLaterID)
+        #expect(store.lists.first?.id == LibraryStore.watchLaterID)
+    }
+
     @Test func resumesUnfinishedItemsSlightlyEarly() {
         let store = LibraryStore(defaults: defaults)
         store.record(movie, position: 600, duration: 6000, at: t0)

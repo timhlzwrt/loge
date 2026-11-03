@@ -9,6 +9,24 @@ three platforms. Not published anywhere and not meant to be.
 The Xcode project, scheme and bundle ID still use the working name `MediaApp`,
 so saved data carries over between builds.
 
+Home includes festival winner collections and an editorial selection of directors,
+using Wikidata's recorded film relationships (which may be incomplete or delayed).
+Connect TMDB in Settings with an API Read Access Token to add English movie/series
+details, cast portraits, character names and director/writer credits. The token is
+validated before being saved in this device's Keychain. Metadata addons remain the
+fallback and supply series episodes and IMDb ratings; IMDb playback and saved-list
+IDs stay unchanged. Person title lists still use catalog search and may be incomplete.
+TMDB's required logo and notice appear in Settings → Credits.
+Reviews open IMDb's critic links or Letterboxd; review text is not downloaded into the app.
+
+Hold a poster to save it to a custom list. The + button uses Watch Later, preserving
+titles saved by older versions. Audio defaults to English unless changed in Settings.
+Intro, recap and credits skipping uses named video chapters, with duration-matched
+community timings from [TheIntroDB](https://theintrodb.org/) as a fallback. Community
+timings need sufficient confidence and may be unavailable for a title or release.
+Only direct HTTP(S) sources play; torrent descriptors, magnet links and `.torrent`
+files are rejected. There is no peer-to-peer playback backend.
+
 ## Building it
 
 Needs Xcode and [XcodeGen](https://github.com/yonaskolb/XcodeGen).

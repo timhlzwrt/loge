@@ -7,7 +7,11 @@ struct MetaDetailView: View {
 
     @Environment(AddonStore.self) private var store
     @Environment(LibraryStore.self) private var library
+    @Environment(TMDBAccount.self) private var tmdb
     @State private var state = LoadState.loading
+    @State private var tmdbState = TMDBLoadState.disconnected
+    @State private var loadAttempt = 0
+    @State private var tmdbAttempt = 0
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
@@ -21,12 +25,24 @@ struct MetaDetailView: View {
         case failed(String)
     }
 
+    private enum TMDBLoadState {
+        case disconnected, loading, loaded(TMDBDetails), failed(String)
+    }
+
+    private struct TMDBLoadKey: Hashable {
+        let revision: Int
+        let attempt: Int
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
                 hero
-                switch state {
-                case .loaded(let meta):
+                if let meta = loaded {
+                    if preview.type == "series", case .loading = state {
+                        ProgressView("Loading episodes…")
+                            .frame(maxWidth: .infinity)
+                    }
                     if let videos = meta.videos, !videos.isEmpty, meta.type == "series" {
                         EpisodesSection(
                             videos: videos,
@@ -35,25 +51,33 @@ struct MetaDetailView: View {
                             choose: { choosingSource = route(for: $0) }
                         )
                     }
-                    let people = meta.people
+                    if case .failed = state {
+                        HStack {
+                            Text("Addon details are unavailable.\(preview.type == "series" ? " Episodes could not be loaded." : "")")
+                                .foregroundStyle(.secondary)
+                            Button("Retry", action: retry)
+                        }
+                        .padding(.horizontal, Metrics.gutter)
+                    }
+                    let people = creditedPeople(fallback: meta.people)
                     if !people.isEmpty {
                         PeopleRow(people: people, title: preview)
                     }
+                    ReviewsSection(preview: preview)
                     InformationSection(meta: meta)
-                case .failed(let message):
+                } else if case .failed(let message) = state {
                     HStack {
                         Text(message)
                             .foregroundStyle(.secondary)
-                        Button("Retry") { state = .loading }
+                        Button("Retry", action: retry)
                     }
                     .padding(.horizontal, Metrics.gutter)
-                case .loading where preview.type == "series":
+                } else if preview.type == "series" {
                     ProgressView()
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 40)
-                case .loading:
-                    EmptyView()
                 }
+                tmdbStatus
             }
             .padding(.bottom, 40)
         }
@@ -73,8 +97,7 @@ struct MetaDetailView: View {
         #else
         .sheet(item: $choosingSource) { SourcesView(route: $0, isChoosing: true) }
         #endif
-        .task(id: isLoading) {
-            guard isLoading else { return }
+        .task(id: loadAttempt) {
             guard let client = store.addons.metaClient(type: preview.type, id: preview.id) else {
                 state = .failed("None of your addons provides details for this title.")
                 return
@@ -90,6 +113,28 @@ struct MetaDetailView: View {
                 state = .failed("Couldn't load the details for \(preview.name).")
             }
         }
+        .task(id: TMDBLoadKey(revision: tmdb.revision, attempt: tmdbAttempt)) {
+            guard let client = tmdb.client, preview.id.wholeMatch(of: /tt\d+/) != nil,
+                  preview.type == "movie" || preview.type == "series" else {
+                tmdbState = .disconnected
+                return
+            }
+            tmdbState = .loading
+            do {
+                let details = try await client.details(imdbID: preview.id, type: preview.type)
+                try Task.checkCancellation()
+                tmdbState = .loaded(details)
+            } catch {
+                guard !Task.isCancelled else { return }
+                let message = switch error as? TMDBError {
+                case .unauthorized: "TMDB didn't accept the saved token. Check TMDB in Settings."
+                case .rateLimited: "TMDB is busy. Try again in a few minutes."
+                case .notFound: "This title wasn't found on TMDB."
+                default: "Couldn't load TMDB details."
+                }
+                tmdbState = .failed(message)
+            }
+        }
         // Stream addons such as AIOStreams take seconds to answer, so ask while the page is
         // being read; the sources screen picks up the same request.
         .task(id: playAction?.route.id) {
@@ -100,13 +145,47 @@ struct MetaDetailView: View {
         }
     }
 
-    private var isLoading: Bool {
-        if case .loading = state { true } else { false }
+    private func retry() {
+        state = .loading
+        loadAttempt += 1
+        tmdbAttempt += 1
     }
 
     /// Full details once loaded; until then the catalog entry already has enough to draw the page.
     private var loaded: Meta? {
-        if case .loaded(let meta) = state { meta } else { nil }
+        let base: Meta? = if case .loaded(let meta) = state { meta } else { nil }
+        if case .loaded(let details) = tmdbState {
+            return base.map { details.applying(to: $0) } ?? details.meta(for: preview)
+        }
+        return base
+    }
+
+    private func creditedPeople(fallback: [Person]) -> [Person] {
+        if case .loaded(let details) = tmdbState, !details.people.isEmpty { return details.creditedPeople }
+        return fallback
+    }
+
+    @ViewBuilder
+    private var tmdbStatus: some View {
+        Group {
+            switch tmdbState {
+            case .loaded:
+                Text("Details provided by TMDB")
+                    .accessibilityIdentifier("tmdb-details-source")
+            case .failed(let message):
+                HStack {
+                    Text(message + (loaded == nil ? "" : " Showing available addon details."))
+                    Button("Retry TMDB") { tmdbAttempt += 1 }
+                }
+            case .loading:
+                Text("Loading TMDB details…")
+            case .disconnected:
+                EmptyView()
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, Metrics.gutter)
     }
 
     private var playAction: PlayAction? {
@@ -150,7 +229,6 @@ struct MetaDetailView: View {
                 .frame(maxWidth: logoWidth, alignment: Alignment(horizontal: heroAlignment, vertical: .center))
             (loaded?.infoLine ?? preview.infoLine)
                 .multilineTextAlignment(heroAlignment == .center ? .center : .leading)
-            ratingLinks
             if !synopsisUnderButtons, let description {
                 Text(description)
                     .font(.synopsis)
@@ -170,26 +248,6 @@ struct MetaDetailView: View {
         .padding(.horizontal, Metrics.gutter)
     }
 
-    @ViewBuilder
-    private var ratingLinks: some View {
-        #if !os(tvOS)
-        // IMDb IDs make stable links without guessing a title's translated Letterboxd slug.
-        if preview.id.wholeMatch(of: /tt\d+/) != nil {
-            HStack(spacing: 20) {
-                Link("IMDb", destination: URL(string: "https://www.imdb.com/title/\(preview.id)/")!)
-                    .frame(minHeight: 44)
-                if preview.type == "movie" {
-                    Link("Letterboxd", destination: URL(string: "https://letterboxd.com/imdb/\(preview.id)/")!)
-                        .frame(minHeight: 44)
-                }
-            }
-            .font(.caption)
-            .foregroundStyle(.white.opacity(0.85))
-            .underline()
-        }
-        #endif
-    }
-
     private var buttons: some View {
         HStack(spacing: 12) {
             if let play = playAction {
@@ -206,6 +264,7 @@ struct MetaDetailView: View {
                     MyListButton(isSaved: library.isSaved(preview.id)) {
                         library.toggleSaved(preview)
                     }
+                    .contextMenu { SaveToMenu(meta: preview) }
                     if let play = playAction {
                         Button("Choose a Source", systemImage: "list.bullet") {
                             var route = play.route
@@ -368,7 +427,7 @@ private struct MyListButton: View {
 
     var body: some View {
         Button(action: toggle) {
-            Label(isSaved ? "Remove from My List" : "Add to My List", systemImage: isSaved ? "checkmark" : "plus")
+            Label(isSaved ? "Remove from Watch Later" : "Add to Watch Later", systemImage: isSaved ? "checkmark" : "plus")
                 .contentTransition(.symbolEffect(.replace))
         }
         .buttonStyle(GlassIconButtonStyle())

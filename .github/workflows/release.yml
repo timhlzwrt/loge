@@ -1,0 +1,50 @@
+name: Release
+
+# Pushing a tag such as v0.2 builds every platform and publishes a GitHub release with
+# Loge-iOS.ipa (iPhone and iPad), Loge-tvOS.ipa and Loge-macOS.dmg.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: xcode-27
+    strategy:
+      matrix:
+        include:
+          - platform: iOS
+            command: Tools/build-ipa.sh iOS
+            file: .build/ipa/Loge-iOS.ipa
+          - platform: tvOS
+            command: Tools/build-ipa.sh tvOS
+            file: .build/ipa/Loge-tvOS.ipa
+          - platform: macOS
+            command: Tools/build-dmg.sh
+            file: .build/dmg/Loge-macOS.dmg
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install xcodegen
+      - uses: actions/cache@v4
+        with:
+          path: .build/xcode/SourcePackages
+          key: spm-${{ hashFiles('project.yml', 'Vendor/MPVKit/Package.swift') }}
+      - run: ${{ matrix.command }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}
+          path: ${{ matrix.file }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --generate-notes Loge-*
+        env:
+          GH_TOKEN: ${{ github.token }}

@@ -322,3 +322,25 @@ extension Meta {
         InfoLine(releaseInfo: releaseInfo, genres: genres, runtime: runtime, rating: imdbRating)
     }
 }
+
+/// Context menus on posters and the save button share the same list memberships.
+struct SaveToMenu: View {
+    let meta: MetaPreview
+    @Environment(LibraryStore.self) private var library
+
+    var body: some View {
+        Menu("Save to", systemImage: "text.badge.plus") {
+            ForEach(library.lists) { list in
+                Button {
+                    library.toggleSaved(meta, in: list.id)
+                } label: {
+                    if library.contains(meta.id, in: list.id) {
+                        Label(list.name, systemImage: "checkmark")
+                    } else {
+                        Text(list.name)
+                    }
+                }
+            }
+        }
+    }
+}

@@ -6,6 +6,7 @@ struct MediaApp: App {
     @State private var addonStore: AddonStore
     @State private var library: LibraryStore
     @State private var trakt: TraktAccount
+    @State private var tmdb = TMDBAccount()
     @State private var playback: PlaybackSession
 
     init() {
@@ -33,6 +34,7 @@ struct MediaApp: App {
                 .environment(library)
                 .environment(playback)
                 .environment(trakt)
+                .environment(tmdb)
                 .preferredColorScheme(.dark)
                 // No accent colour: artwork carries the colour, controls stay neutral.
                 .tint(.white)
@@ -98,7 +100,7 @@ struct RootView: View {
                 BrowseStack { SearchView() }
             }
             #endif
-            tab("My List", systemImage: "plus") {
+            tab("My Lists", systemImage: "plus") {
                 BrowseStack { MyListView() }
             }
             #if os(macOS)
