@@ -115,6 +115,14 @@ My Lists and a grid per day behind "History ›" (PR #10).
 3 November: browsing tvOS Home no longer lags (PR #11). A focus move redrew every row, every
 poster in the focused row, and the backdrop crossfade on the CPU; now only the backdrop,
 header and the two posters involved update.
+3 November, release prep (PR #12): everything named loge except the bundle ID, Keychain
+services and log subsystem (`li.tjh.MediaApp`, kept for saved data and sign-ins). Settings is
+an index of pages with About (credits: development Tim Holzwarth, testing Lenja) and Data
+Sources, which holds all attribution that used to sit under artwork and lists. Details name
+their actions (Watch Later, Lists, Sources); a missing playback addon can be added from the
+sources sheet; source rows lead with size and HDR; cast without photos reads as credits;
+genre tiles show a small still first; Search shows a genre as a removable pill; Watch Later
+is one section. Before/after screenshots are in the PR.
 
 Decisions: MPVKit player (vendored with an AVFoundation video output); addons added as manual
 manifest URLs; cross-device sync via Trakt (not iCloud), with the user's own Trakt app keys
@@ -147,6 +155,7 @@ Open from the 2 November list (the rest shipped in PR #9):
 - Directors: the row is a hand-picked five, not a popularity ranking; consider TMDB's
   popular people filtered to directing. Person pages could also filter acting vs. directing.
 
-Untested so far: playback and Picture in Picture on tvOS and macOS, HDR output and tvOS display
+Untested so far: the PR #12 screens on the Mac and the sources rows with AIOStreams' long
+names; on Apple TV the Search genre pill and the Watch Later row. Playback and Picture in Picture on tvOS and macOS, HDR output and tvOS display
 matching (need real hardware), Trakt against the live API, tvOS swipe-to-scrub, Mac screens
 beyond Home, the scrub preview on screen. iPhone simulators report Picture in Picture as unsupported; use an iPad simulator.
