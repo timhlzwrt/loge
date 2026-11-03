@@ -25,12 +25,25 @@ TMDB's required logo and notice appear in Settings → Credits.
 Reviews open IMDb's critic links or Letterboxd; review text is not downloaded into the app.
 
 Hold a poster to save it to a custom list. The + button uses Watch Later, preserving
-titles saved by older versions. Audio defaults to English unless changed in Settings.
+titles saved by older versions. My Lists ends with History: everything played or marked
+watched, by day. Audio defaults to English unless changed in Settings.
 Intro, recap and credits skipping uses named video chapters, with duration-matched
 community timings from [TheIntroDB](https://theintrodb.org/) as a fallback. Community
 timings need sufficient confidence and may be unavailable for a title or release.
 Only direct HTTP(S) sources play; torrent descriptors, magnet links and `.torrent`
 files are rejected. There is no peer-to-peer playback backend.
+
+## Feature to-do
+
+- [ ] Continue Watching in the Apple TV's Top Shelf. On hold: sideloaded with a free Apple ID,
+  the extension and its App Group install, but tvOS never launches the extension.
+- [ ] Review text in the app. Reviews are links to IMDb and Letterboxd for now; Letterboxd's
+  API excludes personal projects, so the text needs another source.
+- [ ] Complete festival winner lists. Wikidata's records stop short of the latest editions.
+- [ ] Popular Directors ranked by popularity instead of hand-picked, and person pages that
+  separate acting from directing.
+
+Not planned: downloads. The interface stays English-only for now.
 
 ## Building it
 

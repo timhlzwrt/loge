@@ -171,7 +171,7 @@ struct MyListView: View {
 
     var body: some View {
         Group {
-            if library.saved.isEmpty && library.lists.isEmpty {
+            if library.saved.isEmpty && library.lists.isEmpty && library.progress.isEmpty {
                 ContentUnavailableView(
                     "Nothing saved yet",
                     systemImage: "bookmark",
@@ -188,6 +188,9 @@ struct MyListView: View {
                         }
                         ForEach(library.lists) { list in
                             section(list.titles) { listMenu(list) }
+                        }
+                        if !library.progress.isEmpty {
+                            historySection
                         }
                     }
                     .padding(.top, 12)
@@ -239,6 +242,52 @@ struct MyListView: View {
                 }
                 .padding(.horizontal, Metrics.gutter)
             }
+        }
+    }
+
+    /// The latest history as a row of stills, opening the whole history like a catalog row's "›".
+    private var historySection: some View {
+        let recent = library.history.prefix(12)
+        return VStack(alignment: .leading, spacing: Metrics.headerSpacing) {
+            Group {
+                #if os(tvOS)
+                // On tvOS the row ends in a "See All" tile instead, which focus reaches naturally.
+                Text("History")
+                #else
+                NavigationLink(value: HistoryRoute()) {
+                    HStack(spacing: 4) {
+                        Text("History")
+                        Image(systemName: "chevron.right")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Shows everything you've watched")
+                #endif
+            }
+            .font(.sectionTitle)
+            .padding(.horizontal, Metrics.gutter)
+            ScrollView(.horizontal) {
+                LazyHStack(alignment: .top, spacing: Metrics.rowSpacing) {
+                    ForEach(recent, id: \.item.id) { entry in
+                        HistoryCardLink(entry: entry, when: HistoryView.dayTitle(entry.updatedAt, short: true))
+                            .frame(width: Metrics.historyCardWidth)
+                    }
+                    #if os(tvOS)
+                    NavigationLink(value: HistoryRoute()) {
+                        Label("See All", systemImage: "clock")
+                            .font(.headline)
+                            .frame(width: Metrics.historyCardWidth, height: Metrics.historyCardWidth * 9 / 16)
+                            .background(.white.opacity(0.06))
+                    }
+                    .buttonStyle(.card)
+                    #endif
+                }
+                .padding(.horizontal, Metrics.gutter)
+            }
+            .scrollIndicators(.hidden)
+            .scrollClipDisabled()
         }
     }
 

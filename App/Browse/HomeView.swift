@@ -77,70 +77,56 @@ private func prefetchArtwork(of sources: [CatalogSource]) async {
 }
 
 #if os(tvOS)
+/// What has focus on Home. It lives outside `TVHome`'s own state so a focus move redraws
+/// only the backdrop and header that read it, not every row beneath them.
+@MainActor @Observable
+private final class HomeFocus {
+    var title: MetaPreview?
+    var collection: FilmCollection?
+
+    func show(_ title: MetaPreview) {
+        self.title = title
+        collection = nil
+    }
+}
+
 /// Like the TV app: the focused poster's backdrop fills the screen and its
 /// details sit above the rows, so browsing doesn't require opening anything.
 private struct TVHome: View {
-    @Environment(TMDBAccount.self) private var tmdb
     let sources: [CatalogSource]
-    @State private var focused: MetaPreview?
-    @State private var focusedCollection: FilmCollection?
+    @State private var focus = HomeFocus()
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            Artwork(url: focusedCollection == nil ? focused?.featuredBackground : nil)
-                .id(focusedCollection?.id)
-                .opacity(focusedCollection == nil ? 1 : 0)
-                .ignoresSafeArea()
-                .overlay {
-                    // Darken the left and bottom, where the text and rows sit.
-                    LinearGradient(colors: [.canvas.opacity(0.85), .canvas.opacity(0)], startPoint: .leading, endPoint: .center)
-                        .ignoresSafeArea()
-                    BackdropFade().ignoresSafeArea()
-                }
-                .animation(.easeInOut(duration: 0.4), value: focused?.id)
+            TVHomeBackdrop(focus: focus)
 
             // The header stays put while only the rows scroll beneath it, so the focused
             // title's details remain visible whichever row it's in.
             VStack(alignment: .leading, spacing: 0) {
-                header
+                TVHomeHeader(focus: focus)
                     .frame(height: 400, alignment: .bottomLeading)
                     .padding(.horizontal, Metrics.gutter)
                     .padding(.bottom, 40)
                 ScrollViewReader { proxy in
                     ScrollView {
                         VStack(alignment: .leading, spacing: 24) {
-                            ContinueWatchingRow {
-                                focused = $0
-                                focusedCollection = nil
-                            }
-                            MyListRow(shelf: .series) {
-                                focused = $0
-                                focusedCollection = nil
-                            }
-                            MyListRow(shelf: .movies) {
-                                focused = $0
-                                focusedCollection = nil
-                            }
+                            ContinueWatchingRow(onFocus: focus.show)
+                            MyListRow(shelf: .series, onFocus: focus.show)
+                            MyListRow(shelf: .movies, onFocus: focus.show)
                             ForEach(sources.prefix(3)) { source in
-                                CatalogRow(source: source, isPrimary: source == sources.first) {
-                                    focused = $0
-                                    focusedCollection = nil
-                                }
+                                CatalogRow(source: source, isPrimary: source == sources.first, onFocus: focus.show)
                             }
                             GenreRow()
                             ForEach(sources.dropFirst(3)) { source in
-                                CatalogRow(source: source) {
-                                    focused = $0
-                                    focusedCollection = nil
-                                }
+                                CatalogRow(source: source, onFocus: focus.show)
                             }
                             DiscoveryCollectionRow(title: "Film Festivals", collections: FilmCollection.festivals) {
-                                focusedCollection = $0
+                                focus.collection = $0
                                 proxy.scrollTo("festival-row", anchor: .top)
                             }
                             .id("festival-row")
                             DiscoveryCollectionRow(title: "Popular Directors", collections: FilmCollection.directors) {
-                                focusedCollection = $0
+                                focus.collection = $0
                                 proxy.scrollTo("director-row", anchor: .top)
                             }
                             .id("director-row")
@@ -157,34 +143,65 @@ private struct TVHome: View {
         .task {
             await prefetchArtwork(of: sources)
         }
-        .task(id: "\(tmdb.revision):\(focused?.id ?? "")") {
-            guard tmdb.isConfigured, let title = focused else { return }
-            do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
-            // Opening the focused title reuses this response; its page owns retry/error UI.
-            _ = try? await tmdb.details(imdbID: title.id, type: title.type)
-        }
     }
+}
 
-    private var header: some View {
+/// The focused title's backdrop, hidden while a festival or director has focus.
+private struct TVHomeBackdrop: View {
+    let focus: HomeFocus
+
+    var body: some View {
+        let url = focus.collection == nil ? focus.title?.featuredBackground : nil
+        ZStack {
+            // Each backdrop is its own view, so the crossfade blends two layers on the GPU.
+            // Animating one image view's content instead redrew both images on the CPU every frame.
+            Artwork(url: url)
+                .id(url)
+                .transition(.opacity)
+        }
+        .opacity(focus.collection == nil ? 1 : 0)
+        .ignoresSafeArea()
+        .overlay {
+            // Darken the left and bottom, where the text and rows sit.
+            LinearGradient(colors: [.canvas.opacity(0.85), .canvas.opacity(0)], startPoint: .leading, endPoint: .center)
+                .ignoresSafeArea()
+            BackdropFade().ignoresSafeArea()
+        }
+        .animation(.easeInOut(duration: 0.4), value: url)
+    }
+}
+
+/// The focused title's logo, info line and synopsis, or the focused festival or director.
+private struct TVHomeHeader: View {
+    let focus: HomeFocus
+    @Environment(TMDBAccount.self) private var tmdb
+
+    var body: some View {
         // The clear base keeps the header's height while nothing is focused yet.
         ZStack(alignment: .bottomLeading) {
             Color.clear
-            if let focusedCollection {
+            if let collection = focus.collection {
                 HStack(spacing: 32) {
-                    CollectionArtwork(collection: focusedCollection)
-                        .frame(width: focusedCollection.isFestival ? Metrics.posterWidth * 1.4 : Metrics.personSize,
+                    CollectionArtwork(collection: collection)
+                        .frame(width: collection.isFestival ? Metrics.posterWidth * 1.4 : Metrics.personSize,
                                height: Metrics.personSize * 1.25)
                         .clipShape(.rect(cornerRadius: Metrics.posterRadius))
                     VStack(alignment: .leading, spacing: 14) {
-                        Text(focusedCollection.name).font(.system(size: 64, weight: .bold))
-                        Text(focusedCollection.isFestival ? "\(focusedCollection.subtitle) winners" : "Directed films")
+                        Text(collection.name).font(.system(size: 64, weight: .bold))
+                        Text(collection.isFestival ? "\(collection.subtitle) winners" : "Directed films")
                             .font(.metaLine)
                             .foregroundStyle(.secondary)
                     }
                 }
-            } else if let focused {
-                details(focused)
+            } else if let title = focus.title {
+                details(title)
             }
+        }
+        .task(id: "\(tmdb.revision):\(focus.title?.id ?? "")") {
+            guard tmdb.isConfigured, let title = focus.title else { return }
+            do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
+            // Opening the focused title reuses this response; its page owns retry/error UI.
+            _ = try? await tmdb.details(imdbID: title.id, type: title.type)
         }
     }
 

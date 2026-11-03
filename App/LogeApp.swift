@@ -190,6 +190,7 @@ private struct BrowseStack<Content: View>: View {
                 .navigationDestination(for: SourcesRoute.self) { SourcesView(route: $0) }
                 .navigationDestination(for: CatalogSource.self) { CatalogGridView(source: $0) }
                 .navigationDestination(for: PersonRoute.self) { PersonView(route: $0) }
+                .navigationDestination(for: HistoryRoute.self) { _ in HistoryView() }
         }
     }
 }

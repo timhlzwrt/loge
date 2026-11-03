@@ -91,6 +91,16 @@ struct LibraryStoreTests {
         #expect(LibraryStore(defaults: defaults).progress.isEmpty)
     }
 
+    @Test func historyListsEveryEpisodeNewestFirst() {
+        let store = LibraryStore(defaults: defaults)
+        store.markWatched([episode(1, 1), episode(1, 2)], at: t0)
+        store.record(movie, position: 5900, duration: 6000, at: t0.addingTimeInterval(10))
+        store.record(episode(1, 3), position: 300, duration: 2000, at: t0.addingTimeInterval(20))
+
+        #expect(store.history.map(\.item.id) == ["tt9:1:3", "tt1", "tt9:1:2", "tt9:1:1"])
+        #expect(store.continueWatching.map(\.item.id) == ["tt9:1:3"])
+    }
+
     @Test func dropsOldestEntriesBeyondTheLimit() {
         let store = LibraryStore(defaults: defaults)
         for index in 0...LibraryStore.maximumEntries {
