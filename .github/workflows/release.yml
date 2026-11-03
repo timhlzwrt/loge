@@ -56,8 +56,8 @@ jobs:
           mkdir -p site
           cp App/Assets.xcassets/AppIcon.appiconset/icon-1024.png site/icon.png
           gh api "repos/$GITHUB_REPOSITORY/releases" --paginate --slurp | jq 'add' > releases.json
-          python3 Tools/sidestore-source.py releases.json \
-            "https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}" > site/source.json
+          # Pages is served on the account's custom domain; github.io redirects there over plain HTTP.
+          python3 Tools/sidestore-source.py releases.json https://tjh.li/loge > site/source.json
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -35,7 +35,7 @@ account is needed.
 2. In SideStore, open **Sources**, tap **+** and add:
 
    ```
-   https://timhlzwrt.github.io/loge/source.json
+   https://tjh.li/loge/source.json
    ```
 
 3. Install loge from the source. New builds appear there as updates. SideStore refreshes

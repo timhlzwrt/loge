@@ -40,7 +40,7 @@ accent, system font, no cards/gradients/badges.
 - `.github/workflows/ci.yml` — Core tests and warning-free builds for iOS, tvOS and macOS.
 - `.github/workflows/release.yml` — every push to main: unsigned iOS and tvOS `.ipa` files as
   release `build-<commit count>`, and the SideStore source (`Tools/sidestore-source.py`) on
-  GitHub Pages at `https://timhlzwrt.github.io/loge/source.json`.
+  GitHub Pages at `https://tjh.li/loge/source.json` (the account's custom Pages domain).
 
 ## Commands
 
