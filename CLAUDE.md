@@ -27,6 +27,8 @@ accent, system font, no cards/gradients/badges.
   playback preferences inline; About with version, credits and the Data Sources page
   (all attribution lives there rather than under artwork).
 - `Tools/run-device.sh` — Debug build onto the connected iPhone/iPad with the free Personal Team.
+- `Tools/install.sh` — Release build of origin/main (in the nightly checkout) onto a device
+  chosen from a menu: a reachable iPhone/iPad, the Apple TV via atvloadly, or all.
 - `Tools/test-addon.py` — local stream addon at `http://127.0.0.1:8765/manifest.json` with
   test streams (MKV, HEVC, multi-track HLS, header-protected, broken, torrent).
 - `Tools/render-icons.swift` — regenerates `App/Assets.xcassets` (icons, top shelf, accent);
@@ -47,6 +49,7 @@ xcodebuild -project loge.xcodeproj -scheme loge -destination 'generic/platform=i
 Tools/build-ipa.sh [iOS|tvOS]                       # unsigned .ipa files in .build/ipa
 Tools/install-tv.sh                                 # build tvOS, install on the Apple TV via atvloadly
 Tools/run-device.sh [--console|--no-launch]         # build, install, launch on the iPhone/iPad
+Tools/install.sh [--here]                           # latest main (or this checkout) on a device picked from a menu
 DEVICE=<udid> Tools/nightly-deploy.sh --install     # nightly install of main on both (launchd)
 ```
 
