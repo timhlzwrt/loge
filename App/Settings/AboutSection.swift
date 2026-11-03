@@ -22,6 +22,8 @@ struct AboutSection: View {
 /// Where titles, artwork and timings come from. Kept here rather than under every
 /// picture and list, which once carried their own source lines.
 struct DataSourcesView: View {
+    @State private var editions: [FestivalEdition] = []
+    @State private var festivalSourceFailure = false
     var body: some View {
         List {
             Section {
@@ -32,7 +34,7 @@ struct DataSourcesView: View {
                         .frame(width: 120, height: 16)
                         .foregroundStyle(.white)
                         .accessibilityLabel("TMDB")
-                    Text("Details, cast and crew, filmographies and portraits, once connected.")
+                    Text("Details, filmographies, portraits, popular directors and member reviews, once connected.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                     Text("This product uses the TMDB API but is not endorsed or certified by TMDB.")
@@ -51,8 +53,21 @@ struct DataSourcesView: View {
                        url: "https://www.stremio.com")
                 source("Letterboxd via Stremboxd", "Popular and all-time lists on Home and in genres.",
                        url: "https://letterboxd.com")
-                source("Wikidata", "Festival winners and directors’ films. Records may be incomplete.",
+                source("Wikidata", "Recorded historical festival winners and selected directors’ films. Records may be incomplete.",
                        url: "https://www.wikidata.org")
+            }
+
+            Section("2026 Festival Awards") {
+                ForEach(editions, id: \.festival) { edition in
+                    ForEach(edition.sources, id: \.absoluteString) { url in
+                        source("\(edition.festival.name) · \(url.host() ?? "Source")",
+                               "\(edition.coverage) Checked \(edition.checkedOn).", url: url.absoluteString)
+                    }
+                }
+                if festivalSourceFailure {
+                    Text("The bundled festival source list couldn't be read.")
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section("Playback") {
@@ -79,6 +94,10 @@ struct DataSourcesView: View {
         #endif
         .background(Color.canvas)
         .navigationTitle("Data Sources")
+        .task {
+            do { editions = try FestivalEdition.all() }
+            catch { festivalSourceFailure = true }
+        }
     }
 
     @ViewBuilder

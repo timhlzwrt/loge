@@ -19,6 +19,7 @@ struct PersonView: View {
     @State private var state = LoadState.loading
     @State private var attempt = 0
     @State private var filter = CreditFilter.all
+    @State private var role: TMDBCreditRole?
     @State private var sort = CreditSort.newest
     @State private var biographyExpanded = false
 
@@ -82,6 +83,19 @@ struct PersonView: View {
         .background(Color.canvas)
         .navigationTitle(route.person.name)
         .task(id: LoadKey(revision: tmdb.revision, attempt: attempt)) {
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("--person-role-ui-test") {
+                state = .filmography(TMDBPersonDetails(id: 1, name: "Filmography check", titles: [
+                    TMDBCreditTitle(tmdbID: 1, type: "movie", name: "Acting movie", roles: ["Actor"], creditRoles: [.acting]),
+                    TMDBCreditTitle(tmdbID: 2, type: "series", name: "Directed series", roles: ["Director"], creditRoles: [.directing]),
+                    TMDBCreditTitle(tmdbID: 3, type: "movie", name: "Mixed credit", roles: ["Actor", "Director", "Producer"],
+                                    creditRoles: [.acting, .directing, .otherCrew]),
+                    TMDBCreditTitle(tmdbID: 4, type: "series", name: "Camera series", roles: ["Director of Photography"],
+                                    creditRoles: [.otherCrew]),
+                ]))
+                return
+            }
+            #endif
             state = .loading
             do {
                 if let id = route.person.tmdbID, tmdb.isConfigured {
@@ -172,6 +186,7 @@ struct PersonView: View {
     }
 
     private func filmography(_ titles: [TMDBCreditTitle]) -> some View {
+        let titles = titles.filter { title in role.map { title.creditRoles.contains($0) } ?? true }
         let movies = titles.filter { $0.type == "movie" }.count
         let series = titles.filter { $0.type == "series" }.count
         let visible = sortedTitles(titles.filter {
@@ -185,7 +200,34 @@ struct PersonView: View {
                 Text("Series (\(series))").tag(CreditFilter.series)
             }
             .pickerStyle(.segmented)
+            #if os(tvOS)
+            Picker("Credit role", selection: $role) {
+                Text("All roles").tag(TMDBCreditRole?.none)
+                ForEach(TMDBCreditRole.allCases, id: \.self) { role in
+                    Text(role.rawValue).tag(Optional(role))
+                }
+            }
+            .pickerStyle(.segmented)
+            .accessibilityIdentifier("person-role-filter")
+            #endif
             HStack {
+                #if !os(tvOS)
+                Menu {
+                    Picker("Credit role", selection: $role) {
+                        Text("All roles").tag(TMDBCreditRole?.none)
+                        ForEach(TMDBCreditRole.allCases, id: \.self) { role in
+                            Text(role.rawValue).tag(Optional(role))
+                        }
+                    }
+                } label: {
+                    Label(role?.rawValue ?? "All roles", systemImage: "line.3.horizontal.decrease")
+                        .font(.metaLine)
+                        .frame(minHeight: 44)
+                }
+                .accessibilityLabel("Credit role")
+                .accessibilityValue(role?.rawValue ?? "All roles")
+                .accessibilityIdentifier("person-role-filter")
+                #endif
                 Spacer()
                 Menu {
                     Picker("Sort", selection: $sort) {
@@ -348,7 +390,7 @@ struct PeopleRow: View {
             Text("Cast & Crew")
                 .font(.sectionTitle)
                 .padding(.horizontal, Metrics.gutter)
-            ScrollView(.horizontal) {
+            HorizontalShelf("cast and crew") {
                 LazyHStack(alignment: .top, spacing: Metrics.rowSpacing) {
                     ForEach(people) { person in
                         NavigationLink(value: PersonRoute(person: person, title: title)) {
@@ -364,9 +406,8 @@ struct PeopleRow: View {
                 #if os(tvOS)
                 .padding(.vertical, 20)
                 #endif
+                .padding(.horizontal, Metrics.gutter)
             }
-            .contentMargins(.horizontal, Metrics.gutter, for: .scrollContent)
-            .scrollIndicators(.hidden)
             .scrollClipDisabled()
         }
     }

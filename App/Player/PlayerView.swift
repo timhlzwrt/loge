@@ -59,6 +59,12 @@ struct PlayerView: View {
                 #else
                 touchSurface(player)
                 #endif
+                #if DEBUG
+                if ProcessInfo.processInfo.arguments.contains("--playback-ui-test") {
+                    PlaybackFixtureDiagnostics(player: player)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                }
+                #endif
                 if let seekFlash {
                     SeekFlashView(flash: seekFlash)
                 }
