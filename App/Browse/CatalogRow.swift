@@ -14,7 +14,9 @@ struct CatalogRow: View {
     var onLoaded: (Int) -> Void = { _ in }
 
     @State private var items: Result<[MetaPreview], Error>?
-    @FocusState private var focusedID: MetaPreview.ID?
+    /// Only the first poster is bound to focus state, for Home's default focus: binding every
+    /// poster to one value made each focus move update the whole row.
+    @FocusState private var isFirstFocused: Bool
 
     var body: some View {
         Group {
@@ -55,11 +57,6 @@ struct CatalogRow: View {
             }
         }
         .onChange(of: search) { items = nil }
-        .onChange(of: focusedID) {
-            if case .success(let metas) = items, let meta = metas.first(where: { $0.id == focusedID }) {
-                onFocus(meta)
-            }
-        }
     }
 
     /// Restarts loading when the query changes or Retry clears the result.
@@ -101,15 +98,11 @@ struct CatalogRow: View {
         ScrollView(.horizontal) {
             LazyHStack(spacing: Metrics.rowSpacing) {
                 ForEach(metas) { meta in
-                    NavigationLink(value: meta) {
-                        PosterTile(meta: meta)
+                    if meta.id == metas.first?.id {
+                        poster(meta).focused($isFirstFocused)
+                    } else {
+                        poster(meta)
                     }
-                    #if os(tvOS)
-                    .buttonStyle(.card)
-                    #else
-                    .buttonStyle(.plain)
-                    #endif
-                    .focused($focusedID, equals: meta.id)
                 }
                 #if os(tvOS)
                 if search == nil {
@@ -133,7 +126,21 @@ struct CatalogRow: View {
         .scrollClipDisabled()
         #if os(tvOS)
         // Home opens on its first row rather than on the sidebar.
-        .defaultFocus($focusedID, isPrimary ? metas.first?.id : nil)
+        .defaultFocus($isFirstFocused, isPrimary)
+        #endif
+    }
+
+    private func poster(_ meta: MetaPreview) -> some View {
+        NavigationLink(value: meta) {
+            PosterTile(meta: meta)
+                #if os(tvOS)
+                .modifier(ReportsFocus { onFocus(meta) })
+                #endif
+        }
+        #if os(tvOS)
+        .buttonStyle(.card)
+        #else
+        .buttonStyle(.plain)
         #endif
     }
 
@@ -199,6 +206,21 @@ private struct TitleCard: View {
         return (title, year.map { String($0.1) })
     }
 }
+
+#if os(tvOS)
+/// Calls `action` when the button this sits in gains focus. Each poster watches only its own
+/// focus, so a move updates the two posters involved rather than the whole row.
+private struct ReportsFocus: ViewModifier {
+    let action: () -> Void
+    @Environment(\.isFocused) private var isFocused
+
+    func body(content: Content) -> some View {
+        content.onChange(of: isFocused) { _, focused in
+            if focused { action() }
+        }
+    }
+}
+#endif
 
 struct PosterTile: View {
     let meta: MetaPreview
