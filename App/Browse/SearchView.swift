@@ -79,15 +79,39 @@ struct SearchView: View {
             }
             .pickerStyle(.segmented)
             .fixedSize()
-            Menu {
-                Picker("Genre", selection: $genre) {
-                    Text("All Genres").tag(String?.none)
-                    ForEach(genres, id: \.self) { Text($0).tag(Optional($0)) }
+            // With nothing typed the genre list below is the way in, so only a chosen genre
+            // shows here, as something to remove; while searching, a menu narrows the results.
+            if let genre {
+                Button {
+                    self.genre = nil
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(genre)
+                        Image(systemName: "xmark")
+                            .font(.caption.weight(.bold))
+                    }
+                    #if !os(tvOS)
+                    .padding(.horizontal, 14)
+                    .frame(minHeight: 32)
+                    .background(.white.opacity(0.12), in: .capsule)
+                    #endif
                 }
-            } label: {
-                Label(genre ?? "All Genres", systemImage: "line.3.horizontal.decrease.circle")
+                #if !os(tvOS)
+                .buttonStyle(.plain)
+                #endif
+                .accessibilityLabel("\(genre), remove genre")
+                .fixedSize()
+            } else if !query.isEmpty {
+                Menu {
+                    Picker("Genre", selection: $genre) {
+                        Text("Any Genre").tag(String?.none)
+                        ForEach(genres, id: \.self) { Text($0).tag(Optional($0)) }
+                    }
+                } label: {
+                    Label("Genre", systemImage: "line.3.horizontal.decrease.circle")
+                }
+                .fixedSize()
             }
-            .fixedSize()
             Spacer(minLength: 0)
         }
         .labelsHidden()

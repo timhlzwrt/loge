@@ -104,6 +104,24 @@ final class FlowTests: XCTestCase {
     }
 
     @MainActor
+    func testSearchGenreCanBeRemovedAndNarrowsTypedSearches() {
+        openTab("Search")
+        XCTAssertFalse(app.buttons["Genre"].exists, "The genre list is the way in before typing")
+        app.buttons["Drama"].firstMatch.tap()
+        let chip = app.buttons["Drama, remove genre"]
+        XCTAssertTrue(chip.waitForExistence(timeout: 5))
+        screenshot("search-genre-chip")
+        chip.tap()
+        XCTAssertTrue(app.staticTexts["Genres"].waitForExistence(timeout: 5))
+
+        let field = app.searchFields.firstMatch
+        field.tap()
+        field.typeText("heat")
+        XCTAssertTrue(app.buttons["Genre"].waitForExistence(timeout: 5))
+        screenshot("search-typed-genre-menu")
+    }
+
+    @MainActor
     func testSearchAndSeeAllFilterByGenreTypeAndSort() {
         openTab("Search")
         let comedy = app.buttons["Comedy"].firstMatch
