@@ -27,6 +27,21 @@ enum PlaybackPreferences {
     }
 }
 
+/// How fast this device downloads, from what playback sustained; the sources list
+/// recommends a source by it.
+enum ConnectionSpeed {
+    /// Bits per second; 0 until something has played long enough to tell.
+    static let key = "connectionSpeed"
+
+    static func record(_ speed: Double) {
+        let defaults = UserDefaults.standard
+        let previous = defaults.double(forKey: key)
+        // Averaged with the last value only, so a move to another room or network shows
+        // after a film or two.
+        defaults.set(previous > 0 ? (previous + speed) / 2 : speed, forKey: key)
+    }
+}
+
 struct PlaybackSettingsSection: View {
     @AppStorage(PlaybackPreferences.audioKey) private var audioLanguage = PlaybackPreferences.defaultAudioLanguage
     @AppStorage(PlaybackPreferences.subtitleKey) private var subtitleLanguage = ""

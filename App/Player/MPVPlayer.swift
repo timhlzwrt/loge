@@ -84,7 +84,7 @@ final class MPVPlayer {
         var decoderDrops: Int64?
         var outputDrops: Int64?
         var bufferedSeconds: Double?
-        /// Bits per second, measured while buffering or while Playback Info is open.
+        /// Bits per second, measured while mpv downloads or waits for data.
         var downloadSpeed: Double?
         var videoBitrate: Double?
         var audioBitrate: Double?
@@ -163,6 +163,11 @@ final class MPVPlayer {
     private var loadState = LoadState.idle
     private var isPaused = false
     private var isBuffering = false
+    /// False once mpv's buffer is full and it stops reading, when its speed says nothing
+    /// about the connection.
+    @ObservationIgnored private var isDownloading = false
+    /// Download speeds in bits per second, sampled while mpv reads as fast as it can.
+    @ObservationIgnored private var downloadSamples: [Double] = []
     private var isEnded = false
 
     @ObservationIgnored private let handle: OpaquePointer
@@ -233,6 +238,7 @@ final class MPVPlayer {
 
         mpv_observe_property(handle, 0, "pause", MPV_FORMAT_FLAG)
         mpv_observe_property(handle, 0, "paused-for-cache", MPV_FORMAT_FLAG)
+        mpv_observe_property(handle, 0, "demuxer-cache-idle", MPV_FORMAT_FLAG)
         mpv_observe_property(handle, 0, "eof-reached", MPV_FORMAT_FLAG)
         mpv_observe_property(handle, 0, "time-pos", MPV_FORMAT_DOUBLE)
         mpv_observe_property(handle, 0, "duration", MPV_FORMAT_DOUBLE)
@@ -251,7 +257,7 @@ final class MPVPlayer {
                 if case .loaded = loadState {
                     check(mpv_get_property_async(handle, 0, "time-pos", MPV_FORMAT_DOUBLE), "time-pos")
                     check(mpv_get_property_async(handle, 0, "duration", MPV_FORMAT_DOUBLE), "duration")
-                    if isBuffering {
+                    if isBuffering || isDownloading {
                         check(mpv_get_property_async(handle, 0, "cache-speed", MPV_FORMAT_INT64), "cache-speed")
                     }
                 }
@@ -285,6 +291,7 @@ final class MPVPlayer {
         trackOperations = []
         trackError = nil
         playbackInfo = PlaybackInfo()
+        downloadSamples = []
         loadState = .loading
         cancelSeeks()
         position = 0
@@ -432,6 +439,12 @@ final class MPVPlayer {
     }
 
     func dismissTrackError() { trackError = nil }
+
+    /// What the connection sustained for this file, once there are enough samples to say.
+    var measuredDownloadSpeed: Double? {
+        guard downloadSamples.count >= 10 else { return nil }
+        return downloadSamples.sorted()[downloadSamples.count / 2]
+    }
 
     /// Requested only while Playback Info is open, without blocking the UI on mpv.
     func refreshPlaybackInfo() {
@@ -723,8 +736,12 @@ final class MPVPlayer {
         case .integer("frame-drop-count", let value):
             playbackInfo.outputDrops = value
             return
+        case .flag("demuxer-cache-idle", let value):
+            isDownloading = !value
+            return
         case .integer("cache-speed", let value):
             playbackInfo.downloadSpeed = Double(value) * 8
+            if isDownloading && value > 0 { downloadSamples.append(Double(value) * 8) }
             return
         case .double("demuxer-cache-duration", let value):
             playbackInfo.bufferedSeconds = value

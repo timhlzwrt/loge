@@ -133,7 +133,11 @@ festival); turning subtitles on shows a track mpv already demuxes (`sub-visibili
 selecting a new embedded track makes mpv re-read its whole buffer and stall; mpv waits for
 5 s of buffer after running dry and the player shows the download speed while buffering;
 iPhone browsing is portrait-only (`AppDelegate`), the player turns; the details backdrop
-fades as the page scrolls; the player's Close button is a full 44 pt target.
+fades as the page scrolls; the player's Close button is a full 44 pt target. Playback measures
+the download speed while mpv fills its buffer (`ConnectionSpeed`, per device, loopback ignored),
+and the sources list marks the best source within ¾ of it as recommended, without playing it,
+whenever some listed source is too much for the connection (`StreamDetails.recommendedIndex`).
+`FlowTests.testTrackSwitchingWhilePlaying` is flaky: menus sometimes don't open in time.
 
 Decisions: MPVKit player (vendored with an AVFoundation video output); addons added as manual
 manifest URLs; cross-device sync via Trakt (not iCloud), with the user's own Trakt app keys
