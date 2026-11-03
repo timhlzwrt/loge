@@ -1,7 +1,7 @@
 #!/bin/zsh
 # Builds the tvOS .ipa and hands it to atvloadly, which signs it with the free Apple ID signed in
 # there, installs it on the paired Apple TV and re-signs it every night before the 7 days run out.
-# atvloadly runs on the home server (CT 107); pairing and the Apple ID sign-in happen once in its
+# atvloadly runs on a server on the home network; pairing and the Apple ID sign-in happen once in its
 # web UI. Needs the home network or VPN.
 # Run from anywhere: Tools/install-tv.sh
 # ATVLOADLY=<url> overrides the server, IPA=<path> installs an existing .ipa without building.

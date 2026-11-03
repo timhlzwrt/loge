@@ -4,7 +4,7 @@ import XCTest
 /// End-to-end checks of browsing flows against live addons. They need the network,
 /// Cinemeta, and for playback the local test addon (Tools/test-addon.py) installed, so
 /// they only run on request. Screenshots go to `SCREENSHOT_DIR` when it's set:
-/// Track switching also uses the generated MOV server on port 8766; see docs/REVIEW_VALIDATION.md.
+/// Track switching also uses the MOV fixture server on port 8766; see Tools/test-addon.py.
 ///
 ///     TEST_RUNNER_UI_FLOWS=1 TEST_RUNNER_SCREENSHOT_DIR=/tmp/shots xcodebuild test \
 ///       -scheme loge -destination 'platform=iOS Simulator,name=iPhone 18 Pro' \
@@ -630,7 +630,7 @@ final class FlowTests: XCTestCase {
         app.buttons["Close"].tap()
     }
 
-    /// Screenshots of each redesigned screen, to compare with `Design/mockups`.
+    /// Screenshots of each main screen, to compare before and after a change.
     @MainActor
     func testScreenTour() {
         installTestAddonIfNeeded()
