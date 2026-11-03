@@ -11,9 +11,7 @@ struct GenreRow: View {
             HorizontalShelf("genres") {
                 LazyHStack(spacing: Metrics.rowSpacing) {
                     ForEach(DiscoveryCatalogs.genres) { genre in
-                        NavigationLink {
-                            GenreView(genre: genre)
-                        } label: {
+                        NavigationLink(value: genre) {
                             GenreTile(genre: genre)
                         }
                         #if os(tvOS)

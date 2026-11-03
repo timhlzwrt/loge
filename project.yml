@@ -49,6 +49,29 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletv*]: App Icon & Top Shelf Image
         # Ad-hoc signing lets the Mac build run locally without a developer account
         CODE_SIGN_IDENTITY[sdk=macosx*]: "-"
+        # The commit stamp below reads the repository, outside what a sandboxed script may.
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+    # Settings > About shows which commit a build is, to compare with GitHub; the build
+    # number is the commit count.
+    postBuildScripts:
+      - name: Stamp commit
+        basedOnDependencyAnalysis: false
+        script: |
+          plist="$TARGET_BUILD_DIR/$INFOPLIST_PATH"
+          git() { /usr/bin/git -C "$SRCROOT" "$@"; }
+          commit=$(git rev-parse HEAD 2>/dev/null) || exit 0
+          # The commit count as the build number, so each build of main counts up and
+          # SideStore offers it as an update. CI needs the full history for this.
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $(git rev-list --count HEAD)" "$plist"
+          modified=$([ -n "$(git status --porcelain --untracked-files=no)" ] && echo true || echo false)
+          for entry in "LogeCommit string $commit" \
+                       "LogeCommitDate string $(git log -1 --format=%cI)" \
+                       "LogeBranch string $(git rev-parse --abbrev-ref HEAD)" \
+                       "LogeModified bool $modified"; do
+            set -- $entry
+            /usr/libexec/PlistBuddy -c "Delete :$1" "$plist" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Add :$1 $2 $3" "$plist"
+          done
     scheme:
       testTargets:
         - logeUITests

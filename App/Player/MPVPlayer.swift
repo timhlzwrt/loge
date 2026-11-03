@@ -44,7 +44,20 @@ final class MPVPlayer {
 
     private(set) var position: Double = 0
     private(set) var duration: Double?
-    private(set) var tracks: [Track] = []
+    /// The file's tracks; a hidden subtitle track reads as not selected.
+    var tracks: [Track] {
+        guard !subtitlesVisible else { return demuxedTracks }
+        return demuxedTracks.map { track in
+            var track = track
+            if track.kind == .sub { track.isSelected = false }
+            return track
+        }
+    }
+    private var demuxedTracks: [Track] = []
+    /// Subtitles are hidden rather than switched off, so the track mpv picked stays
+    /// demuxed: switching one on makes mpv re-read everything it has buffered, from ten
+    /// seconds back, which stalls playback on a connection with little to spare.
+    private var subtitlesVisible = false
     private(set) var chapters: [PlaybackChapter] = []
     private(set) var communitySegments: [PlaybackSegment] = []
 
@@ -71,6 +84,8 @@ final class MPVPlayer {
         var decoderDrops: Int64?
         var outputDrops: Int64?
         var bufferedSeconds: Double?
+        /// Bits per second, measured while mpv downloads or waits for data.
+        var downloadSpeed: Double?
         var videoBitrate: Double?
         var audioBitrate: Double?
     }
@@ -95,7 +110,7 @@ final class MPVPlayer {
         let channelCount: Int?
         let isForced: Bool
         let isHearingImpaired: Bool
-        let isSelected: Bool
+        var isSelected: Bool
 
         /// "English · Commentary · Dolby Digital 5.1" or "English · Forced". Streams often
         /// carry several tracks per language, so the details that tell them apart are included.
@@ -148,6 +163,11 @@ final class MPVPlayer {
     private var loadState = LoadState.idle
     private var isPaused = false
     private var isBuffering = false
+    /// False once mpv's buffer is full and it stops reading, when its speed says nothing
+    /// about the connection.
+    @ObservationIgnored private var isDownloading = false
+    /// Download speeds in bits per second, sampled while mpv reads as fast as it can.
+    @ObservationIgnored private var downloadSamples: [Double] = []
     private var isEnded = false
 
     @ObservationIgnored private let handle: OpaquePointer
@@ -194,6 +214,10 @@ final class MPVPlayer {
             ("hwdec", "videotoolbox"),
             // Stay on the last frame at the end instead of unloading the file.
             ("keep-open", "yes"),
+            // After running dry, wait for a few seconds of video instead of mpv's one: on a
+            // connection barely slower than the file, that's a pause now and then rather
+            // than stopping every second.
+            ("cache-pause-wait", "5"),
         ] {
             check(mpv_set_option_string(handle, name, value), name)
         }
@@ -214,6 +238,7 @@ final class MPVPlayer {
 
         mpv_observe_property(handle, 0, "pause", MPV_FORMAT_FLAG)
         mpv_observe_property(handle, 0, "paused-for-cache", MPV_FORMAT_FLAG)
+        mpv_observe_property(handle, 0, "demuxer-cache-idle", MPV_FORMAT_FLAG)
         mpv_observe_property(handle, 0, "eof-reached", MPV_FORMAT_FLAG)
         mpv_observe_property(handle, 0, "time-pos", MPV_FORMAT_DOUBLE)
         mpv_observe_property(handle, 0, "duration", MPV_FORMAT_DOUBLE)
@@ -232,6 +257,9 @@ final class MPVPlayer {
                 if case .loaded = loadState {
                     check(mpv_get_property_async(handle, 0, "time-pos", MPV_FORMAT_DOUBLE), "time-pos")
                     check(mpv_get_property_async(handle, 0, "duration", MPV_FORMAT_DOUBLE), "duration")
+                    if isBuffering || isDownloading {
+                        check(mpv_get_property_async(handle, 0, "cache-speed", MPV_FORMAT_INT64), "cache-speed")
+                    }
                 }
             }
         }
@@ -245,13 +273,15 @@ final class MPVPlayer {
     ///   - headers: Sent with every request for this file, e.g. debrid authorisation.
     ///   - startAt: Seconds into the file to start from, for resuming.
     ///   - audioLanguage: ISO 639-1 code to prefer; nil keeps the file's default track.
-    ///   - subtitleLanguage: ISO 639-1 code to show; nil turns subtitles off.
+    ///   - subtitleLanguage: ISO 639-1 code to show; nil hides subtitles.
+    ///   - hiddenSubtitleLanguages: Codes for the track kept ready while subtitles are hidden.
     func load(
         _ url: URL,
         headers: [String: String] = [:],
         startAt: Double? = nil,
         audioLanguage: String? = nil,
-        subtitleLanguage: String? = nil
+        subtitleLanguage: String? = nil,
+        hiddenSubtitleLanguages: [String] = []
     ) {
         guard !isShutDown else { return }
         guard StreamSource.isDirectPlaybackURL(url) else {
@@ -261,19 +291,20 @@ final class MPVPlayer {
         trackOperations = []
         trackError = nil
         playbackInfo = PlaybackInfo()
+        downloadSamples = []
         loadState = .loading
         cancelSeeks()
         position = 0
         duration = nil
-        tracks = []
+        demuxedTracks = []
         chapters = []
         communitySegments = []
         exactPosition = 0
         if let activeTrackOperation {
             // Finish or abort the old file's subtitle load before issuing the next loadfile.
             pendingLoad = { [weak self] in
-                self?.load(url, headers: headers, startAt: startAt,
-                           audioLanguage: audioLanguage, subtitleLanguage: subtitleLanguage)
+                self?.load(url, headers: headers, startAt: startAt, audioLanguage: audioLanguage,
+                           subtitleLanguage: subtitleLanguage, hiddenSubtitleLanguages: hiddenSubtitleLanguages)
             }
             mpv_abort_async_command(handle, activeTrackOperation.id)
             return
@@ -296,13 +327,11 @@ final class MPVPlayer {
         // These are global options, so each is set explicitly rather than left over from the last file.
         setProperty("start", startAt.map { String(Int($0)) } ?? "none")
         setProperty("alang", audioLanguage.map(LanguageCodes.trackTags) ?? "")
-        if let subtitleLanguage {
-            setProperty("slang", LanguageCodes.trackTags(for: subtitleLanguage))
-            setProperty("sid", "auto")
-        } else {
-            // Otherwise mpv shows any track the file marks as default.
-            setProperty("sid", "no")
-        }
+        let subtitleLanguages = subtitleLanguage.map { [$0] } ?? hiddenSubtitleLanguages
+        setProperty("slang", subtitleLanguages.map(LanguageCodes.trackTags).joined(separator: ","))
+        setProperty("sid", "auto")
+        subtitlesVisible = subtitleLanguage != nil
+        setProperty("sub-visibility", subtitlesVisible ? "yes" : "no")
         // A shift fixes one file's timing, so it shouldn't carry over to the next.
         setDelay(0, for: .sub)
         setDelay(0, for: .audio)
@@ -386,21 +415,36 @@ final class MPVPlayer {
     /// Pass nil to turn subtitles off.
     func select(_ track: Track?, kind: Track.Kind) {
         trackError = nil
-        if kind == .sub {
+        var commands: [[String]]
+        switch kind {
+        case .audio:
+            commands = [["set", "aid", track.map { String($0.id) } ?? "no"]]
+        case .sub:
             hasSelectedSubtitles = true
             // A subtitle still downloading must not override the user's explicit choice.
             for index in trackOperations.indices where trackOperations[index].arguments.first == "sub-add" {
                 trackOperations[index].arguments[2] = "auto"
             }
+            let demuxed = demuxedTracks.first { $0.kind == .sub && $0.isSelected }
+            commands = []
+            if let track, track.id != demuxed?.id {
+                commands.append(["set", "sid", String(track.id)])
+            }
+            commands.append(["set", "sub-visibility", track == nil ? "no" : "yes"])
+            subtitlesVisible = track != nil
         }
-        let operation = TrackOperation(
-            arguments: ["set", kind == .audio ? "aid" : "sid", track.map { String($0.id) } ?? "no"], kind: kind)
         trackOperations.removeAll { $0.kind == kind }
-        if activeTrackOperation?.operation.arguments == operation.arguments { return }
-        enqueueTrackOperation(operation)
+        if activeTrackOperation?.operation.arguments == commands.first { commands.removeFirst() }
+        enqueueTrackOperations(commands.map { TrackOperation(arguments: $0, kind: kind) })
     }
 
     func dismissTrackError() { trackError = nil }
+
+    /// What the connection sustained for this file, once there are enough samples to say.
+    var measuredDownloadSpeed: Double? {
+        guard downloadSamples.count >= 10 else { return nil }
+        return downloadSamples.sorted()[downloadSamples.count / 2]
+    }
 
     /// Requested only while Playback Info is open, without blocking the UI on mpv.
     func refreshPlaybackInfo() {
@@ -410,6 +454,7 @@ final class MPVPlayer {
             ("decoder-frame-drop-count", MPV_FORMAT_INT64),
             ("frame-drop-count", MPV_FORMAT_INT64),
             ("demuxer-cache-duration", MPV_FORMAT_DOUBLE),
+            ("cache-speed", MPV_FORMAT_INT64),
             ("video-bitrate", MPV_FORMAT_DOUBLE),
             ("audio-bitrate", MPV_FORMAT_DOUBLE),
         ] {
@@ -659,6 +704,8 @@ final class MPVPlayer {
             isPaused = value
         case .flag("paused-for-cache", let value):
             isBuffering = value
+            // Measured afresh for each stall.
+            if value { playbackInfo.downloadSpeed = nil }
         case .flag("eof-reached", let value):
             isEnded = value
         case .double("time-pos", let value):
@@ -677,7 +724,7 @@ final class MPVPlayer {
         case .chapters(let value):
             if value != chapters { chapters = value }
         case .tracks(let value):
-            if value != tracks { tracks = value }
+            if value != demuxedTracks { demuxedTracks = value }
         case .videoFormat(let value):
             if value != videoFormat { videoFormat = value }
         case .string("hwdec-current", let value):
@@ -688,6 +735,13 @@ final class MPVPlayer {
             return
         case .integer("frame-drop-count", let value):
             playbackInfo.outputDrops = value
+            return
+        case .flag("demuxer-cache-idle", let value):
+            isDownloading = !value
+            return
+        case .integer("cache-speed", let value):
+            playbackInfo.downloadSpeed = Double(value) * 8
+            if isDownloading && value > 0 { downloadSamples.append(Double(value) * 8) }
             return
         case .double("demuxer-cache-duration", let value):
             playbackInfo.bufferedSeconds = value
@@ -770,17 +824,21 @@ final class MPVPlayer {
         for completion in completions + queued { completion() }
     }
 
+    /// Switches run in order, ahead of subtitles still being added.
+    private func enqueueTrackOperations(_ operations: [TrackOperation]) {
+        guard !isShutDown, !operations.isEmpty else { return }
+        trackOperations.insert(contentsOf: operations, at: 0)
+        if let active = activeTrackOperation, active.operation.arguments.first == "sub-add", !active.preempted {
+            activeTrackOperation?.preempted = true
+            mpv_abort_async_command(handle, active.id)
+        }
+        runNextTrackOperation()
+    }
+
+    /// Subtitle files are added after any switches already waiting.
     private func enqueueTrackOperation(_ operation: TrackOperation) {
         guard !isShutDown else { return }
-        if operation.kind != nil {
-            trackOperations.insert(operation, at: 0)
-            if let active = activeTrackOperation, active.operation.arguments.first == "sub-add", !active.preempted {
-                activeTrackOperation?.preempted = true
-                mpv_abort_async_command(handle, active.id)
-            }
-        } else {
-            trackOperations.append(operation)
-        }
+        trackOperations.append(operation)
         runNextTrackOperation()
     }
 

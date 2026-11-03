@@ -3,6 +3,9 @@ import SwiftUI
 
 @main
 struct LogeApp: App {
+    #if os(iOS)
+    @UIApplicationDelegateAdaptor private var appDelegate: AppDelegate
+    #endif
     @State private var addonStore: AddonStore
     @State private var library: LibraryStore
     @State private var trakt: TraktAccount
@@ -205,6 +208,29 @@ private struct BrowseStack<Content: View>: View {
                 .navigationDestination(for: CatalogSource.self) { CatalogGridView(source: $0) }
                 .navigationDestination(for: PersonRoute.self) { PersonView(route: $0) }
                 .navigationDestination(for: HistoryRoute.self) { _ in HistoryView() }
+                .navigationDestination(for: FilmCollection.self) { FilmCollectionView(collection: $0) }
+                .navigationDestination(for: DiscoveryCatalogs.Genre.self) { GenreView(genre: $0) }
+                .navigationDestination(for: FestivalRoute.self) { $0.destination }
         }
     }
 }
+
+#if os(iOS)
+/// iPhone browsing stays upright; only the player turns with the phone.
+final class AppDelegate: NSObject, UIApplicationDelegate {
+    private static var allowsLandscape = false
+
+    func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+        guard UIDevice.current.userInterfaceIdiom == .phone else { return .all }
+        return Self.allowsLandscape ? .allButUpsideDown : .portrait
+    }
+
+    static func setAllowsLandscape(_ allowed: Bool) {
+        guard allowed != allowsLandscape else { return }
+        allowsLandscape = allowed
+        for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
+            scene.keyWindow?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+        }
+    }
+}
+#endif

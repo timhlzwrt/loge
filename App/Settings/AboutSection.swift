@@ -2,9 +2,23 @@ import LogeCore
 import SwiftUI
 
 struct AboutSection: View {
+    private let build = BuildInfo()
+
     var body: some View {
         Section("About") {
             LabeledContent("Version", value: version)
+            if let commit = build.commit {
+                LabeledContent("Build", value: build.summary)
+                if let branch = build.branch {
+                    LabeledContent("Branch", value: branch)
+                }
+                #if !os(tvOS)
+                // The repository is private, so GitHub answers in the browser where you're signed
+                // in: "identical" when this is main's latest, or the commits it's missing.
+                Link("Compare with main on GitHub",
+                     destination: URL(string: "https://github.com/timhlzwrt/loge/compare/\(commit)...main")!)
+                #endif
+            }
             LabeledContent("Development", value: "Tim Holzwarth")
             LabeledContent("Testing", value: "Lenja")
             NavigationLink("Data Sources") { DataSourcesView() }
@@ -16,6 +30,31 @@ struct AboutSection: View {
         let short = info?["CFBundleShortVersionString"] as? String ?? "–"
         let build = info?["CFBundleVersion"] as? String ?? "–"
         return "\(short) (\(build))"
+    }
+}
+
+/// The commit a build was made from, stamped into Info.plist by the "Stamp commit" build phase.
+private struct BuildInfo {
+    let commit: String?
+    let date: Date?
+    /// Nil on main, and for the detached checkouts the nightly job and install script build in.
+    let branch: String?
+    let isModified: Bool
+
+    init(info: [String: Any] = Bundle.main.infoDictionary ?? [:]) {
+        commit = info["LogeCommit"] as? String
+        date = (info["LogeCommitDate"] as? String).flatMap { try? Date($0, strategy: .iso8601) }
+        branch = (info["LogeBranch"] as? String).flatMap { ["main", "HEAD"].contains($0) ? nil : $0 }
+        isModified = info["LogeModified"] as? Bool ?? false
+    }
+
+    /// "a87f81f · 3 Nov 2026, 16:39", with "· modified" when built with uncommitted changes.
+    var summary: String {
+        [commit.map { String($0.prefix(7)) },
+         date?.formatted(date: .abbreviated, time: .shortened),
+         isModified ? "modified" : nil]
+            .compactMap { $0 }
+            .joined(separator: " · ")
     }
 }
 

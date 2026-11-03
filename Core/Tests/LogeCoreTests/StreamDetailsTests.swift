@@ -43,6 +43,27 @@ struct StreamDetailsTests {
         #expect(StreamDetails(text: "2160p HDR x265").dynamicRange == ["HDR10"])
     }
 
+    @Test func recommendsTheBestSourceTheConnectionKeepsUpWith() {
+        let sources = [
+            StreamDetails(text: "[RD+] 2160p REMUX\nOverall: 60 Mbps"),
+            StreamDetails(text: "[RD download] 2160p WEB-DL\nOverall: 18 Mbps"),
+            StreamDetails(text: "[RD+] 2160p WEB-DL\nOverall: 16 Mbps"),
+            StreamDetails(text: "[RD+] 2160p WEB-DL\nOverall: 12 Mbps"),
+            StreamDetails(text: "[RD+] 1080p BluRay\nOverall: 20 Mbps"),
+            StreamDetails(text: "[RD+] 2160p WEB-DL"),
+        ]
+        // 30 Mbps leaves 22.5 for the file: the cached 4K files under that, the larger first.
+        #expect(StreamDetails.recommendedIndex(in: sources, connectionSpeed: 30_000_000) == 2)
+        // Too slow for any 4K file here.
+        #expect(StreamDetails.recommendedIndex(in: sources, connectionSpeed: 15_000_000) == nil)
+        #expect(StreamDetails.recommendedIndex(in: sources, connectionSpeed: 18_000_000) == 3)
+    }
+
+    @Test func recommendsNothingWhenEverySourceFits() {
+        let sources = [StreamDetails(text: "1080p\nOverall: 8 Mbps"), StreamDetails(text: "720p\nOverall: 4 Mbps")]
+        #expect(StreamDetails.recommendedIndex(in: sources, connectionSpeed: 100_000_000) == nil)
+    }
+
     @Test func leavesUnknownsEmpty() {
         let details = StreamDetails(text: "Debrid\nSome file")
         #expect(details.resolution == nil)

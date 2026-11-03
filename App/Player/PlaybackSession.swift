@@ -94,6 +94,7 @@ final class PlaybackSession {
 
     private func stopPlayback() {
         guard let player else { return }
+        recordConnectionSpeed()
         recordProgress()
         scrobble(.stop)
         tasks.forEach { $0.cancel() }
@@ -182,6 +183,7 @@ final class PlaybackSession {
 
     private func load(_ request: PlaybackRequest) {
         guard let player else { return }
+        recordConnectionSpeed()
         let episodesChanged = request.item?.metaID != current?.item?.metaID
         skipLookup?.cancel()
         skipLookup = nil
@@ -212,7 +214,10 @@ final class PlaybackSession {
             headers: request.headers,
             startAt: request.startAt,
             audioLanguage: audio.isEmpty ? nil : audio,
-            subtitleLanguage: subtitles.isEmpty ? nil : subtitles
+            subtitleLanguage: subtitles.isEmpty ? nil : subtitles,
+            // The languages subtitles are most likely turned on in: the sound's and the device's.
+            hiddenSubtitleLanguages: [audio.isEmpty ? PlaybackPreferences.defaultAudioLanguage : audio]
+                + Locale.preferredLanguages.prefix(1).compactMap { Locale(identifier: $0).language.languageCode?.identifier }
         )
         if episodesChanged {
             episodes = []
@@ -314,6 +319,14 @@ final class PlaybackSession {
         player.seek(to: max(fraction * duration - 5, 0))
     }
 
+    /// Before the file changes, which starts a new measurement. Files served from this
+    /// machine, such as the test addon's, say nothing about the network.
+    private func recordConnectionSpeed() {
+        guard let speed = player?.measuredDownloadSpeed, let host = current?.url.host(),
+              !["127.0.0.1", "localhost", "::1"].contains(host) else { return }
+        ConnectionSpeed.record(speed)
+    }
+
     private func recordProgress() {
         // Live streams have no duration, and nothing is known before the file has loaded.
         guard !isOpeningFile, let item = current?.item, let player,
@@ -373,8 +386,10 @@ final class PlaybackSession {
         let results = await withTaskGroup(of: (Int, SubtitleProvider, [Subtitle]).self) { group in
             for (index, provider) in providers.enumerated() {
                 group.addTask {
-                    let subtitles = (try? await provider.subtitles(type: item.type, id: item.id, filename: request.filename)) ?? []
-                    return (index, provider, subtitles)
+                    // Awaited on its own line, as in SourcesView: Release builds have mishandled
+                    // child results awaited inside a larger expression.
+                    let subtitles = try? await provider.subtitles(type: item.type, id: item.id, filename: request.filename)
+                    return (index, provider, subtitles ?? [])
                 }
             }
             var results: [(Int, SubtitleProvider, [Subtitle])] = []

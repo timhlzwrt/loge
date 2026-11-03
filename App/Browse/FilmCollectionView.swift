@@ -16,15 +16,19 @@ struct DiscoveryCollectionRow: View {
             HorizontalShelf(title) {
                 HStack(alignment: .top, spacing: Metrics.rowSpacing) {
                     ForEach(collections) { collection in
-                        NavigationLink {
+                        Group {
+                            // Value links like the rest of the stack: a view-built destination
+                            // left the film links inside it dead.
                             if tmdb.isConfigured, let id = collection.tmdbPersonID {
-                                PersonView(route: PersonRoute(person: Person(
-                                    name: collection.name, roles: [.director], tmdbID: id, portraitURL: collection.artworkURL)))
+                                NavigationLink(value: PersonRoute(person: Person(
+                                    name: collection.name, roles: [.director], tmdbID: id, portraitURL: collection.artworkURL))) {
+                                    CollectionTile(collection: collection)
+                                }
                             } else {
-                                FilmCollectionView(collection: collection)
+                                NavigationLink(value: collection) {
+                                    CollectionTile(collection: collection)
+                                }
                             }
-                        } label: {
-                            CollectionTile(collection: collection)
                         }
                         #if os(tvOS)
                         .buttonStyle(.card)
@@ -205,7 +209,8 @@ struct RecordedCollectionView: View {
                         heading.frame(minWidth: Metrics.cardWidth * 0.9, maxWidth: .infinity, alignment: .leading)
                     }
                     VStack(alignment: .leading, spacing: 16) {
-                        collectionImage.aspectRatio(16 / 9, contentMode: .fit)
+                        // Short, so the winners start on the first screen of a phone.
+                        collectionImage.frame(height: 120)
                         heading
                     }
                 }

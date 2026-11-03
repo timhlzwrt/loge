@@ -4,7 +4,7 @@ import XCTest
 /// End-to-end checks of browsing flows against live addons. They need the network,
 /// Cinemeta, and for playback the local test addon (Tools/test-addon.py) installed, so
 /// they only run on request. Screenshots go to `SCREENSHOT_DIR` when it's set:
-/// Track switching also uses the generated MOV server on port 8766; see docs/REVIEW_VALIDATION.md.
+/// Track switching also uses the MOV fixture server on port 8766; see Tools/test-addon.py.
 ///
 ///     TEST_RUNNER_UI_FLOWS=1 TEST_RUNNER_SCREENSHOT_DIR=/tmp/shots xcodebuild test \
 ///       -scheme loge -destination 'platform=iOS Simulator,name=iPhone 18 Pro' \
@@ -279,21 +279,29 @@ final class FlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["Season"].waitForExistence(timeout: 5))
     }
 
+    /// iPhone browsing stays upright when the phone turns; iPad turns with it.
     @MainActor
-    func testLandscapeAndPullToRefresh() {
+    func testRotationAndPullToRefresh() {
         XCTAssertTrue(app.staticTexts["Popular Movies"].waitForExistence(timeout: 15))
         app.swipeDown()
         XCTAssertTrue(app.staticTexts["Popular Movies"].waitForExistence(timeout: 15), "Rows gone after refresh")
 
+        let isPhone = UIDevice.current.userInterfaceIdiom == .phone
+        func isUpright() -> Bool {
+            let frame = app.windows.firstMatch.frame
+            return frame.height > frame.width
+        }
         XCUIDevice.shared.orientation = .landscapeLeft
         sleep(2)
-        screenshot("landscape-home")
+        screenshot("rotated-home")
+        XCTAssertEqual(isUpright(), isPhone)
         XCUIDevice.shared.orientation = .portrait
         openSeries("Lanterns")
         XCTAssertTrue(app.buttons["Season"].waitForExistence(timeout: 15))
         XCUIDevice.shared.orientation = .landscapeLeft
         sleep(3)
-        screenshot("landscape-details")
+        screenshot("rotated-details")
+        XCTAssertEqual(isUpright(), isPhone)
         XCUIDevice.shared.orientation = .portrait
     }
 
@@ -307,6 +315,8 @@ final class FlowTests: XCTestCase {
         XCUIDevice.shared.orientation = .landscapeLeft
         sleep(1)
         screenshot("rotated-while-playing")
+        let frame = app.windows.firstMatch.frame
+        XCTAssertGreaterThan(frame.width, frame.height, "The player didn't turn")
 
         // A tap toggles the controls; aim above the middle, where the play button sits.
         if !app.buttons["Close"].exists { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap() }
@@ -315,7 +325,10 @@ final class FlowTests: XCTestCase {
         XCUIDevice.shared.orientation = .portrait
         sleep(2)
         screenshot("rotated-while-paused")
+        if !app.buttons["Close"].exists { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap() }
         app.buttons["Close"].tap()
+        let browsing = app.windows.firstMatch.frame
+        XCTAssertGreaterThan(browsing.height, browsing.width, "Browsing didn't turn back upright")
     }
 
     /// The player's button hands the video to the floating window and closes the player
@@ -479,6 +492,22 @@ final class FlowTests: XCTestCase {
         app.buttons["Close"].tap()
     }
 
+    /// With a measured speed below some sources' bitrates, the best one that fits is marked
+    /// but not played.
+    @MainActor
+    func testSourcesRecommendOneForTheConnection() {
+        app.terminate()
+        app.launchArguments = ["-connectionSpeed", "32000000"]
+        app.launch()
+        installTestAddonIfNeeded()
+        openSeries("Lanterns")
+        episodeCard().tap()
+        let recommended = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'recommended'")).firstMatch
+        XCTAssertTrue(recommended.waitForExistence(timeout: 15), "No source recommended")
+        XCTAssertFalse(app.buttons["Pause"].exists, "The recommended source started by itself")
+        screenshot("source-recommended")
+    }
+
     @MainActor
     func testSourceBitrateFilteringAndSorting() {
         installTestAddonIfNeeded()
@@ -489,14 +518,17 @@ final class FlowTests: XCTestCase {
         screenshot("source-bitrates")
         app.buttons["Sort & Filter"].tap()
         screenshot("source-sort-menu")
+        app.buttons["Sort by"].tap()
         app.buttons["Lower bitrate"].tap()
         app.buttons["Sort & Filter"].tap()
+        app.buttons["Maximum bitrate"].tap()
         app.buttons["Up to 25 Mbps"].tap()
-        XCTAssertTrue(app.staticTexts["Up to 25 Mbps reported bitrate. Unknown bitrates stay visible."].exists)
+        XCTAssertTrue(app.staticTexts["Up to 25 Mbps, estimated from the size where not reported. Unknown bitrates stay visible."].exists)
         XCTAssertFalse(higherRate.exists)
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label MATCHES '.*23[,.]6 Mbps.*'")).firstMatch.exists)
         screenshot("source-bitrate-filter")
         app.buttons["Sort & Filter"].tap()
+        app.buttons["Maximum bitrate"].tap()
         app.buttons["Any bitrate"].tap()
         XCTAssertTrue(higherRate.exists)
     }
@@ -598,7 +630,7 @@ final class FlowTests: XCTestCase {
         app.buttons["Close"].tap()
     }
 
-    /// Screenshots of each redesigned screen, to compare with `Design/mockups`.
+    /// Screenshots of each main screen, to compare before and after a change.
     @MainActor
     func testScreenTour() {
         installTestAddonIfNeeded()
@@ -613,7 +645,12 @@ final class FlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["Season"].waitForExistence(timeout: 15))
         sleep(2)
         screenshot("tour-details")
-        app.buttons["Choose a Source"].tap()
+        // The backdrop fades as the page scrolls past it.
+        app.swipeUp()
+        sleep(1)
+        screenshot("tour-details-scrolled")
+        app.swipeDown()
+        app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Choose a Source'")).firstMatch.tap()
         let source = app.buttons.matching(NSPredicate(format: "label CONTAINS 'DTS 5.1'")).firstMatch
         XCTAssertTrue(source.waitForExistence(timeout: 15), "No test sources")
         screenshot("tour-sources")
@@ -692,6 +729,8 @@ final class FlowTests: XCTestCase {
     @MainActor
     private func installTestAddonIfNeeded(name: String = "Test Streams", manifestURL: String = "http://127.0.0.1:8765/manifest.json") {
         openTab("Settings")
+        let addons = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Addons'")).firstMatch
+        if addons.waitForExistence(timeout: 5) { addons.tap() }
         let installedName = name == "Test Streams" ? ProcessInfo.processInfo.environment["PLAYBACK_TEST_ADDON_NAME"] ?? name : name
         guard !app.staticTexts[installedName].waitForExistence(timeout: 5) else { return }
         let field = app.textFields["Manifest URL"]

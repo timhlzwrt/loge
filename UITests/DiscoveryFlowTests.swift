@@ -25,6 +25,13 @@ final class DiscoveryFlowTests: XCTestCase {
         cannes.tap()
         XCTAssertTrue(app.staticTexts["2026 winners"].waitForExistence(timeout: 10))
         screenshot("discovery-cannes-latest")
+        let watchLater = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Watch Later'")).firstMatch
+        let latestFilm = app.otherElements["festival-films"].buttons.firstMatch
+        XCTAssertTrue(latestFilm.waitForExistence(timeout: 10))
+        latestFilm.tap()
+        XCTAssertTrue(watchLater.waitForExistence(timeout: 20), "A latest winner didn't open its details")
+        screenshot("discovery-cannes-latest-film")
+        app.navigationBars.buttons.firstMatch.tap()
         let previous = app.buttons["Previous recorded winners"]
         for _ in 0..<12 {
             if previous.exists && previous.isHittable { break }
@@ -40,6 +47,14 @@ final class DiscoveryFlowTests: XCTestCase {
         expectation(for: loaded, evaluatedWith: app)
         waitForExpectations(timeout: 40)
         screenshot("discovery-cannes")
+        let winner = app.otherElements["collection-films"].buttons.firstMatch
+        if winner.exists {
+            // These links were dead when the festival page was pushed as a view.
+            winner.tap()
+            XCTAssertTrue(watchLater.waitForExistence(timeout: 15), "A winner didn't open its details")
+            screenshot("discovery-cannes-winner")
+            app.navigationBars.buttons.firstMatch.tap()
+        }
 
     }
 

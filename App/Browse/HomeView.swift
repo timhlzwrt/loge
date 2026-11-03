@@ -46,21 +46,20 @@ struct HomeView: View {
 }
 
 /// Downloads artwork into the shared URL cache that `Artwork` and `TitleLogo` load from,
-/// so it's already there when a row scrolls in or the carousel pages.
-private func prefetch(_ urls: [String?]) async {
-    await withTaskGroup(of: Void.self) { group in
-        for url in Set(urls.compactMap { $0 }).compactMap(URL.init(string:)) {
-            group.addTask {
-                // Only warms the cache: the view that shows the image handles a failure.
-                _ = try? await URLSession.shared.data(from: url)
-            }
-        }
+/// so it's already there when a row scrolls in or the carousel pages. Plain data tasks
+/// rather than a task group: opening anything from Home cancels its task, and a Release
+/// crash on the iPhone (a group child finishing after its group was gone) followed opening
+/// a festival while this was likely still running.
+private func prefetch(_ urls: [String?]) {
+    for url in Set(urls.compactMap { $0 }).compactMap(URL.init(string:)) {
+        // Only warms the cache: the view that shows the image handles a failure.
+        URLSession.shared.dataTask(with: url).resume()
     }
 }
 
-/// The first posters of every Home row, one row at a time in screen order, so rows further
-/// down have theirs before they scroll in. Their catalog responses are cached too, so the
-/// rows don't download them again.
+/// The first posters of every Home row in screen order, so rows further down have theirs
+/// before they scroll in. Their catalog responses are cached too, so the rows don't
+/// download them again.
 private func prefetchArtwork(of sources: [CatalogSource]) async {
     for source in sources {
         guard !Task.isCancelled else { return }
@@ -71,7 +70,7 @@ private func prefetchArtwork(of sources: [CatalogSource]) async {
         // Focus usually enters a row at its start, which fills the screen with its backdrop.
         urls += metas.prefix(2).map(\.featuredBackground)
         #endif
-        await prefetch(urls)
+        prefetch(urls)
     }
 }
 
@@ -283,11 +282,15 @@ private struct FeaturedCarousel: View {
             // their own error, so a failure here just leaves it out.
             async let movieItems = try? movies.items()
             async let seriesItems = try? series.items()
-            items = DiscoveryCatalogs.featured(movies: await movieItems ?? [], series: await seriesItems ?? [])
-            await prefetchPages(after: nil)
+            // Each awaited on its own line, as Release builds have mishandled child task
+            // results awaited inside a larger expression.
+            let loadedMovies = await movieItems
+            let loadedSeries = await seriesItems
+            items = DiscoveryCatalogs.featured(movies: loadedMovies ?? [], series: loadedSeries ?? [])
+            prefetchPages(after: nil)
         }
-        .task(id: currentID) {
-            await prefetchPages(after: currentID)
+        .onChange(of: currentID) { _, id in
+            prefetchPages(after: id)
         }
         .task(id: "\(tmdb.revision):\(currentID ?? items.first?.id ?? "")") {
             guard tmdb.isConfigured else { return }
@@ -302,10 +305,10 @@ private struct FeaturedCarousel: View {
     }
 
     /// The next two pages' artwork, so paging never shows an empty backdrop.
-    private func prefetchPages(after id: MetaPreview.ID?) async {
+    private func prefetchPages(after id: MetaPreview.ID?) {
         let index = items.firstIndex { $0.id == id } ?? 0
         let upcoming = items.dropFirst(index + 1).prefix(2)
-        await prefetch(upcoming.flatMap { [$0.featuredBackground, $0.logo] })
+        prefetch(upcoming.flatMap { [$0.featuredBackground, $0.logo] })
     }
 
     private var pageDots: some View {

@@ -1,6 +1,6 @@
 # loge: implementation overview
 
-Updated 2 November 2026. See [HANDOFF.md](HANDOFF.md) for the latest batch, verification and remaining work. loge is a private SwiftUI streaming app for
+Updated 2 November 2026. loge is a SwiftUI streaming app for
 iPhone, iPad, Apple TV and Mac. `li.tjh.MediaApp` remains the bundle
 identifier so existing installations keep their data.
 
@@ -168,6 +168,3 @@ also require `Tools/test-addon.py`. Set `TEST_RUNNER_SCREENSHOT_DIR` to retain
 screenshots. `RemoteDriverTests.swift` drives tvOS focus/navigation with an
 opt-in command file. `PlayerMenuTests.swift` covers player interactions on
 request. Keep fixture requests separate from private stream-addon credentials.
-
-See [REVIEW_VALIDATION.md](REVIEW_VALIDATION.md) for this review's actual results
-and limitations.

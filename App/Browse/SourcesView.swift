@@ -40,6 +40,7 @@ struct SourcesView: View {
     /// Chosen in the sheet, to play once it has closed.
     @State private var pendingPlay: Entry?
     @State private var isAddingAddon = false
+    @AppStorage(ConnectionSpeed.key) private var connectionSpeed = 0.0
     @Environment(PlaybackSession.self) private var playback
 
     var body: some View {
@@ -257,6 +258,7 @@ struct SourcesView: View {
     @ViewBuilder
     private func list(_ groups: [SourceGroup], providers: [StreamProvider], selectedID: Entry.ID? = nil) -> some View {
         let lastPlayed = lastPlayedID(in: groups)
+        let recommended = recommendedID(in: groups)
         let failed = providers.filter { if case .failure = results[$0.id] { true } else { false } }
         let isLoading = providers.contains { results[$0.id] == nil }
         ListContainer {
@@ -273,7 +275,8 @@ struct SourcesView: View {
             ForEach(groups) { group in
                 SourceGroupView(title: group.title) {
                     ForEach(group.entries) { entry in
-                        row(entry, isLastPlayed: entry.id == lastPlayed, isSelected: entry.id == selectedID)
+                        row(entry, isLastPlayed: entry.id == lastPlayed, isRecommended: entry.id == recommended,
+                            isSelected: entry.id == selectedID)
                     }
                 }
             }
@@ -336,8 +339,9 @@ struct SourcesView: View {
     }
 
     @ViewBuilder
-    private func row(_ entry: Entry, isLastPlayed: Bool, isSelected: Bool) -> some View {
-        let label = StreamRow(entry: entry, isLastPlayed: isLastPlayed)
+    private func row(_ entry: Entry, isLastPlayed: Bool, isRecommended: Bool, isSelected: Bool) -> some View {
+        let label = StreamRow(entry: entry, isLastPlayed: isLastPlayed,
+                              connectionSpeed: isRecommended ? connectionSpeed : nil)
         #if os(macOS)
         if isChoosing {
             // Click selects and double-click plays, as in a Mac list; Play plays the selection.
@@ -419,6 +423,14 @@ struct SourcesView: View {
     /// Unknown bitrates pass, so a limit never hides sources that just don't say.
     private func withinBitrateLimit(_ details: StreamDetails) -> Bool {
         maximumBitrate == 0 || (details.listedBitrate ?? 0) <= Double(maximumBitrate) * 1_000_000
+    }
+
+    /// The best source for the speed playback has measured here; only marked, never played
+    /// by itself.
+    private func recommendedID(in groups: [SourceGroup]) -> Entry.ID? {
+        let entries = groups.flatMap(\.entries)
+        return StreamDetails.recommendedIndex(in: entries.map(\.details), connectionSpeed: connectionSpeed)
+            .map { entries[$0].id }
     }
 
     /// The remembered source: the same file, or for another episode the same release.
@@ -578,6 +590,8 @@ private struct SourceGroupView<Content: View>: View {
 private struct StreamRow: View {
     let entry: SourcesView.Entry
     let isLastPlayed: Bool
+    /// Set on the source recommended for this speed, in bits per second.
+    let connectionSpeed: Double?
 
     var body: some View {
         let details = entry.details
@@ -594,10 +608,10 @@ private struct StreamRow: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
-                if isLastPlayed || isCold {
-                    Text(isLastPlayed ? "Last played" : "Not cached, may be slow to start")
+                if let note {
+                    Text(note)
                         .font(summaryFont.weight(.medium))
-                        .foregroundStyle(isLastPlayed ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                        .foregroundStyle(isLastPlayed || connectionSpeed != nil ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
                 }
             }
             Spacer(minLength: 8)
@@ -625,6 +639,16 @@ private struct StreamRow: View {
         #endif
         .contentShape(.rect)
         .accessibilityElement(children: .combine)
+    }
+
+    /// "Recommended for your 32 Mbps connection", "Last played", or a warning that the file
+    /// isn't cached; shortened when it's both, to stay on one line.
+    private var note: String? {
+        if isLastPlayed { return connectionSpeed == nil ? "Last played" : "Last played · recommended" }
+        if let connectionSpeed {
+            return "Recommended for your \((connectionSpeed / 1_000_000).formatted(.number.precision(.fractionLength(0)))) Mbps connection"
+        }
+        return entry.details.isCached == false ? "Not cached, may be slow to start" : nil
     }
 
     /// Codec and audio; the dynamic range is already beside the title.

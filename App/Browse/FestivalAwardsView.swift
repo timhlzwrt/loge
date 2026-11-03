@@ -43,9 +43,7 @@ struct FestivalAwardsView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("\(String(edition.year)) winners").font(.sectionTitle)
                             Text("\(films.count) films").font(.metaLine).foregroundStyle(.secondary)
-                            NavigationLink("All awards") {
-                                FestivalAwardListView(collection: collection, edition: edition, matches: matches, client: client)
-                            }
+                            NavigationLink("All awards", value: FestivalRoute.allAwards(collection))
                             .font(.metaLine)
                             .buttonStyle(.plain)
                         }
@@ -54,10 +52,7 @@ struct FestivalAwardsView: View {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: filmWidth), spacing: Metrics.rowSpacing,
                                                 alignment: .top)], alignment: .leading, spacing: 24) {
                         ForEach(films) { film in
-                            NavigationLink {
-                                FestivalFilmDestination(film: film, collection: collection, year: edition.year,
-                                                        knownMeta: matches[film.title], client: client)
-                            } label: {
+                            NavigationLink(value: FestivalRoute.film(title: film.title, collection: collection)) {
                                 FestivalFilmTile(film: film, meta: matches[film.title],
                                                  loading: !finished.contains(film.title) && !failures.contains(film.title))
                             }
@@ -76,14 +71,12 @@ struct FestivalAwardsView: View {
                         }.font(.metaLine)
                     }
                     Divider()
-                    NavigationLink("Previous recorded winners") {
-                        RecordedCollectionView(collection: collection, client: client)
-                    }
+                    NavigationLink("Previous recorded winners", value: FestivalRoute.recordedWinners(collection))
                     .font(.metaLine)
                 } else if failed {
                     ContentUnavailableView("Award list unavailable", systemImage: "film",
                         description: Text("The bundled edition couldn't be read."))
-                    NavigationLink("Recorded winners") { RecordedCollectionView(collection: collection, client: client) }
+                    NavigationLink("Recorded winners", value: FestivalRoute.recordedWinners(collection))
                 } else {
                     ProgressView("Loading winners…")
                 }
@@ -117,8 +110,14 @@ struct FestivalAwardsView: View {
         await withTaskGroup(of: (String, MetaPreview?, Bool).self) { group in
             func enqueue(_ award: FestivalAward) {
                 group.addTask {
-                    do { return (award.title, try await client.film(named: award.title, festivalYear: edition.year), false) }
-                    catch { return (award.title, nil, true) }
+                    // Awaited on its own line, as in SourcesView: Release builds have mishandled
+                    // child results awaited inside a larger expression.
+                    do {
+                        let meta = try await client.film(named: award.title, festivalYear: edition.year)
+                        return (award.title, meta, false)
+                    } catch {
+                        return (award.title, nil, true)
+                    }
                 }
             }
             // A full edition must not swamp the catalog with parallel requests.
@@ -209,8 +208,7 @@ private struct FestivalFilmDestination: View {
     let film: FestivalFilm
     let collection: FilmCollection
     let year: Int
-    let knownMeta: MetaPreview?
-    let client: FilmCollectionClient
+    var client = FilmCollectionClient.shared
     @State private var resolved: MetaPreview?
     @State private var loading = true
     @State private var failed = false
@@ -218,7 +216,7 @@ private struct FestivalFilmDestination: View {
 
     var body: some View {
         Group {
-            if let meta = knownMeta ?? resolved {
+            if let meta = resolved {
                 MetaDetailView(preview: meta)
             } else {
                 VStack(spacing: 0) {
@@ -230,7 +228,7 @@ private struct FestivalFilmDestination: View {
             }
         }
         .task(id: attempt) {
-            guard knownMeta == nil else { return }
+            // Usually answered from the client's cache, filled while the winners showed.
             loading = true
             failed = false
             do {
@@ -271,7 +269,7 @@ private struct FestivalFilmInfoView: View {
                 } else {
                     Text(lookupFailed ? "The title listing couldn't load." : "A matching title listing isn't available yet.")
                         .font(.synopsis).foregroundStyle(.secondary)
-                    NavigationLink("Find title") { SearchView(query: film.title) }
+                    NavigationLink("Find title", value: FestivalRoute.search(film.title))
                 }
             }
             .frame(maxWidth: 800, alignment: .leading)
@@ -285,8 +283,6 @@ private struct FestivalFilmInfoView: View {
 private struct FestivalAwardListView: View {
     let collection: FilmCollection
     let edition: FestivalEdition
-    let matches: [String: MetaPreview]
-    let client: FilmCollectionClient
 
     private var sections: [String] {
         edition.awards.reduce(into: []) { if !$0.contains($1.section) { $0.append($1.section) } }
@@ -297,14 +293,10 @@ private struct FestivalAwardListView: View {
             ForEach(sections, id: \.self) { section in
                 Section(section) {
                     ForEach(edition.awards.filter { $0.section == section }) { award in
-                        if let meta = matches[award.title], award.isFilm {
-                            NavigationLink { MetaDetailView(preview: meta) } label: { label(award) }
-                        } else if award.isFilm {
-                            NavigationLink {
-                                FestivalFilmDestination(film: FestivalFilm(title: award.title,
-                                    awards: edition.awards.filter { $0.isFilm && $0.title == award.title }),
-                                    collection: collection, year: edition.year, knownMeta: nil, client: client)
-                            } label: { label(award) }
+                        if award.isFilm {
+                            NavigationLink(value: FestivalRoute.film(title: award.title, collection: collection)) {
+                                label(award)
+                            }
                         } else {
                             label(award)
                                 #if os(tvOS)
@@ -359,3 +351,32 @@ private struct FestivalSectionView: View {
     }
 }
 #endif
+
+/// Festival screens are pushed by value, like the rest of a browse stack: a screen pushed as
+/// a view left the value links inside it, to titles, cast and sources, doing nothing.
+enum FestivalRoute: Hashable {
+    case recordedWinners(FilmCollection)
+    case allAwards(FilmCollection)
+    case film(title: String, collection: FilmCollection)
+    case search(String)
+
+    @MainActor @ViewBuilder
+    var destination: some View {
+        switch self {
+        case .recordedWinners(let collection):
+            RecordedCollectionView(collection: collection)
+        case .allAwards(let collection):
+            if let edition = try? FestivalEdition.edition(for: collection) {
+                FestivalAwardListView(collection: collection, edition: edition)
+            }
+        case .film(let title, let collection):
+            if let edition = try? FestivalEdition.edition(for: collection) {
+                FestivalFilmDestination(
+                    film: FestivalFilm(title: title, awards: edition.awards.filter { $0.isFilm && $0.title == title }),
+                    collection: collection, year: edition.year)
+            }
+        case .search(let query):
+            SearchView(query: query)
+        }
+    }
+}

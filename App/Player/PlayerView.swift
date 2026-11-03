@@ -76,6 +76,12 @@ struct PlayerView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .offset(y: 56)
+                } else if player.status == .buffering, let speed = player.playbackInfo.downloadSpeed {
+                    // Tells a slow connection apart from a stalled source.
+                    Text("Downloading at \(PlaybackInfoView.bitrate(speed))")
+                        .font(.subheadline.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .offset(y: 56)
                 }
                 if case .failed(let message) = player.status {
                     failure(message)
@@ -114,8 +120,16 @@ struct PlayerView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: controlsVisible)
-        .onAppear { session.screenDidAppear() }
+        .onAppear {
+            #if os(iOS)
+            AppDelegate.setAllowsLandscape(true)
+            #endif
+            session.screenDidAppear()
+        }
         .onDisappear {
+            #if os(iOS)
+            AppDelegate.setAllowsLandscape(false)
+            #endif
             scrubPreview = nil
             session.screenDidDisappear()
         }
