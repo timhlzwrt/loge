@@ -73,14 +73,12 @@ struct PlayerControls: View {
     private var phoneBody: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
+                // The whole circle is the button: with the glass button style, taps near its
+                // edge fell through to the picture and hid the controls instead of closing.
                 Button("Close", systemImage: "xmark", action: onClose)
-                    .labelStyle(.iconOnly)
-                    .font(.body.weight(.semibold))
-                    // A larger target than the glyph, since this is the main way out.
-                    .frame(width: 44, height: 44)
-                    .buttonStyle(.glass)
-                    .buttonBorderShape(.circle)
-                    .simultaneousGesture(DragGesture(minimumDistance: 0).onChanged { _ in onInteract() })
+                    .modifier(CapsuleIcon())
+                    .fontWeight(.semibold)
+                    .glassEffect(.regular.interactive(), in: .circle)
                 Text(title)
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(2)
@@ -602,14 +600,15 @@ struct PlaybackInfoView: View {
                 }
             }
             LabeledContent("Hardware decoder", value: player.playbackInfo.hardwareDecoder ?? "Unavailable")
-            LabeledContent("Video bitrate", value: bitrate(player.playbackInfo.videoBitrate))
-            LabeledContent("Audio bitrate", value: bitrate(player.playbackInfo.audioBitrate))
+            LabeledContent("Video bitrate", value: Self.bitrate(player.playbackInfo.videoBitrate))
+            LabeledContent("Audio bitrate", value: Self.bitrate(player.playbackInfo.audioBitrate))
             LabeledContent("Decoder drops", value: player.playbackInfo.decoderDrops.map(String.init) ?? "Unavailable")
             LabeledContent("Output drops", value: player.playbackInfo.outputDrops.map(String.init) ?? "Unavailable")
             LabeledContent("Buffered", value: player.playbackInfo.bufferedSeconds.map {
                 "\($0.formatted(.number.precision(.fractionLength(1)))) s"
             } ?? "Unavailable")
-            Text("Bitrates estimate recent media packets, not download speed. Watch whether drop counts increase during a hitch. A low buffer can indicate a slow source. These counters cannot measure the TV's display cadence.")
+            LabeledContent("Download speed", value: Self.bitrate(player.playbackInfo.downloadSpeed))
+            Text("Bitrates are estimated from recent video and audio. A download speed that stays below them means the source is too large for this connection; drop counts that rise during a hitch point to decoding instead.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             Button("Done") { dismiss() }
@@ -619,7 +618,7 @@ struct PlaybackInfoView: View {
         .padding(32)
     }
 
-    private func bitrate(_ value: Double?) -> String {
+    static func bitrate(_ value: Double?) -> String {
         guard let value else { return "Unavailable" }
         let megabits = value >= 1_000_000
         let number = value / (megabits ? 1_000_000 : 1_000)

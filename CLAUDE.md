@@ -123,6 +123,14 @@ their actions (Watch Later, Lists, Sources); a missing playback addon can be add
 sources sheet; source rows lead with size and HDR; cast without photos reads as credits;
 genre tiles show a small still first; Search shows a genre as a removable pill; Watch Later
 is one section. Before/after screenshots are in the PR.
+3 November, fixes from using it: festival and genre tiles push by value, so winners open
+(a view-built destination left the links inside dead); Home's artwork prefetch is plain
+data tasks, not a task group (likely cause of a Release crash on the iPhone after opening a
+festival); turning subtitles on shows a track mpv already demuxes (`sub-visibility`), since
+selecting a new embedded track makes mpv re-read its whole buffer and stall; mpv waits for
+5 s of buffer after running dry and the player shows the download speed while buffering;
+iPhone browsing is portrait-only (`AppDelegate`), the player turns; the details backdrop
+fades as the page scrolls; the player's Close button is a full 44 pt target.
 
 Decisions: MPVKit player (vendored with an AVFoundation video output); addons added as manual
 manifest URLs; cross-device sync via Trakt (not iCloud), with the user's own Trakt app keys

@@ -18,6 +18,7 @@ struct MetaDetailView: View {
     #endif
     /// Set by "Choose a Source" and by picking an episode, which bypass the remembered source.
     @State private var choosingSource: SourcesRoute?
+    @State private var heroScroll = HeroScroll()
 
     private enum LoadState {
         case loading
@@ -80,9 +81,22 @@ struct MetaDetailView: View {
             .padding(.bottom, 40)
         }
         .scrollClipDisabled()
+        #if os(tvOS)
         .background(alignment: .top) {
             backdrop
         }
+        #else
+        // The backdrop stays put behind the page, so it fades as the hero scrolls away
+        // instead of showing behind episodes and cast.
+        .onScrollGeometryChange(for: Double.self) { geometry in
+            min(max((geometry.contentOffset.y + geometry.contentInsets.top) / heroHeight, 0), 1)
+        } action: { _, progress in
+            heroScroll.progress = progress
+        }
+        .background(alignment: .top) {
+            HeroScroll.Fading(scroll: heroScroll) { backdrop }
+        }
+        #endif
         .background(Color.canvas)
         #if os(iOS)
         .toolbarBackground(.hidden, for: .navigationBar)
@@ -826,6 +840,22 @@ struct PlayAction {
         switch (video.season, video.episode) {
         case let (season?, episode?): "S\(season), E\(episode)"
         default: EpisodesSection.code(for: video)
+        }
+    }
+}
+
+/// How far the hero has scrolled away, from 0 to 1. An object of its own, so scrolling
+/// redraws only the backdrop rather than the whole page.
+@MainActor @Observable
+private final class HeroScroll {
+    var progress = 0.0
+
+    struct Fading<Content: View>: View {
+        let scroll: HeroScroll
+        @ViewBuilder let content: Content
+
+        var body: some View {
+            content.opacity(1 - scroll.progress)
         }
     }
 }

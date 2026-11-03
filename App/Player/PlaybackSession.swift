@@ -212,7 +212,10 @@ final class PlaybackSession {
             headers: request.headers,
             startAt: request.startAt,
             audioLanguage: audio.isEmpty ? nil : audio,
-            subtitleLanguage: subtitles.isEmpty ? nil : subtitles
+            subtitleLanguage: subtitles.isEmpty ? nil : subtitles,
+            // The languages subtitles are most likely turned on in: the sound's and the device's.
+            hiddenSubtitleLanguages: [audio.isEmpty ? PlaybackPreferences.defaultAudioLanguage : audio]
+                + Locale.preferredLanguages.prefix(1).compactMap { Locale(identifier: $0).language.languageCode?.identifier }
         )
         if episodesChanged {
             episodes = []
@@ -373,8 +376,10 @@ final class PlaybackSession {
         let results = await withTaskGroup(of: (Int, SubtitleProvider, [Subtitle]).self) { group in
             for (index, provider) in providers.enumerated() {
                 group.addTask {
-                    let subtitles = (try? await provider.subtitles(type: item.type, id: item.id, filename: request.filename)) ?? []
-                    return (index, provider, subtitles)
+                    // Awaited on its own line, as in SourcesView: Release builds have mishandled
+                    // child results awaited inside a larger expression.
+                    let subtitles = try? await provider.subtitles(type: item.type, id: item.id, filename: request.filename)
+                    return (index, provider, subtitles ?? [])
                 }
             }
             var results: [(Int, SubtitleProvider, [Subtitle])] = []
