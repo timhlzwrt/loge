@@ -137,6 +137,9 @@ fades as the page scrolls; the player's Close button is a full 44 pt target. Pla
 the download speed while mpv fills its buffer (`ConnectionSpeed`, per device, loopback ignored),
 and the sources list marks the best source within ¾ of it as recommended, without playing it,
 whenever some listed source is too much for the connection (`StreamDetails.recommendedIndex`).
+Settings > About shows the build's commit, date, branch and a GitHub compare link, stamped into
+Info.plist by the "Stamp commit" build phase (`project.yml`; the repo is private, so the app
+can't ask GitHub itself).
 `FlowTests.testTrackSwitchingWhilePlaying` is flaky: menus sometimes don't open in time.
 
 Decisions: MPVKit player (vendored with an AVFoundation video output); addons added as manual
