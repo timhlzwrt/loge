@@ -68,7 +68,11 @@ TEST_RUNNER_UI_FLOWS=1 TEST_RUNNER_SCREENSHOT_DIR=/tmp/shots xcodebuild test -pr
 ```
 
 `UITests/RemoteDriverTests.swift` drives the Apple TV simulator's remote from a command file
-(see its header); XCUIRemote can press buttons but not swipe.
+(see its header); XCUIRemote can press buttons but not swipe. Each press also stalls the app's
+main thread 60–100 ms, so for timing send arrow keys straight to the simulator and sample the
+app with macOS `sample <pid>`. The Apple TV is paired with Xcode (Product > Destination >
+Manage Devices…) for `devicectl` and crash logs; Instruments over the network to it drops
+after about a second.
 
 ## Conventions
 
@@ -103,7 +107,11 @@ Phase 4 and 2 November: TMDB metadata, filmographies and festival collections (P
 devices get a Release build of main every night (`nightly-deploy.sh`); sources load in
 Release builds again (an optimizer bug lost the task group's result); festival queries take
 about a second instead of timing out.
-Phase 3: History (My Lists > History), every played or marked-watched item by day.
+Phase 3: History, every played or marked-watched item by day: a row of stills at the end of
+My Lists and a grid per day behind "History ›" (PR #10).
+3 November: browsing tvOS Home no longer lags (PR #11). A focus move redrew every row, every
+poster in the focused row, and the backdrop crossfade on the CPU; now only the backdrop,
+header and the two posters involved update.
 
 Decisions: MPVKit player (vendored with an AVFoundation video output); addons added as manual
 manifest URLs; cross-device sync via Trakt (not iCloud), with the user's own Trakt app keys
@@ -113,9 +121,15 @@ Picture is required; downloads are out of scope; UI is English only for now.
 
 Next, in plan order:
 
-1. Phase 2 leftovers: tvOS Top Shelf with Continue Watching needs an App Group shared with an
-   extension, which free (personal team) signing likely doesn't allow; confirm before building.
-   tvOS swipe-to-scrub and Mac screens beyond Home need checking by hand.
+1. Phase 2 leftovers: tvOS swipe-to-scrub and Mac screens beyond Home need checking by hand.
+2. tvOS Top Shelf with Continue Watching, on hold. Tested 2 November (branch
+   `claude/top-shelf-test`): atvloadly signs and installs a Top Shelf extension with a free
+   Apple ID and registers the App Group (`group.li.tjh.MediaApp.<team ID>`; the real name has
+   to be read from the embedded provisioning profile), but tvOS never launches the extension:
+   no process, no crash log, the shelf stays empty. The reason is only in the Apple TV's live
+   log (Console.app with the paired device); read it before building more.
+3. Check the Home lag fix on the Apple TV itself (simulator only so far; simulator 4K
+   rendering still shows 90–170 ms frame gaps per move).
 
 Open from the 2 November list (the rest shipped in PR #9):
 
