@@ -1,7 +1,7 @@
 # loge
 
-loge: a private, never-published Stremio-addon client for iPhone/iPad, Apple TV and Mac,
-in native SwiftUI. The project, scheme, product and `LogeCore` package are all named loge; only the bundle ID
+loge: a Stremio-addon client for iPhone/iPad, Apple TV and Mac, in native SwiftUI, public on
+GitHub under GPL-3.0 and installed by sideloading (SideStore source, no App Store). The project, scheme, product and `LogeCore` package are all named loge; only the bundle ID
 (`li.tjh.MediaApp`), Keychain service names and log subsystem keep the old working name, so
 saved data and sign-ins carry over. It browses catalogs from Stremio addons, shows details, lists streams and
 plays them with mpv. The look follows the Strand app: charcoal canvas, artwork-led, white
@@ -38,6 +38,9 @@ accent, system font, no cards/gradients/badges.
   `vo=avfoundation` (an `AVSampleBufferDisplayLayer`, for Picture in Picture and HDR). Rebuild
   with `rebuild-libmpv.sh`; see its README.
 - `.github/workflows/ci.yml` — Core tests and warning-free builds for iOS, tvOS and macOS.
+- `.github/workflows/release.yml` — every push to main: unsigned iOS and tvOS `.ipa` files as
+  release `build-<commit count>`, and the SideStore source (`Tools/sidestore-source.py`) on
+  GitHub Pages at `https://timhlzwrt.github.io/loge/source.json`.
 
 ## Commands
 
@@ -62,8 +65,8 @@ in its own checkout (`.build/nightly` of the main repo): when origin/main moved 
 Release build on the Apple TV via `install-tv.sh` and on the iPhone over Wi-Fi via
 `run-device.sh`, and it reinstalls the iPhone after 5 days so the free signature never lapses.
 It logs to `~/Library/Logs/loge-nightly.log` and shows a notification when an install fails.
-atvloadly runs on the home Proxmox server (CT 107, `http://192.168.178.115:5533`, set up in the
-separate infrastructure repo); it re-signs every night 03:00–06:30, and `install-tv.sh` uploads a
+atvloadly runs on a server on the home network (`ATVLOADLY`, default in `install-tv.sh`, set up
+in a separate infrastructure repo); it re-signs every night 03:00–06:30, and `install-tv.sh` uploads a
 new build to it. A free Apple ID allows 3 sideloaded apps at once across Xcode, Sideloadly and
 atvloadly.
 
@@ -138,11 +141,13 @@ the download speed while mpv fills its buffer (`ConnectionSpeed`, per device, lo
 and the sources list marks the best source within ¾ of it as recommended, without playing it,
 whenever some listed source is too much for the connection (`StreamDetails.recommendedIndex`).
 Settings > About shows the build's commit, date, branch and a GitHub compare link, stamped into
-Info.plist by the "Stamp commit" build phase (`project.yml`; the repo is private, so the app
-can't ask GitHub itself).
+Info.plist by the "Stamp commit" build phase (`project.yml`), which also sets the build number to
+the commit count. The repo went public with a README for outside users; agent handoff notes
+and dated review reports were removed. Others install through the SideStore source.
 `FlowTests.testTrackSwitchingWhilePlaying` is flaky: menus sometimes don't open in time.
 
-Decisions: MPVKit player (vendored with an AVFoundation video output); addons added as manual
+Decisions: public under GPL-3.0, distributed as a SideStore source (each user signs with a free
+Apple ID; Apple TV via Sideloadly); MPVKit player (vendored with an AVFoundation video output); addons added as manual
 manifest URLs; cross-device sync via Trakt (not iCloud), with the user's own Trakt app keys
 entered in Settings; no paid Apple developer account, devices are sideloaded (see Commands).
 iPhone/iPad and Apple TV are equal main devices, so no platform gets priority. Picture in
@@ -167,8 +172,7 @@ Open from the 2 November list (the rest shipped in PR #9):
   playback with AIOStreams and the advancing timeline are confirmed (simulator and iPhone);
   close and recap/intro skips passed simulator UI tests.
 - Embedded TMDB member reviews, popularity-ranked directors, person role filters and dated
-  2026 festival editions are implemented in `codex/remaining-features`. See
-  `docs/HANDOFF.md` for verification and coverage boundaries.
+  2026 festival editions shipped in PR #13.
 
 Untested so far: Mac playback and sources rows with AIOStreams' long
 names; on Apple TV the Search genre pill and the Watch Later row. Playback and Picture in Picture on tvOS and macOS, HDR output and tvOS display

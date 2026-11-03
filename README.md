@@ -1,58 +1,68 @@
 # loge
 
-A private streaming app for my own iPhone, iPad, Apple TV and Mac. Managed Home
-shelves, search, title details and IMDb scores work out of the box through
-Cinemeta. Add a Stremio playback addon to watch its streams with mpv.
-Native SwiftUI, one app target for all
-three platforms. Not published anywhere and not meant to be.
+A Stremio addon client for iPhone, iPad, Apple TV and Mac, in native SwiftUI. Browse
+catalogs, read details and play streams with mpv.
 
-Only the bundle ID (`li.tjh.MediaApp`) and Keychain service names keep the old
-working name, so saved data and sign-ins carry over between builds.
+Movies, series, search and IMDb ratings work out of the box through Cinemeta. To watch
+something, add a Stremio addon that provides streams. **loge has no content of its own**:
+what plays, and whether you may watch it, depends entirely on the addons you add.
 
-Home includes dated festival award collections and TMDB popularity-ranked directors.
-Historical collections use Wikidata's recorded film relationships, which may be incomplete or delayed.
-Connect TMDB in Settings with an API Read Access Token to add English movie/series
-details, cast portraits, character names and director/writer credits. The token is
-validated before being saved in this device's Keychain. Metadata addons remain the
-fallback and supply series episodes and IMDb ratings; IMDb playback and saved-list
-IDs stay unchanged. Connected actor/director pages use TMDB's full combined movie and TV credits,
-with movie/series and acting/directing/other crew filters, sorting and biographies.
-Credits without an IMDb mapping stay visible as information-only titles; IMDb IDs
-are resolved only when opening a credit.
-TMDB responses are cached in bounded device memory; Home preloads the current/next
-featured title, and title pages warm the first actor and director. Legacy credits
-without a TMDB person ID still fall back to catalog search.
-TMDB's required logo and notice appear in Settings → Credits.
-Reviews open IMDb's critic links or Letterboxd; review text is not downloaded into the app.
+## What it does
 
-Hold a poster to save it to a custom list. The + button uses Watch Later, preserving
-titles saved by older versions. My Lists ends with History: everything played or marked
-watched, by day. Audio defaults to English unless changed in Settings.
-Intro, recap and credits skipping uses named video chapters, with duration-matched
-community timings from [TheIntroDB](https://theintrodb.org/) as a fallback. Community
-timings need sufficient confidence and may be unavailable for a title or release.
-Only direct HTTP(S) sources play; torrent descriptors, magnet links and `.torrent`
-files are rejected. There is no peer-to-peer playback backend.
+- **Home:** popular and Letterboxd lists, genres, festival winners and directors, Continue
+  Watching, Watch Later and your own lists.
+- **Details:** seasons and episodes with Up Next, cast and crew, reviews, and marking
+  things watched. History lists everything you played, by day.
+- **Sources:** every stream from your addons, read into resolution, HDR, codec, audio,
+  size and bitrate. The best one your connection keeps up with is marked as recommended.
+- **Player:** mpv with hardware decoding, HDR, Picture in Picture, AirPlay, subtitles from
+  the file, the stream or subtitle addons (with timing adjustment), skipping of intros,
+  recaps and credits, and the next episode starting by itself.
+- **Accounts, both optional:** [Trakt](https://trakt.tv) syncs progress and history between
+  devices; a [TMDB](https://www.themoviedb.org) token adds portraits, filmographies and
+  member reviews.
 
-## Feature to-do
+Only direct HTTP(S) streams play. Torrents and magnet links are not supported.
 
-- [ ] Continue Watching in the Apple TV's Top Shelf. On hold: sideloaded with a free Apple ID,
-  the extension and its App Group install, but tvOS never launches the extension.
-- [x] Review text in the app, using TMDB member reviews with full-text reading and pagination.
-  IMDb critic and Letterboxd links remain available.
-- [x] Latest festival editions: 278 dated 2026 awards and mentions across all seven festivals,
-  with poster grids, award filters and direct title opening for unique recent catalog matches.
-  The full awards list and historical Wikidata winners remain available.
-- [x] Popular Directors ranked by TMDB popularity, supplementing the popular feed with
-  the existing director identities so an actor-heavy feed does not empty the shelf.
-  Without TMDB, the editorial fallback is labeled Selected Directors.
-- [x] Person pages that separate acting, directing and other crew credits.
+## Installing
 
-Not planned: downloads. The interface stays English-only for now.
+loge isn't in the App Store. You sign it yourself with a free Apple ID; no paid developer
+account is needed.
 
-## Building it
+### iPhone and iPad: SideStore
 
-Needs Xcode and [XcodeGen](https://github.com/yonaskolb/XcodeGen).
+1. Set up [SideStore](https://sidestore.io) once, following its guide.
+2. In SideStore, open **Sources**, tap **+** and add:
+
+   ```
+   https://timhlzwrt.github.io/loge/source.json
+   ```
+
+3. Install loge from the source. New builds appear there as updates. SideStore refreshes
+   the 7-day signature in the background.
+
+The same source works in [AltStore](https://altstore.io) Classic.
+
+### Apple TV
+
+SideStore doesn't run on tvOS. Download `loge-tvOS.ipa` from the
+[latest release](https://github.com/timhlzwrt/loge/releases/latest) and install it with a
+computer-based sideloader such as [Sideloadly](https://sideloadly.io). The free signature
+lasts 7 days, so reinstall or refresh it each week.
+
+### Mac
+
+Build it from source (below); the Mac build runs ad-hoc signed.
+
+### Which build do I have?
+
+Settings → About shows the build's commit and date, with a link that compares it with the
+latest `main` on GitHub. Every push to `main` becomes a
+[release](https://github.com/timhlzwrt/loge/releases) numbered by commit count.
+
+## Building
+
+Needs Xcode 27 and [XcodeGen](https://github.com/yonaskolb/XcodeGen).
 
 ```sh
 xcodegen generate              # after adding or removing files
@@ -62,37 +72,29 @@ xcodebuild -project loge.xcodeproj -scheme loge \
 ```
 
 Swap the destination for `generic/platform=tvOS Simulator` or `platform=macOS`.
-CI runs the Core tests and warning-free builds for all three.
+`Tools/build-ipa.sh` writes unsigned `.ipa` files to `.build/ipa`, and
+`Tools/test-addon.py` serves a local addon with test streams at
+`http://127.0.0.1:8765/manifest.json`.
 
-`Tools/test-addon.py` serves a local addon at
-`http://127.0.0.1:8765/manifest.json` with test streams (MKV, HEVC, multi-track
-HLS, header-protected, broken, torrent).
+| Path             | What's in it                                                        |
+| ---------------- | ------------------------------------------------------------------- |
+| `Core/`          | `LogeCore` package: addon client, routing, addon and library stores |
+| `App/Browse/`    | Home, catalog rows, details, sources, search                        |
+| `App/Player/`    | mpv player, controls, Picture in Picture, next episode              |
+| `App/Settings/`  | Addons, accounts, playback preferences, About                       |
+| `Vendor/MPVKit/` | MPVKit with a patched libmpv that adds an AVFoundation video output |
+| `Tools/`         | Test addon, `.ipa` builder, device install scripts, icon renderer   |
 
-## Getting it onto devices
+[The app overview](docs/APP_OVERVIEW.md) covers data flow and platform behaviour, and
+[playback performance](docs/PLAYBACK_PERFORMANCE.md) the source size limits and diagnostics.
 
-There's no paid developer account. `Tools/nightly-deploy.sh` installs the latest
-`main` every night: on the iPhone over Wi-Fi with Xcode's free Personal Team, and on
-the Apple TV through atvloadly, which re-signs it before the seven days run out. Set
-it up once with `DEVICE=<udid> Tools/nightly-deploy.sh --install`.
-`Tools/build-ipa.sh` writes unsigned `.ipa` files to `.build/ipa` for sideloading by hand.
+## Licence
 
-## What's where
+loge is licensed under the [GNU General Public License v3.0](LICENSE).
 
-| Path            | What's in it                                                        |
-| --------------- | ------------------------------------------------------------------- |
-| `Core/`         | `LogeCore` package: addon client, routing, addon and library stores |
-| `App/Browse/`   | Home, catalog rows, details, sources, search                        |
-| `App/Player/`   | mpv player, controls, next-episode countdown                        |
-| `App/Settings/` | Addons and playback language preferences                            |
-| `Vendor/MPVKit/`| MPVKit with a patched libmpv that follows layer resizes             |
-| `Tools/`        | Test addon, icon renderer, `.ipa` builder                           |
-
-mpv comes through MPVKit's LGPL build.
-
-## Implementation notes
-
-See [the app overview](docs/APP_OVERVIEW.md) for ownership, data flow,
-platform behavior, persistence, review fixes and follow-up work, and
-[review validation](docs/REVIEW_VALIDATION.md) for checks actually performed.
-See [playback performance](docs/PLAYBACK_PERFORMANCE.md) for the automatic source
-size limit, on-screen diagnostics and native frame-presentation correction.
+Playback uses [mpv](https://mpv.io) and [FFmpeg](https://ffmpeg.org) through
+[MPVKit](https://github.com/mpvkit/MPVKit)'s LGPL build (1.1.0-n9.0.2, mpv 0.41.0), under
+the LGPL. The patches applied to libmpv and the script that rebuilds it from MPVKit's
+source are in [`Vendor/MPVKit`](Vendor/MPVKit). Data sources and
+image credits are listed in the app under Settings → About → Data Sources. This product uses
+the TMDB API but is not endorsed or certified by TMDB.

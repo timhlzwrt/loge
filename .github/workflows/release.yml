@@ -1,0 +1,66 @@
+name: Release
+
+# Every push to main becomes a release with unsigned .ipa files, and the SideStore source
+# on GitHub Pages lists it, so SideStore offers it as an update. SideStore signs the app on
+# the phone with the user's own free Apple ID; the tvOS .ipa is for Sideloadly and the like.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# One release at a time, in push order, so build numbers and the source stay consistent.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: xcode-27
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}source.json
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The build number is the commit count, and release notes go back to the last build.
+          fetch-depth: 0
+      - run: brew install xcodegen
+      - uses: actions/cache@v4
+        with:
+          path: .build/xcode/SourcePackages
+          key: spm-release-${{ hashFiles('project.yml', 'Vendor/MPVKit/Package.swift') }}
+      - run: Tools/build-ipa.sh iOS tvOS
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          plist=.build/xcode/Build/Products/Release-iphoneos/loge.app/Info.plist
+          version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$plist")
+          build=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$plist")
+          previous=$(git tag --list 'build-*' --sort=-v:refname | head -1)
+          range=${previous:+$previous..}HEAD
+          git log --no-merges --format='- %s' -n 20 "$range" > notes.md
+          gh release create "build-$build" .build/ipa/loge-iOS.ipa .build/ipa/loge-tvOS.ipa \
+            --target "$GITHUB_SHA" --title "$version ($build)" --notes-file notes.md
+
+      - name: Write the SideStore source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p site
+          cp App/Assets.xcassets/AppIcon.appiconset/icon-1024.png site/icon.png
+          gh api "repos/$GITHUB_REPOSITORY/releases" --paginate --slurp | jq 'add' > releases.json
+          python3 Tools/sidestore-source.py releases.json \
+            "https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}" > site/source.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: pages
+        uses: actions/deploy-pages@v4
