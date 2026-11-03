@@ -96,6 +96,11 @@ and credited-title navigation; Apple TV person-page focus; all three Debug build
 with Swift warnings treated as errors. Xcode emits its known AppIntents extraction
 notice. No new build was installed on the user's physical devices.
 
+3 November (PR #12): renamed to loge (bundle ID and Keychain names keep
+`li.tjh.MediaApp`), Settings split into pages with About, credits and Data Sources
+(all attribution moved there), and a UI pass over details, sources, cast, genres,
+Search and Watch Later. CLAUDE.md's Status has the details.
+
 Remaining: real-device playback regressions, embedded reviews (currently links),
 and fuller festival award coverage (currently recorded Wikidata prizes). Trakt is
 implemented but requires the user's registered app credentials to connect. See the
