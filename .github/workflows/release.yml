@@ -1,8 +1,9 @@
 name: Release
 
-# Every push to main becomes a release with unsigned .ipa files, and the SideStore source
-# on GitHub Pages lists it, so SideStore offers it as an update. SideStore signs the app on
-# the phone with the user's own free Apple ID; the tvOS .ipa is for Sideloadly and the like.
+# Every push to main becomes a release with unsigned .ipa files and an ad-hoc signed Mac .dmg,
+# and the SideStore source on GitHub Pages lists it, so SideStore offers it as an update.
+# SideStore signs the app on the phone with the user's own free Apple ID; the tvOS .ipa is for
+# Sideloadly and the like.
 on:
   push:
     branches: [main]
@@ -35,6 +36,7 @@ jobs:
           path: .build/xcode/SourcePackages
           key: spm-release-${{ hashFiles('project.yml', 'Vendor/MPVKit/Package.swift') }}
       - run: Tools/build-ipa.sh iOS tvOS
+      - run: Tools/build-dmg.sh
 
       - name: Publish the release
         env:
@@ -46,7 +48,7 @@ jobs:
           previous=$(git tag --list 'build-*' --sort=-v:refname | head -1)
           range=${previous:+$previous..}HEAD
           git log --no-merges --format='- %s' -n 20 "$range" > notes.md
-          gh release create "build-$build" .build/ipa/loge-iOS.ipa .build/ipa/loge-tvOS.ipa \
+          gh release create "build-$build" .build/ipa/loge-iOS.ipa .build/ipa/loge-tvOS.ipa .build/dmg/loge-macOS.dmg \
             --target "$GITHUB_SHA" --title "$version ($build)" --notes-file notes.md
 
       - name: Write the SideStore source

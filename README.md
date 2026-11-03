@@ -73,7 +73,17 @@ connected iPhone, iPad or, through [atvloadly](https://github.com/bitxeno/atvloa
 
 ### Mac
 
-Build it from source (below); the Mac build runs ad-hoc signed.
+Needs macOS 27 on Apple silicon.
+
+1. Download `loge-macOS.dmg` from the
+   [latest release](https://github.com/timhlzwrt/loge/releases/latest), open it and drag
+   **loge** to **Applications**.
+2. Open loge. macOS refuses the first time, since the app is ad-hoc signed rather than
+   notarized by Apple; click **Done**.
+3. Open **System Settings → Privacy & Security**, scroll to the message about loge and click
+   **Open Anyway**, then confirm with your password.
+
+That's needed once per download. For updates, download the newest `.dmg` and replace the app.
 
 ### Which build do I have?
 
@@ -93,7 +103,8 @@ xcodebuild -project loge.xcodeproj -scheme loge \
 ```
 
 Swap the destination for `generic/platform=tvOS Simulator` or `platform=macOS`.
-`Tools/build-ipa.sh` writes unsigned `.ipa` files to `.build/ipa`, and
+`Tools/build-ipa.sh` writes unsigned `.ipa` files to `.build/ipa`, `Tools/build-dmg.sh` the
+Mac `.dmg` to `.build/dmg`, and
 `Tools/test-addon.py` serves a local addon with test streams at
 `http://127.0.0.1:8765/manifest.json`.
 

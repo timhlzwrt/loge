@@ -38,8 +38,9 @@ accent, system font, no cards/gradients/badges.
   `vo=avfoundation` (an `AVSampleBufferDisplayLayer`, for Picture in Picture and HDR). Rebuild
   with `rebuild-libmpv.sh`; see its README.
 - `.github/workflows/ci.yml` — Core tests and warning-free builds for iOS, tvOS and macOS.
-- `.github/workflows/release.yml` — every push to main: unsigned iOS and tvOS `.ipa` files as
-  release `build-<commit count>`, and the SideStore source (`Tools/sidestore-source.py`) on
+- `.github/workflows/release.yml` — every push to main: unsigned iOS and tvOS `.ipa` files and an
+  ad-hoc signed Mac `.dmg` (`Tools/build-dmg.sh`; not notarized, so Gatekeeper needs "Open
+  Anyway" once) as release `build-<commit count>`, and the SideStore source (`Tools/sidestore-source.py`) on
   GitHub Pages at `https://tjh.li/loge/source.json` (the account's custom Pages domain).
 
 ## Commands
@@ -89,7 +90,7 @@ after about a second.
   UI changes in the simulators (screenshots), including tvOS focus with the remote driver.
 - Platform differences use `#if os(...)` in place; sizes live in `Metrics`
   (`App/Browse/BrowseComponents.swift`), iPad/landscape via size classes.
-- Commit messages end with a `Co-Authored-By` line; commit only when asked.
+- No co-author or "generated with" lines in commits or PRs; commit only when asked.
 
 ## Privacy
 
