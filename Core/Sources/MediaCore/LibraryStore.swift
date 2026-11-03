@@ -219,6 +219,16 @@ public final class LibraryStore {
             .filter { !$0.isFinished && $0.position >= Self.minimumResumePosition }
     }
 
+    /// Everything played or marked watched, most recent first, every episode on its own.
+    /// Episodes marked watched together share a time, so they list last episode first.
+    public var history: [WatchProgress] {
+        progress.values.sorted {
+            if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
+            return ($0.item.season ?? 0, $0.item.episode ?? 0, $0.item.id)
+                > ($1.item.season ?? 0, $1.item.episode ?? 0, $1.item.id)
+        }
+    }
+
     /// Checks one title's resume state without building and sorting Continue Watching.
     public func isInProgress(metaID: String) -> Bool {
         guard let latest = progress.values.lazy.filter({ $0.item.metaID == metaID })
