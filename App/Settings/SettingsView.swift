@@ -85,7 +85,7 @@ struct SettingsPage<Content: View>: View {
     }
 }
 
-private struct AddonsSettingsView: View {
+struct AddonsSettingsView: View {
     @Environment(AddonStore.self) private var store
     @State private var manifestURL = ""
     @State private var isInstalling = false
@@ -154,7 +154,9 @@ private struct AddonsSettingsView: View {
         .background(Color.canvas)
         .navigationTitle("Addons")
         #if os(iOS)
-        .toolbar { EditButton() }
+        .toolbar {
+            if !store.addons.isEmpty { EditButton() }
+        }
         #endif
     }
 

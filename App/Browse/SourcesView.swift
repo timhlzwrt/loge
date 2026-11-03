@@ -39,17 +39,47 @@ struct SourcesView: View {
     #endif
     /// Chosen in the sheet, to play once it has closed.
     @State private var pendingPlay: Entry?
+    @State private var isAddingAddon = false
     @Environment(PlaybackSession.self) private var playback
 
     var body: some View {
         let providers = store.addons.streamProviders(type: route.type, id: route.id)
         Group {
             if providers.isEmpty {
-                ContentUnavailableView(
-                    "No stream addons",
-                    systemImage: "play.slash",
-                    description: Text("Install an addon that provides streams in Settings.")
-                )
+                // Installing one here, rather than a pointer to Settings, so the title is still
+                // open once there's something to play it with.
+                ContentUnavailableView {
+                    Label("No playback addons", systemImage: "play.slash")
+                } description: {
+                    Text("Add a Stremio addon that provides streams to watch \(route.title).")
+                } actions: {
+                    Button("Add Addon") { isAddingAddon = true }
+                        .buttonStyle(.glassProminent)
+                        .foregroundStyle(.black)
+                }
+                #if os(iOS)
+                .overlay(alignment: .topTrailing) {
+                    if isChoosing {
+                        Button("Close", systemImage: "xmark") { dismiss() }
+                            .labelStyle(.iconOnly)
+                            .font(.body.weight(.semibold))
+                            .frame(width: 44, height: 44)
+                            .buttonStyle(.glass)
+                            .buttonBorderShape(.circle)
+                            .padding([.top, .trailing], 16)
+                    }
+                }
+                #endif
+                .sheet(isPresented: $isAddingAddon) {
+                    NavigationStack {
+                        AddonsSettingsView()
+                            .toolbar {
+                                ToolbarItem(placement: .confirmationAction) {
+                                    Button("Done") { isAddingAddon = false }
+                                }
+                            }
+                    }
+                }
             } else {
                 content(providers)
             }

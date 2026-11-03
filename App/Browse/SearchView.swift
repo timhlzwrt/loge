@@ -44,6 +44,7 @@ struct SearchView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.canvas)
+        .navigationTitle("Search")
         #if os(iOS)
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Movies and series")
         #else
@@ -101,14 +102,29 @@ struct SearchView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Genres")
                 .font(.headline)
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: Metrics.posterWidth * 1.4), alignment: .leading)],
-                      alignment: .leading, spacing: 12) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: Metrics.posterWidth * 1.4), spacing: 24, alignment: .leading)],
+                      alignment: .leading, spacing: 0) {
                 ForEach(genres, id: \.self) { genre in
-                    Button(genre) { self.genre = genre }
+                    Button { self.genre = genre } label: {
+                        HStack {
+                            Text(genre)
+                            Spacer(minLength: 8)
+                            #if !os(tvOS)
+                            Image(systemName: "chevron.right")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                            #endif
+                        }
                         #if !os(tvOS)
-                        .buttonStyle(.plain)
+                        .padding(.vertical, 12)
+                        .overlay(alignment: .bottom) { Rectangle().fill(.quaternary).frame(height: 0.5) }
+                        .contentShape(.rect)
                         #endif
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    #if !os(tvOS)
+                    .buttonStyle(.plain)
+                    #endif
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         }

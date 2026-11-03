@@ -286,34 +286,55 @@ struct MetaDetailView: View {
         .padding(.horizontal, Metrics.gutter)
     }
 
+    /// On a phone Play takes the full width and the other actions sit in a row beneath it,
+    /// each named under its icon; wider screens keep them on one line.
+    @ViewBuilder
     private var buttons: some View {
-        HStack(spacing: 12) {
-            if let play = playAction {
-                NavigationLink(value: play.route) {
-                    Label(play.label, systemImage: "play.fill")
-                        .frame(maxWidth: synopsisUnderButtons ? .infinity : nil)
-                }
-                .buttonStyle(PrimaryButtonStyle())
-                .contextMenu { watchedActions(play.route.item) }
-            }
-            // No merging distance: the circles stay apart, as separate buttons.
-            GlassEffectContainer(spacing: 0) {
-                HStack(spacing: 12) {
-                    MyListButton(isSaved: library.isSaved(preview.id)) {
-                        library.toggleSaved(savedPreview)
-                    }
-                    .contextMenu { SaveToMenu(title: savedPreview) }
-                    ListsMenu(title: savedPreview)
-                    if let play = playAction {
-                        Button("Choose a Source", systemImage: "list.bullet") {
-                            var route = play.route
-                            route.autoplay = false
-                            choosingSource = route
-                        }
-                        .buttonStyle(GlassIconButtonStyle())
-                    }
+        if synopsisUnderButtons {
+            VStack(spacing: 16) {
+                playButton
+                HStack(spacing: 0) {
+                    secondaryButtons
+                        .frame(maxWidth: .infinity)
                 }
             }
+        } else {
+            HStack(alignment: .top, spacing: 16) {
+                playButton
+                // No merging distance: the circles stay apart, as separate buttons.
+                GlassEffectContainer(spacing: 0) {
+                    HStack(alignment: .top, spacing: 16) { secondaryButtons }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var playButton: some View {
+        if let play = playAction {
+            NavigationLink(value: play.route) {
+                Label(play.label, systemImage: "play.fill")
+                    .frame(maxWidth: synopsisUnderButtons ? .infinity : nil)
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .contextMenu { watchedActions(play.route.item) }
+        }
+    }
+
+    @ViewBuilder
+    private var secondaryButtons: some View {
+        MyListButton(isSaved: library.isSaved(preview.id)) {
+            library.toggleSaved(savedPreview)
+        }
+        .contextMenu { SaveToMenu(title: savedPreview) }
+        ListsMenu(title: savedPreview)
+        if let play = playAction {
+            Button("Choose a Source", systemImage: "list.bullet") {
+                var route = play.route
+                route.autoplay = false
+                choosingSource = route
+            }
+            .buttonStyle(GlassIconButtonStyle(caption: "Sources"))
         }
     }
 
@@ -448,7 +469,7 @@ private struct InformationSection: View {
     }
 }
 
-/// A description clamped to two lines, with "more" at the end when it overflows.
+/// A description clamped to two lines, with "More" under it when it overflows.
 private struct ExpandableText: View {
     let text: String
     @State private var isExpanded = false
@@ -460,33 +481,32 @@ private struct ExpandableText: View {
         Button {
             if isTruncated || isExpanded { isExpanded.toggle() }
         } label: {
-            Text(text)
-                .font(.synopsis)
-                .foregroundStyle(.white.opacity(0.88))
-                .lineLimit(isExpanded ? nil : 2)
-                // Otherwise the hero's stack squeezes the expanded text back to a few lines.
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { shownHeight = $0 }
-                .background(alignment: .top) {
-                    // The unclamped text, measured to tell whether two lines cut it short.
-                    Text(text)
-                        .font(.synopsis)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .hidden()
-                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { fullHeight = $0 }
-                }
-                .overlay(alignment: .bottomTrailing) {
-                    if isTruncated {
-                        Text("more")
-                            .font(.synopsis.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .padding(.leading, 24)
-                            .background(alignment: .trailing) {
-                                LinearGradient(colors: [.canvas.opacity(0), .canvas], startPoint: .leading, endPoint: .init(x: 0.4, y: 0.5))
-                            }
+            VStack(alignment: .leading, spacing: 0) {
+                Text(text)
+                    .font(.synopsis)
+                    .foregroundStyle(.white.opacity(0.88))
+                    .lineLimit(isExpanded ? nil : 2)
+                    // Otherwise the hero's stack squeezes the expanded text back to a few lines.
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { shownHeight = $0 }
+                    .background(alignment: .top) {
+                        // The unclamped text, measured to tell whether two lines cut it short.
+                        Text(text)
+                            .font(.synopsis)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .hidden()
+                            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { fullHeight = $0 }
                     }
+                // Under the text rather than over its end: a fade to the canvas showed as a
+                // dark patch where the hero's backdrop is still behind the synopsis.
+                if isTruncated {
+                    Text("More")
+                        .font(.synopsis.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 2)
                 }
+            }
         }
         .buttonStyle(.plain)
         .accessibilityHint(isTruncated ? "Shows the whole description" : "")
@@ -502,7 +522,7 @@ private struct MyListButton: View {
             Label(isSaved ? "Remove from Watch Later" : "Add to Watch Later", systemImage: isSaved ? "checkmark" : "plus")
                 .contentTransition(.symbolEffect(.replace))
         }
-        .buttonStyle(GlassIconButtonStyle())
+        .buttonStyle(GlassIconButtonStyle(caption: isSaved ? "Saved" : "Watch Later"))
     }
 }
 
