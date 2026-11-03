@@ -39,7 +39,7 @@ extension Meta {
         var people: [Person] = []
         func add(_ names: [String]?, as role: Person.Role) {
             for name in names ?? [] {
-                let name = name.trimmingCharacters(in: .whitespaces)
+                let name = name.decodingHTMLEntities.trimmingCharacters(in: .whitespaces)
                 guard !name.isEmpty else { continue }
                 if let index = people.firstIndex(where: { $0.name == name }) {
                     if !people[index].roles.contains(role) { people[index].roles.append(role) }
@@ -61,14 +61,29 @@ extension Meta {
 }
 
 extension MetaPreview {
-    func credits(_ name: String) -> Bool {
+    /// Whether `name` is in the cast or crew, ignoring case and accents.
+    public func credits(_ name: String) -> Bool {
         [cast, director, writer].contains { names in
-            names?.contains { $0.compare(name, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame } == true
+            names?.contains {
+                $0.decodingHTMLEntities.compare(name, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+            } == true
         }
     }
 
     /// 2008 for "2008–2013".
     var startYear: Int? {
         releaseInfo.flatMap { Int($0.prefix(4)) }
+    }
+}
+
+extension String {
+    /// Cinemeta escapes some names as HTML: "Catherine O&apos;Hara".
+    var decodingHTMLEntities: String {
+        guard contains("&") else { return self }
+        var result = self
+        for (entity, character) in [("&apos;", "'"), ("&#39;", "'"), ("&quot;", "\""), ("&lt;", "<"), ("&gt;", ">"), ("&amp;", "&")] {
+            result = result.replacingOccurrences(of: entity, with: character)
+        }
+        return result
     }
 }

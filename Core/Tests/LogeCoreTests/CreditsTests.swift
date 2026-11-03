@@ -21,6 +21,12 @@ struct CreditsTests {
         #expect(meta.people.map(\.roles) == [[.actor], [.actor], [.actor], [.writer]])
     }
 
+    @Test func escapedNamesAreDecoded() throws {
+        let json = #"{"id": "x", "type": "movie", "name": "X", "cast": ["Catherine O&apos;Hara", "Tom &amp; Jerry"]}"#
+        let meta = try JSONDecoder().decode(Meta.self, from: Data(json.utf8))
+        #expect(meta.people.map(\.name) == ["Catherine O'Hara", "Tom & Jerry"])
+    }
+
     @Test func linksStandInForMissingCreditFields() throws {
         let json = #"""
         {"id": "x", "type": "movie", "name": "X", "cast": [], "links": [

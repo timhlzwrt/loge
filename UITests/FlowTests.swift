@@ -279,21 +279,29 @@ final class FlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["Season"].waitForExistence(timeout: 5))
     }
 
+    /// iPhone browsing stays upright when the phone turns; iPad turns with it.
     @MainActor
-    func testLandscapeAndPullToRefresh() {
+    func testRotationAndPullToRefresh() {
         XCTAssertTrue(app.staticTexts["Popular Movies"].waitForExistence(timeout: 15))
         app.swipeDown()
         XCTAssertTrue(app.staticTexts["Popular Movies"].waitForExistence(timeout: 15), "Rows gone after refresh")
 
+        let isPhone = UIDevice.current.userInterfaceIdiom == .phone
+        func isUpright() -> Bool {
+            let frame = app.windows.firstMatch.frame
+            return frame.height > frame.width
+        }
         XCUIDevice.shared.orientation = .landscapeLeft
         sleep(2)
-        screenshot("landscape-home")
+        screenshot("rotated-home")
+        XCTAssertEqual(isUpright(), isPhone)
         XCUIDevice.shared.orientation = .portrait
         openSeries("Lanterns")
         XCTAssertTrue(app.buttons["Season"].waitForExistence(timeout: 15))
         XCUIDevice.shared.orientation = .landscapeLeft
         sleep(3)
-        screenshot("landscape-details")
+        screenshot("rotated-details")
+        XCTAssertEqual(isUpright(), isPhone)
         XCUIDevice.shared.orientation = .portrait
     }
 
@@ -307,6 +315,8 @@ final class FlowTests: XCTestCase {
         XCUIDevice.shared.orientation = .landscapeLeft
         sleep(1)
         screenshot("rotated-while-playing")
+        let frame = app.windows.firstMatch.frame
+        XCTAssertGreaterThan(frame.width, frame.height, "The player didn't turn")
 
         // A tap toggles the controls; aim above the middle, where the play button sits.
         if !app.buttons["Close"].exists { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap() }
@@ -315,7 +325,10 @@ final class FlowTests: XCTestCase {
         XCUIDevice.shared.orientation = .portrait
         sleep(2)
         screenshot("rotated-while-paused")
+        if !app.buttons["Close"].exists { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap() }
         app.buttons["Close"].tap()
+        let browsing = app.windows.firstMatch.frame
+        XCTAssertGreaterThan(browsing.height, browsing.width, "Browsing didn't turn back upright")
     }
 
     /// The player's button hands the video to the floating window and closes the player
@@ -613,7 +626,12 @@ final class FlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["Season"].waitForExistence(timeout: 15))
         sleep(2)
         screenshot("tour-details")
-        app.buttons["Choose a Source"].tap()
+        // The backdrop fades as the page scrolls past it.
+        app.swipeUp()
+        sleep(1)
+        screenshot("tour-details-scrolled")
+        app.swipeDown()
+        app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Choose a Source'")).firstMatch.tap()
         let source = app.buttons.matching(NSPredicate(format: "label CONTAINS 'DTS 5.1'")).firstMatch
         XCTAssertTrue(source.waitForExistence(timeout: 15), "No test sources")
         screenshot("tour-sources")
@@ -692,6 +710,8 @@ final class FlowTests: XCTestCase {
     @MainActor
     private func installTestAddonIfNeeded(name: String = "Test Streams", manifestURL: String = "http://127.0.0.1:8765/manifest.json") {
         openTab("Settings")
+        let addons = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Addons'")).firstMatch
+        if addons.waitForExistence(timeout: 5) { addons.tap() }
         let installedName = name == "Test Streams" ? ProcessInfo.processInfo.environment["PLAYBACK_TEST_ADDON_NAME"] ?? name : name
         guard !app.staticTexts[installedName].waitForExistence(timeout: 5) else { return }
         let field = app.textFields["Manifest URL"]

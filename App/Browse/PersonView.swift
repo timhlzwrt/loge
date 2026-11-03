@@ -264,11 +264,7 @@ struct PersonView: View {
             return results
         }
         if let title = route.title { return route.person.titles(in: results, foundOn: title) }
-        return results.filter { title in
-            [title.cast, title.director, title.writer].contains { names in
-                names?.contains { $0.compare(name, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame } == true
-            }
-        }.sorted { ($0.releaseInfo ?? "") > ($1.releaseInfo ?? "") }
+        return results.filter { $0.credits(name) }.sorted { ($0.releaseInfo ?? "") > ($1.releaseInfo ?? "") }
     }
 
     @ViewBuilder

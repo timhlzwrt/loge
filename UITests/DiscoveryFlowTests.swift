@@ -31,6 +31,15 @@ final class DiscoveryFlowTests: XCTestCase {
         expectation(for: loaded, evaluatedWith: app)
         waitForExpectations(timeout: 40)
         screenshot("discovery-cannes")
+        let winner = app.otherElements["collection-films"].buttons.firstMatch
+        if winner.exists {
+            // These links were dead when the festival page was pushed as a view.
+            winner.tap()
+            let watchLater = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Watch Later'")).firstMatch
+            XCTAssertTrue(watchLater.waitForExistence(timeout: 15), "A winner didn't open its details")
+            screenshot("discovery-cannes-winner")
+            app.navigationBars.buttons.firstMatch.tap()
+        }
 
         app.navigationBars.buttons.firstMatch.tap()
         let director = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Christopher Nolan'")).firstMatch
