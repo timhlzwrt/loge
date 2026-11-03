@@ -1,4 +1,4 @@
-import MediaCore
+import LogeCore
 import SwiftUI
 
 struct TMDBSection: View {
@@ -25,8 +25,6 @@ struct TMDBSection: View {
                     tmdb.retryStorageRead()
                 }
             }
-        } header: {
-            Text("TMDB")
         } footer: {
             Text("Adds movie and series details, cast portraits and crew credits. The API token is stored in this device's Keychain.")
         }
@@ -123,31 +121,6 @@ private struct TMDBSetupView: View {
             } catch {
                 errorMessage = "Couldn't verify the token with TMDB. Check your connection and try again."
             }
-        }
-    }
-}
-
-struct TMDBCreditsSection: View {
-    var body: some View {
-        Section("Credits") {
-            VStack(alignment: .leading, spacing: 12) {
-                Image("TMDBLogo")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 120, height: 16)
-                    .foregroundStyle(.white)
-                    .accessibilityLabel("TMDB")
-                Text("This product uses the TMDB API but is not endorsed or certified by TMDB.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                #if os(tvOS)
-                Text("themoviedb.org").font(.footnote).foregroundStyle(.secondary)
-                #else
-                Link("The Movie Database", destination: URL(string: "https://www.themoviedb.org")!)
-                    .font(.footnote)
-                #endif
-            }
-            .padding(.vertical, 8)
         }
     }
 }

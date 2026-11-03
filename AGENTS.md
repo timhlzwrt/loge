@@ -1,4 +1,4 @@
-# MediaApp
+# loge
 
 ## Active checkout and preflight
 
@@ -16,17 +16,18 @@ version is current. Preserve dirty work and resolve version mismatches before ed
 Never replace a newer feature or persistence format with an older implementation.
 See `.cursor/rules/checkout-preflight.mdc`.
 
-Loge: a private, never-published Stremio-addon client for iPhone/iPad, Apple TV and Mac,
-in native SwiftUI. The project, scheme and bundle ID keep the working name `MediaApp`; only
-the product name is Loge, so saved data carries over. It browses catalogs from Stremio addons, shows details, lists streams and
+loge: a private, never-published Stremio-addon client for iPhone/iPad, Apple TV and Mac,
+in native SwiftUI. The project, scheme, product and `LogeCore` package are all named loge; only the bundle ID
+(`li.tjh.MediaApp`), Keychain service names and log subsystem keep the old working name, so
+saved data and sign-ins carry over. It browses catalogs from Stremio addons, shows details, lists streams and
 plays them with mpv. The look follows the Strand app: charcoal canvas, artwork-led, white
 accent, system font, no cards/gradients/badges.
 
 ## Layout
 
 - `project.yml` — XcodeGen spec; the `.xcodeproj` is generated and gitignored. One app target
-  (`MediaApp`) builds for iOS, tvOS and macOS; `MediaAppUITests` holds on-demand UI tests.
-- `Core/` — `MediaCore` Swift package, no UI: addon protocol client and models, routing
+  (`loge`) builds for iOS, tvOS and macOS; `logeUITests` holds on-demand UI tests.
+- `Core/` — `LogeCore` Swift package, no UI: addon protocol client and models, routing
   (which addon serves catalogs/meta/streams, in user order), `AddonStore` (installed
   addons), `LibraryStore` (watch progress, My List, remembered sources), language codes.
   All persistence is `UserDefaults` because tvOS can purge app files.
@@ -35,7 +36,9 @@ accent, system font, no cards/gradients/badges.
   sources list (autoplays the remembered or same-binge-group stream), search.
 - `App/Player/` — `MPVPlayer` (libmpv via MPVKit, Metal layer), `PlayerView`, controls and
   menus, next-episode countdown, tvOS remote swipe reader.
-- `App/Settings/` — addons (install/reorder/remove) and playback language preferences.
+- `App/Settings/` — an index of pages: addons (install/reorder/remove), Trakt, TMDB, accent;
+  playback preferences inline; About with version, credits and the Data Sources page
+  (all attribution lives there rather than under artwork).
 - `Tools/test-addon.py` — local stream addon at `http://127.0.0.1:8765/manifest.json` with
   test streams (MKV, HEVC, multi-track HLS, header-protected, broken, torrent).
 - `Tools/render-icons.swift` — regenerates `App/Assets.xcassets` (icons, top shelf, accent);
@@ -50,14 +53,14 @@ accent, system font, no cards/gradients/badges.
 ```bash
 xcodegen generate                                   # after adding/removing files
 (cd Core && swift test)                             # Core unit tests
-xcodebuild -project MediaApp.xcodeproj -scheme MediaApp -destination 'generic/platform=iOS Simulator' -derivedDataPath .build/xcode build
+xcodebuild -project loge.xcodeproj -scheme loge -destination 'generic/platform=iOS Simulator' -derivedDataPath .build/xcode build
 # also: 'generic/platform=tvOS Simulator' and 'platform=macOS'
 ```
 
 On-demand UI tests (need network and installed addons; skipped otherwise):
 
 ```bash
-TEST_RUNNER_UI_FLOWS=1 TEST_RUNNER_SCREENSHOT_DIR=/tmp/shots xcodebuild test -project MediaApp.xcodeproj -scheme MediaApp -destination 'platform=iOS Simulator,name=iPhone 18 Pro' -derivedDataPath .build/xcode -only-testing:MediaAppUITests/FlowTests
+TEST_RUNNER_UI_FLOWS=1 TEST_RUNNER_SCREENSHOT_DIR=/tmp/shots xcodebuild test -project loge.xcodeproj -scheme loge -destination 'platform=iOS Simulator,name=iPhone 18 Pro' -derivedDataPath .build/xcode -only-testing:logeUITests/FlowTests
 ```
 
 `UITests/RemoteDriverTests.swift` drives the Apple TV simulator's remote from a command file
@@ -92,6 +95,11 @@ Verified: 170 Core tests including an opt-in live TMDB check; iPhone/iPad UI flo
 and credited-title navigation; Apple TV person-page focus; all three Debug builds
 with Swift warnings treated as errors. Xcode emits its known AppIntents extraction
 notice. No new build was installed on the user's physical devices.
+
+3 November (PR #12): renamed to loge (bundle ID and Keychain names keep
+`li.tjh.MediaApp`), Settings split into pages with About, credits and Data Sources
+(all attribution moved there), and a UI pass over details, sources, cast, genres,
+Search and Watch Later. CLAUDE.md's Status has the details.
 
 Remaining: real-device playback regressions, embedded reviews (currently links),
 and fuller festival award coverage (currently recorded Wikidata prizes). Trakt is

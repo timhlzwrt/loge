@@ -1,4 +1,4 @@
-import MediaCore
+import LogeCore
 import SwiftUI
 
 struct HomeView: View {
@@ -14,8 +14,7 @@ struct HomeView: View {
             LazyVStack(alignment: .leading, spacing: 28) {
                 FeaturedCarousel(movies: sources[0], series: sources[1])
                 ContinueWatchingRow()
-                MyListRow(shelf: .series)
-                MyListRow(shelf: .movies)
+                MyListRow()
                 // Genres follow the popular shelves, ahead of the narrower ones.
                 ForEach(sources.prefix(3)) { CatalogRow(source: $0) }
                 GenreRow()
@@ -111,8 +110,7 @@ private struct TVHome: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 24) {
                             ContinueWatchingRow(onFocus: focus.show)
-                            MyListRow(shelf: .series, onFocus: focus.show)
-                            MyListRow(shelf: .movies, onFocus: focus.show)
+                            MyListRow(onFocus: focus.show)
                             ForEach(sources.prefix(3)) { source in
                                 CatalogRow(source: source, isPrimary: source == sources.first, onFocus: focus.show)
                             }

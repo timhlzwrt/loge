@@ -1,4 +1,4 @@
-import MediaCore
+import LogeCore
 import SwiftUI
 
 /// Opens History. Pushed as a value like the other routes: a title link inside a screen

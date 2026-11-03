@@ -1,7 +1,7 @@
 import Foundation
 import Synchronization
 import Testing
-@testable import MediaCore
+@testable import LogeCore
 
 @MainActor
 struct TMDBAccountTests {

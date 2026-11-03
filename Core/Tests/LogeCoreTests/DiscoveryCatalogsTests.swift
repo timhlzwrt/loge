@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import MediaCore
+@testable import LogeCore
 
 struct DiscoveryCatalogsTests {
     @Test func homeProvidesDistinctBrowsableShelves() {

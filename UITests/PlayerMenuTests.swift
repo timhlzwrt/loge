@@ -4,9 +4,9 @@ import XCTest
 /// Checks that player menus survive the controls' auto-hide. Needs the network and a
 /// title in Continue Watching with a remembered source, so it only runs on request:
 ///
-///     TEST_RUNNER_PLAYER_TESTS=1 xcodebuild test -scheme MediaApp \
+///     TEST_RUNNER_PLAYER_TESTS=1 xcodebuild test -scheme loge \
 ///       -destination 'platform=iOS Simulator,name=iPhone 18 Pro' \
-///       -only-testing:MediaAppUITests/PlayerMenuTests
+///       -only-testing:logeUITests/PlayerMenuTests
 final class PlayerMenuTests: XCTestCase {
     @MainActor
     func testMenuStaysOpenWhilePlaying() throws {

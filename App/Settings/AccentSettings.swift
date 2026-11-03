@@ -26,7 +26,7 @@ struct AccentSettingsSection: View {
     @AppStorage(Accent.storageKey) private var accent = Accent.white
 
     var body: some View {
-        Section("Accent color") {
+        Section {
             #if os(tvOS)
             // tvOS draws an inline picker's rows without marking the chosen one.
             ForEach(Accent.allCases) { option in

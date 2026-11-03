@@ -1,4 +1,4 @@
-"""Local Stremio stream addon for testing MediaApp's sources list and player.
+"""Local Stremio stream addon for testing loge's sources list and player.
 
 Run with `python3 Tools/test-addon.py`, then install http://127.0.0.1:8765/manifest.json
 in the app (the simulators share the Mac's network).
@@ -32,7 +32,7 @@ MANIFEST = {
     "id": "local.mediaapp.test",
     "version": "1.0.0",
     "name": "Test Streams",
-    "description": "Local test sources for MediaApp",
+    "description": "Local test sources for loge",
     "resources": ["stream", "subtitles"],
     "types": ["movie", "series"],
     "idPrefixes": ["tt"],

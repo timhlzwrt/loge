@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import MediaCore
+@testable import LogeCore
 
 struct SkipTimingClientTests {
     private let movie = WatchItem(id: "tt0000001", type: "movie", metaID: "tt0000001", title: "Fixture")

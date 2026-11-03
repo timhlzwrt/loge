@@ -1,5 +1,5 @@
 import Testing
-@testable import MediaCore
+@testable import LogeCore
 
 struct PlaybackChapterTests {
     @Test func skipsOnlyTheCurrentNamedSegment() {

@@ -1,8 +1,8 @@
-import MediaCore
+import LogeCore
 import SwiftUI
 
 @main
-struct MediaApp: App {
+struct LogeApp: App {
     @State private var addonStore: AddonStore
     @State private var library: LibraryStore
     @State private var trakt: TraktAccount
@@ -134,7 +134,7 @@ struct RootView: View {
                 BrowseStack { SearchView() }
             }
             #endif
-            tab("My Lists", systemImage: "plus") {
+            tab("My Lists", systemImage: "bookmark") {
                 BrowseStack { MyListView() }
             }
             #if os(macOS)

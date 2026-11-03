@@ -1,6 +1,6 @@
 import AVFoundation
 import Libmpv
-import MediaCore
+import LogeCore
 import Observation
 import os
 

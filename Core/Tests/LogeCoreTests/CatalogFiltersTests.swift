@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import MediaCore
+@testable import LogeCore
 
 struct CatalogFiltersTests {
     let cinemeta = try! decodeFixture("cinemeta-manifest", as: AddonManifest.self)

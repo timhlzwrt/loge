@@ -1,4 +1,4 @@
-import MediaCore
+import LogeCore
 import SwiftUI
 
 /// Movie genres on Home, each a still from a defining film with the genre's name over it.
@@ -40,6 +40,8 @@ private struct GenreTile: View {
 
     var body: some View {
         Artwork(url: genre.still)
+            // The small still arrives almost at once; the sharp one covers it when it lands.
+            .background { Artwork(url: genre.stillPreview) }
             .overlay {
                 // Keeps the name legible over bright stills.
                 LinearGradient(colors: [.clear, .black.opacity(0.55)], startPoint: .center, endPoint: .bottom)

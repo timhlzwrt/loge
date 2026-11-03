@@ -2,16 +2,16 @@
 import PackageDescription
 
 let package = Package(
-    name: "MediaCore",
+    name: "LogeCore",
     platforms: [.iOS("26.0"), .tvOS("27.0"), .macOS("27.0")],
     products: [
-        .library(name: "MediaCore", targets: ["MediaCore"]),
+        .library(name: "LogeCore", targets: ["LogeCore"]),
     ],
     targets: [
-        .target(name: "MediaCore"),
+        .target(name: "LogeCore"),
         .testTarget(
-            name: "MediaCoreTests",
-            dependencies: ["MediaCore"],
+            name: "LogeCoreTests",
+            dependencies: ["LogeCore"],
             resources: [.copy("Fixtures")]
         ),
     ]
