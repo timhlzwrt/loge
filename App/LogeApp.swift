@@ -134,7 +134,7 @@ struct RootView: View {
                 BrowseStack { SearchView() }
             }
             #endif
-            tab("My Lists", systemImage: "plus") {
+            tab("My Lists", systemImage: "bookmark") {
                 BrowseStack { MyListView() }
             }
             #if os(macOS)

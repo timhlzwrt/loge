@@ -127,17 +127,33 @@ struct PrimaryButtonStyle: ButtonStyle {
 /// Drawn rather than using the `.glass` button style, which pads the circle beyond the
 /// primary button's height.
 struct GlassIconButtonStyle: ButtonStyle {
+    /// A short name under the circle, so a row of these says what each one does.
+    var caption: String?
+
     func makeBody(configuration: Configuration) -> some View {
-        StyledLabel(configuration: configuration)
+        StyledLabel(configuration: configuration, caption: caption)
     }
 
     private struct StyledLabel: View {
         let configuration: Configuration
+        let caption: String?
         #if os(tvOS)
         @Environment(\.isFocused) private var isFocused
         #endif
 
         var body: some View {
+            if let caption {
+                VStack(spacing: 6) {
+                    circle
+                    IconCaption(caption)
+                }
+                .contentShape(.rect)
+            } else {
+                circle
+            }
+        }
+
+        private var circle: some View {
             configuration.label
                 .labelStyle(.iconOnly)
                 .font(font)
@@ -168,6 +184,32 @@ struct GlassIconButtonStyle: ButtonStyle {
         private let font = Font.title3.weight(.semibold)
         #endif
     }
+}
+
+/// The name under a `GlassIconButtonStyle` circle. A menu draws its label on its own
+/// terms, so a menu button sets this under itself instead of through the style.
+struct IconCaption: View {
+    let text: String
+
+    init(_ text: String) {
+        self.text = text
+    }
+
+    var body: some View {
+        Text(text)
+            .font(font)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .fixedSize()
+    }
+
+    #if os(tvOS)
+    private let font = Font.system(size: 21, weight: .medium)
+    #elseif os(macOS)
+    private let font = Font.system(size: 11, weight: .medium)
+    #else
+    private let font = Font.caption.weight(.medium)
+    #endif
 }
 
 /// Remote artwork that fills whatever frame it's given, cropping rather than
