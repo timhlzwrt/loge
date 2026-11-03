@@ -115,21 +115,18 @@ private struct ContinueWatchingCard: View {
     }
 }
 
-/// One half of Watch Later, newest first: series, or everything else.
+/// Watch Later, newest first, series and movies together as they were saved.
 struct MyListRow: View {
-    enum Shelf { case series, movies }
-
-    let shelf: Shelf
     var onFocus: (MetaPreview) -> Void = { _ in }
 
     @Environment(LibraryStore.self) private var library
     @FocusState private var focusedID: MetaPreview.ID?
 
     var body: some View {
-        let titles = shelf == .series ? library.savedSeries : library.savedMovies
+        let titles = library.saved
         if !titles.isEmpty {
             VStack(alignment: .leading, spacing: Metrics.headerSpacing) {
-                Text(shelf == .series ? "Watch Later · Series" : "Watch Later · Movies")
+                Text("Watch Later")
                     .font(.sectionTitle)
                     .padding(.horizontal, Metrics.gutter)
                 ScrollView(.horizontal) {
@@ -163,7 +160,7 @@ struct MyListRow: View {
     }
 }
 
-/// Watch Later as grids, series first, then the user's own lists in the order they were made.
+/// Watch Later as a grid, then the user's own lists in the order they were made.
 struct MyListView: View {
     @Environment(LibraryStore.self) private var library
     @State private var renaming: TitleList?
@@ -180,11 +177,8 @@ struct MyListView: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 36) {
-                        if !library.savedSeries.isEmpty {
-                            section(library.savedSeries) { Text("Watch Later · Series") }
-                        }
-                        if !library.savedMovies.isEmpty {
-                            section(library.savedMovies) { Text("Watch Later · Movies") }
+                        if !library.saved.isEmpty {
+                            section(library.saved) { Text("Watch Later") }
                         }
                         ForEach(library.lists) { list in
                             section(list.titles) { listMenu(list) }

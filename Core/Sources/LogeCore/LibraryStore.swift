@@ -153,8 +153,7 @@ public final class LibraryStore {
     private static let listsKey = "titleLists"
 
     public private(set) var progress: [String: WatchProgress]
-    /// My List. It's split into shows and movies by type when shown, so it stays the
-    /// one list older builds saved and needs no migration.
+    /// Watch Later, newest first: the one list older builds saved, so it needs no migration.
     public private(set) var saved: [MetaPreview]
     /// The user's own lists, oldest first.
     public private(set) var lists: [TitleList]
@@ -322,15 +321,6 @@ public final class LibraryStore {
             saved.insert(meta, at: 0)
         }
         save(saved, forKey: Self.savedKey)
-    }
-
-    public var savedSeries: [MetaPreview] {
-        saved.filter { $0.type == "series" }
-    }
-
-    /// Everything that isn't a series, so a title of an unusual type still shows somewhere.
-    public var savedMovies: [MetaPreview] {
-        saved.filter { $0.type != "series" }
     }
 
     // MARK: Lists
