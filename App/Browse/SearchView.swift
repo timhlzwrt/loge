@@ -12,6 +12,10 @@ struct SearchView: View {
     /// Newest first, one per line.
     @AppStorage("recentSearches") private var recentSearches = ""
 
+    init(query: String = "") {
+        _query = State(initialValue: query)
+    }
+
     var body: some View {
         let sources = DiscoveryCatalogs.search.filtered(type: type, genre: genre)
         ScrollView {

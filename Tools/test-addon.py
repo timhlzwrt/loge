@@ -19,11 +19,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--port", type=int, default=8765)
+parser.add_argument("--bind", default="127.0.0.1", help="Interface for local or physical-device tests")
+parser.add_argument("--host", default="127.0.0.1", help="Host advertised to a physical device on the LAN")
 parser.add_argument("--tracks-file", type=Path, help="Local multi-audio MOV for track-switch tests")
 parser.add_argument("--name", help="Name for a separate playback fixture addon and its source")
 args = parser.parse_args() if __name__ == "__main__" else parser.parse_args([])
 PORT = args.port
-BASE = f"http://127.0.0.1:{PORT}"
+BASE = f"http://{args.host}:{PORT}"
 TRACKS_FILE = args.tracks_file.resolve(strict=True) if args.tracks_file else None
 TOKEN = "secret-value, with comma"
 MKV = "https://test-videos.co.uk/vids/bigbuckbunny/mkv/1080/Big_Buck_Bunny_1080_10s_30MB.mkv"
@@ -88,7 +90,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
-        elif self.path == "/tracks.mov" and TRACKS_FILE is not None:
+        elif self.path.split("?", 1)[0] == "/tracks.mov" and TRACKS_FILE is not None:
             self.send_tracks()
         elif self.path == "/protected.mkv":
             if token == TOKEN:
@@ -145,4 +147,4 @@ if __name__ == "__main__":
                     "behaviorHints": {"videoSize": TRACKS_FILE.stat().st_size}}]
     print(f"Serving on {BASE}", flush=True)
     sys.stdout.flush()
-    ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
+    ThreadingHTTPServer((args.bind, PORT), Handler).serve_forever()

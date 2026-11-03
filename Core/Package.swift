@@ -8,7 +8,7 @@ let package = Package(
         .library(name: "LogeCore", targets: ["LogeCore"]),
     ],
     targets: [
-        .target(name: "LogeCore"),
+        .target(name: "LogeCore", resources: [.process("Resources")]),
         .testTarget(
             name: "LogeCoreTests",
             dependencies: ["LogeCore"],

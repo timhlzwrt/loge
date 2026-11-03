@@ -8,7 +8,7 @@ struct GenreRow: View {
             Text("Genres")
                 .font(.sectionTitle)
                 .padding(.horizontal, Metrics.gutter)
-            ScrollView(.horizontal) {
+            HorizontalShelf("genres") {
                 LazyHStack(spacing: Metrics.rowSpacing) {
                     ForEach(DiscoveryCatalogs.genres) { genre in
                         NavigationLink {
@@ -29,7 +29,6 @@ struct GenreRow: View {
                 .padding(.vertical, 20)
                 #endif
             }
-            .scrollIndicators(.hidden)
             .scrollClipDisabled()
         }
     }

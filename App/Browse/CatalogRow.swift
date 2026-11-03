@@ -95,7 +95,7 @@ struct CatalogRow: View {
     }
 
     private func posters(_ metas: [MetaPreview]) -> some View {
-        ScrollView(.horizontal) {
+        HorizontalShelf(source.title) {
             LazyHStack(spacing: Metrics.rowSpacing) {
                 ForEach(metas) { meta in
                     if meta.id == metas.first?.id {
@@ -122,7 +122,6 @@ struct CatalogRow: View {
             .padding(.vertical, 20)
             #endif
         }
-        .scrollIndicators(.hidden)
         .scrollClipDisabled()
         #if os(tvOS)
         // Home opens on its first row rather than on the sidebar.

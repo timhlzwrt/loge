@@ -132,7 +132,7 @@ Picture is required; downloads are out of scope; UI is English only for now.
 
 Next, in plan order:
 
-1. Phase 2 leftovers: tvOS swipe-to-scrub and Mac screens beyond Home need checking by hand.
+1. Phase 2 leftovers: tvOS swipe-to-scrub and Mac playback need checking by hand.
 2. tvOS Top Shelf with Continue Watching, on hold. Tested 2 November (branch
    `claude/top-shelf-test`): atvloadly signs and installs a Top Shelf extension with a free
    Apple ID and registers the App Group (`group.li.tjh.MediaApp.<team ID>`; the real name has
@@ -148,14 +148,26 @@ Open from the 2 November list (the rest shipped in PR #9):
   seek correctly (tvOS focus too), and English is picked as the default audio. Sources and
   playback with AIOStreams and the advancing timeline are confirmed (simulator and iPhone);
   close and recap/intro skips passed simulator UI tests.
-- Reviews: critic and Letterboxd reviews are only outbound links; show review text in the app.
-  Letterboxd's API excludes personal projects, so it needs another source.
-- Festivals: pages list recorded Wikidata prize winners (up to 40), not the full latest
-  edition's winners (Sundance's newest is 2024); find a fuller source.
-- Directors: the row is a hand-picked five, not a popularity ranking; consider TMDB's
-  popular people filtered to directing. Person pages could also filter acting vs. directing.
+- Embedded TMDB member reviews, popularity-ranked directors, person role filters and dated
+  2026 festival editions are implemented in `codex/remaining-features`. See
+  `docs/HANDOFF.md` for verification and coverage boundaries.
 
-Untested so far: the PR #12 screens on the Mac and the sources rows with AIOStreams' long
+Untested so far: Mac playback and sources rows with AIOStreams' long
 names; on Apple TV the Search genre pill and the Watch Later row. Playback and Picture in Picture on tvOS and macOS, HDR output and tvOS display
-matching (need real hardware), Trakt against the live API, tvOS swipe-to-scrub, Mac screens
-beyond Home, the scrub preview on screen. iPhone simulators report Picture in Picture as unsupported; use an iPad simulator.
+matching (need real hardware), Trakt against the live API, tvOS swipe-to-scrub and the scrub preview on screen. iPhone simulators report Picture in Picture as unsupported; the isolated iPad PiP restoration check passed in the 3 November follow-up.
+
+3 November follow-up: the Mac Search, title details and member reviews were inspected
+in the native app. An isolated iPhone playback test passed advancing time, English audio
+selection with German first in the file, all three timed skips, close/reopen and source
+replacement. These are simulator results with synthetic timing segments, not real-device
+chapter or HDR verification. Physical iPhone tests stopped before installation because
+Xcode has no signed-in developer account/profile for the UI-test runner. Top Shelf log
+collection requires administrator access; no further extension build was attempted.
+
+After the user configured Xcode signing and approved the Mac Keychain prompt, native
+Mac checks passed Settings/Data Sources, live review previews/full text, director
+artwork, festival filtering and winner-seeded Search. Both isolated playback tests
+then passed on the physical iPhone (timeline, audio, three synthetic skips,
+close/reopen, source replacement and PiP restoration). Evidence:
+`/tmp/loge-iphone-hardware-connected.xcresult`. Top Shelf and the remaining Apple TV
+hardware/HDR/Trakt checks are still pending; no extension build was attempted.
