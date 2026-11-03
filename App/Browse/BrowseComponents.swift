@@ -133,14 +133,18 @@ struct PrimaryButtonStyle: ButtonStyle {
 struct GlassIconButtonStyle: ButtonStyle {
     /// A short name under the circle, so a row of these says what each one does.
     var caption: String?
+    /// Just the icon, no circle: a phone's row under a full-width Play, where a line of
+    /// bubbles beneath the capsule looked busy.
+    var isBare = false
 
     func makeBody(configuration: Configuration) -> some View {
-        StyledLabel(configuration: configuration, caption: caption)
+        StyledLabel(configuration: configuration, caption: caption, isBare: isBare)
     }
 
     private struct StyledLabel: View {
         let configuration: Configuration
         let caption: String?
+        let isBare: Bool
         #if os(tvOS)
         @Environment(\.isFocused) private var isFocused
         #endif
@@ -157,7 +161,21 @@ struct GlassIconButtonStyle: ButtonStyle {
             }
         }
 
+        @ViewBuilder
         private var circle: some View {
+            if isBare {
+                configuration.label
+                    .labelStyle(.iconOnly)
+                    .font(.title2)
+                    .foregroundStyle(.white)
+                    .frame(height: 30)
+                    .opacity(configuration.isPressed ? 0.5 : 1)
+            } else {
+                glassCircle
+            }
+        }
+
+        private var glassCircle: some View {
             configuration.label
                 .labelStyle(.iconOnly)
                 .font(font)

@@ -291,10 +291,10 @@ struct MetaDetailView: View {
     @ViewBuilder
     private var buttons: some View {
         if synopsisUnderButtons {
-            VStack(spacing: 16) {
+            VStack(spacing: 20) {
                 playButton
                 HStack(spacing: 0) {
-                    secondaryButtons
+                    secondaryButtons(isBare: true)
                         .frame(maxWidth: .infinity)
                 }
             }
@@ -303,7 +303,7 @@ struct MetaDetailView: View {
                 playButton
                 // No merging distance: the circles stay apart, as separate buttons.
                 GlassEffectContainer(spacing: 0) {
-                    HStack(alignment: .top, spacing: 16) { secondaryButtons }
+                    HStack(alignment: .top, spacing: 16) { secondaryButtons(isBare: false) }
                 }
             }
         }
@@ -322,19 +322,19 @@ struct MetaDetailView: View {
     }
 
     @ViewBuilder
-    private var secondaryButtons: some View {
-        MyListButton(isSaved: library.isSaved(preview.id)) {
+    private func secondaryButtons(isBare: Bool) -> some View {
+        MyListButton(isSaved: library.isSaved(preview.id), isBare: isBare) {
             library.toggleSaved(savedPreview)
         }
         .contextMenu { SaveToMenu(title: savedPreview) }
-        ListsMenu(title: savedPreview)
+        ListsMenu(title: savedPreview, isBare: isBare)
         if let play = playAction {
             Button("Choose a Source", systemImage: "list.bullet") {
                 var route = play.route
                 route.autoplay = false
                 choosingSource = route
             }
-            .buttonStyle(GlassIconButtonStyle(caption: "Sources"))
+            .buttonStyle(GlassIconButtonStyle(caption: "Sources", isBare: isBare))
         }
     }
 
@@ -515,6 +515,7 @@ private struct ExpandableText: View {
 
 private struct MyListButton: View {
     let isSaved: Bool
+    let isBare: Bool
     let toggle: () -> Void
 
     var body: some View {
@@ -522,7 +523,7 @@ private struct MyListButton: View {
             Label(isSaved ? "Remove from Watch Later" : "Add to Watch Later", systemImage: isSaved ? "checkmark" : "plus")
                 .contentTransition(.symbolEffect(.replace))
         }
-        .buttonStyle(GlassIconButtonStyle(caption: isSaved ? "Saved" : "Watch Later"))
+        .buttonStyle(GlassIconButtonStyle(caption: isSaved ? "Saved" : "Watch Later", isBare: isBare))
     }
 }
 

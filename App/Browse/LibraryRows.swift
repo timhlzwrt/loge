@@ -320,6 +320,7 @@ struct MyListView: View {
 /// Puts a title on the user's own lists, or starts a new list with it.
 struct ListsMenu: View {
     let title: MetaPreview
+    var isBare = false
 
     @Environment(LibraryStore.self) private var library
     @State private var isNaming = false
@@ -338,7 +339,7 @@ struct ListsMenu: View {
                 Label("Save to", systemImage: "rectangle.stack.badge.plus")
             }
             .menuIndicator(.hidden)
-            .buttonStyle(GlassIconButtonStyle())
+            .buttonStyle(GlassIconButtonStyle(isBare: isBare))
             IconCaption("Lists")
                 .accessibilityHidden(true)
         }
