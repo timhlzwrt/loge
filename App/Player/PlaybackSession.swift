@@ -38,6 +38,8 @@ final class PlaybackSession {
     @ObservationIgnored private var openingTimeout: Task<Void, Never>?
     /// Set when the file opens; done once mpv reports the duration.
     @ObservationIgnored private var needsEstimatedSeek = false
+    @ObservationIgnored private var estimatedResumeFraction: Double?
+    @ObservationIgnored private var estimatedResumePosition: Double?
     @ObservationIgnored private var pendingRestore: ((Bool) -> Void)?
     @ObservationIgnored private var isInBackground = false
     @ObservationIgnored private var tasks: [Task<Void, Never>] = []
@@ -50,10 +52,12 @@ final class PlaybackSession {
 
     func start(_ request: PlaybackRequest, fallbacks: [PlaybackRequest] = []) {
         var request = request
+        var usesCurrentPosition = false
         if let item = request.item, let currentItem = current?.item,
            item.id == currentItem.id, item.type == currentItem.type,
            let player, player.position > 0 {
             request.startAt = player.position
+            usesCurrentPosition = true
         }
         // Keep the existing player screen mounted when its source is replaced.
         stopPlayback()
@@ -77,7 +81,7 @@ final class PlaybackSession {
         self.pictureInPicture = pictureInPicture
         nowPlaying = NowPlaying(player: player)
         observe(player)
-        load(request)
+        load(request, resumeEstimatedProgress: !usesCurrentPosition)
         isScreenPresented = true
         #if !os(macOS)
         UIApplication.shared.isIdleTimerDisabled = true
@@ -136,9 +140,9 @@ final class PlaybackSession {
         guard let next else { return }
         if let item = current?.item {
             recordProgress()
-            scrobble(.stop)
             // Skipping the credits shouldn't leave the episode looking unfinished.
             library.markWatched([item])
+            trakt.scrobble(.stop, item, progress: 100)
         }
         // The alternatives were for the episode that just ended.
         fallbacks = []
@@ -162,6 +166,7 @@ final class PlaybackSession {
     }
 
     func sceneDidEnterBackground() {
+        recordProgress()
         isInBackground = true
         if let pictureInPicture {
             // AVKit may deliver its start callback after the scene backgrounds.
@@ -175,13 +180,14 @@ final class PlaybackSession {
     }
 
     func sceneDidBecomeActive() {
+        guard isInBackground else { return }
         isInBackground = false
-        player?.setVideoEnabled(true)
+        player?.restoreVideoOutput()
     }
 
     // MARK: Playback
 
-    private func load(_ request: PlaybackRequest) {
+    private func load(_ request: PlaybackRequest, resumeEstimatedProgress: Bool = true) {
         guard let player else { return }
         recordConnectionSpeed()
         let episodesChanged = request.item?.metaID != current?.item?.metaID
@@ -199,6 +205,9 @@ final class PlaybackSession {
         let subtitles = defaults.string(forKey: PlaybackPreferences.subtitleKey) ?? ""
         isOpeningFile = true
         needsEstimatedSeek = false
+        estimatedResumeFraction = resumeEstimatedProgress
+            ? request.item.flatMap { library.estimatedFraction(for: $0.id) } : nil
+        estimatedResumePosition = nil
         openingTimeout?.cancel()
         openingTimeout = Task {
             // Debrid links that are still being cached can hang instead of failing.
@@ -212,7 +221,8 @@ final class PlaybackSession {
         player.load(
             request.url,
             headers: request.headers,
-            startAt: request.startAt,
+            // Runtime estimates can exceed the file's real length; seek once its duration is known.
+            startAt: estimatedResumeFraction == nil ? request.startAt : nil,
             audioLanguage: audio.isEmpty ? nil : audio,
             subtitleLanguage: subtitles.isEmpty ? nil : subtitles,
             // The languages subtitles are most likely turned on in: the sound's and the device's.
@@ -244,9 +254,15 @@ final class PlaybackSession {
     }
 
     private func positionChanged(_ position: Double) {
+        if let target = estimatedResumePosition {
+            guard position >= target - 1 else { return }
+            estimatedResumePosition = nil
+            estimatedResumeFraction = nil
+            if player?.status == .playing { scrobble(.start) }
+        }
         if needsEstimatedSeek && player?.duration != nil {
             needsEstimatedSeek = false
-            seekToEstimatedProgress()
+            if seekToEstimatedProgress() { return }
         }
         // Often enough that a crash or force-quit loses little, rarely enough not to churn storage.
         if abs(position - lastRecordedPosition) >= 10 {
@@ -292,8 +308,10 @@ final class PlaybackSession {
             rememberSource()
             scrobble(.start)
         case .paused:
+            recordProgress()
             scrobble(.pause)
         case .ended:
+            recordProgress()
             lookUpNextIfDue()
             continueInPictureInPicture()
         case .failed:
@@ -304,19 +322,23 @@ final class PlaybackSession {
         }
     }
 
-    /// Lets Trakt follow along; stopping past 80% counts as watched there.
+    /// Lets Trakt follow along; the account keeps its completion threshold aligned with the library.
     private func scrobble(_ action: TraktClient.ScrobbleAction) {
-        guard let item = current?.item, let player, let duration = player.duration, duration > 0 else { return }
+        guard estimatedResumeFraction == nil, let item = current?.item,
+              let player, let duration = player.duration, duration > 0 else { return }
         trakt.scrobble(action, item, progress: player.position / duration * 100)
     }
 
     /// Progress from another device is a percentage; now that the real duration is known,
     /// go to the exact spot.
-    private func seekToEstimatedProgress() {
-        guard let item = current?.item, let fraction = library.estimatedFraction(for: item.id),
-              let player, let duration = player.duration
-        else { return }
-        player.seek(to: max(fraction * duration - 5, 0))
+    private func seekToEstimatedProgress() -> Bool {
+        guard let fraction = estimatedResumeFraction, let player, let duration = player.duration
+        else { return false }
+        // The seek is asynchronous; preserve the remote entry until its position arrives.
+        let target = max(fraction * duration - 5, 0)
+        estimatedResumePosition = target
+        player.seek(to: target)
+        return true
     }
 
     /// Before the file changes, which starts a new measurement. Files served from this
@@ -329,7 +351,7 @@ final class PlaybackSession {
 
     private func recordProgress() {
         // Live streams have no duration, and nothing is known before the file has loaded.
-        guard !isOpeningFile, let item = current?.item, let player,
+        guard !isOpeningFile, estimatedResumeFraction == nil, let item = current?.item, let player,
               let duration = player.duration, player.position > 0 else { return }
         library.record(item, position: player.position, duration: duration)
         lastRecordedPosition = player.position

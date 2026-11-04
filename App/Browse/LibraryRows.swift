@@ -7,7 +7,7 @@ struct ContinueWatchingRow: View {
     var onFocus: (MetaPreview) -> Void = { _ in }
 
     @Environment(LibraryStore.self) private var library
-    @FocusState private var focusedID: String?
+    @FocusState private var isFirstFocused: Bool
 
     var body: some View {
         let entries = library.continueWatching
@@ -19,23 +19,15 @@ struct ContinueWatchingRow: View {
                 HorizontalShelf("Continue Watching") {
                     LazyHStack(alignment: .top, spacing: Metrics.rowSpacing) {
                         ForEach(entries, id: \.item.id) { entry in
-                            NavigationLink(value: SourcesRoute(item: entry.item, title: title(for: entry.item), autoplay: true)) {
-                                ContinueWatchingCard(entry: entry)
-                            }
                             #if os(tvOS)
-                            .buttonStyle(.borderless)
-                            #else
-                            .buttonStyle(.plain)
-                            #endif
-                            .focused($focusedID, equals: entry.item.id)
-                            .contextMenu {
-                                SaveToMenu(title: MetaPreview(
-                                    id: entry.item.metaID, type: entry.item.type, name: entry.item.title,
-                                    poster: entry.item.poster, background: entry.item.background))
-                                Button("Remove from Continue Watching", systemImage: "eye.slash") {
-                                    library.removeFromContinueWatching(metaID: entry.item.metaID)
-                                }
+                            if entry.item.id == entries.first?.item.id {
+                                card(entry).focused($isFirstFocused)
+                            } else {
+                                card(entry)
                             }
+                            #else
+                            card(entry)
+                            #endif
                         }
                     }
                     .padding(.horizontal, Metrics.gutter)
@@ -43,13 +35,34 @@ struct ContinueWatchingRow: View {
                 .scrollClipDisabled()
                 #if os(tvOS)
                 // Home opens on what's being watched rather than on the sidebar.
-                .defaultFocus($focusedID, entries.first?.item.id)
+                .defaultFocus($isFirstFocused, true)
                 #endif
             }
-            .onChange(of: focusedID) {
-                if let item = entries.first(where: { $0.item.id == focusedID })?.item {
-                    onFocus(MetaPreview(id: item.metaID, type: item.type, name: item.title, poster: item.poster, background: item.background))
-                }
+        }
+    }
+
+    private func card(_ entry: WatchProgress) -> some View {
+        NavigationLink(value: SourcesRoute(item: entry.item, title: title(for: entry.item), autoplay: true)) {
+            ContinueWatchingCard(entry: entry)
+                #if os(tvOS)
+                .modifier(ReportsFocus {
+                    let item = entry.item
+                    onFocus(MetaPreview(id: item.metaID, type: item.type, name: item.title,
+                                        poster: item.poster, background: item.background))
+                })
+                #endif
+        }
+        #if os(tvOS)
+        .buttonStyle(.borderless)
+        #else
+        .buttonStyle(.plain)
+        #endif
+        .contextMenu {
+            SaveToMenu(title: MetaPreview(
+                id: entry.item.metaID, type: entry.item.type, name: entry.item.title,
+                poster: entry.item.poster, background: entry.item.background))
+            Button("Remove from Continue Watching", systemImage: "eye.slash") {
+                library.removeFromContinueWatching(metaID: entry.item.metaID)
             }
         }
     }
@@ -119,7 +132,6 @@ struct MyListRow: View {
     var onFocus: (MetaPreview) -> Void = { _ in }
 
     @Environment(LibraryStore.self) private var library
-    @FocusState private var focusedID: MetaPreview.ID?
 
     var body: some View {
         let titles = library.saved
@@ -133,13 +145,15 @@ struct MyListRow: View {
                         ForEach(titles) { meta in
                             NavigationLink(value: meta) {
                                 PosterTile(meta: meta)
+                                    #if os(tvOS)
+                                    .modifier(ReportsFocus { onFocus(meta) })
+                                    #endif
                             }
                             #if os(tvOS)
                             .buttonStyle(.card)
                             #else
                             .buttonStyle(.plain)
                             #endif
-                            .focused($focusedID, equals: meta.id)
                         }
                     }
                     .padding(.horizontal, Metrics.gutter)
@@ -148,11 +162,6 @@ struct MyListRow: View {
                     #endif
                 }
                 .scrollClipDisabled()
-            }
-            .onChange(of: focusedID) {
-                if let meta = titles.first(where: { $0.id == focusedID }) {
-                    onFocus(meta)
-                }
             }
         }
     }

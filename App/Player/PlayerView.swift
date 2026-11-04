@@ -43,7 +43,6 @@ struct PlayerView: View {
     /// Info, Subtitles and Audio, shown by swiping down.
     @State private var isPanelShown = false
     #endif
-    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dismiss) private var dismiss
 
     private var player: MPVPlayer? { session.player }
@@ -157,13 +156,6 @@ struct PlayerView: View {
             scrubPreview.clear()
             do { try await Task.sleep(for: .seconds(30)) } catch { return }
             self.scrubPreview = nil
-        }
-        .onChange(of: scenePhase) { _, phase in
-            switch phase {
-            case .background: session.sceneDidEnterBackground()
-            case .active: session.sceneDidBecomeActive()
-            default: break
-            }
         }
         // Closing a menu counts as an interaction, so the countdown starts over.
         .onChange(of: isMenuOpen) { _, open in if !open { showControls() } }

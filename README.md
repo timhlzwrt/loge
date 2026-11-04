@@ -1,7 +1,12 @@
-# loge
+# loge — Stremio client for iOS, tvOS and macOS
 
-A Stremio addon client for iPhone, iPad, Apple TV and Mac, in native SwiftUI. Browse
-catalogs, read details and play streams with mpv.
+A native SwiftUI client for Stremio addons on iPhone, iPad, Apple TV and Mac. Browse
+movie and TV catalogs, track episodes and play direct video streams with mpv.
+
+[Install](#installing) · [First run](#first-run) · [Accounts and sync](#optional-accounts) ·
+[Troubleshooting](#troubleshooting) · [Build from source](#building)
+
+Requires **iOS/iPadOS 26**, **tvOS 27** or **macOS 27 on Apple silicon**.
 
 Movies, series, search and IMDb ratings work out of the box through Cinemeta. To watch
 something, add a Stremio addon that provides streams. **loge has no content of its own**:
@@ -18,11 +23,14 @@ what plays, and whether you may watch it, depends entirely on the addons you add
 - **Player:** mpv with hardware decoding, HDR, Picture in Picture, AirPlay, subtitles from
   the file, the stream or subtitle addons (with timing adjustment), skipping of intros,
   recaps and credits, and the next episode starting by itself.
-- **Accounts, both optional:** [Trakt](https://trakt.tv) syncs progress and history between
-  devices; a [TMDB](https://www.themoviedb.org) token adds portraits, filmographies and
-  member reviews.
+- **Accounts, both optional:** [Trakt](https://trakt.tv) brings in paused playback progress
+  and receives playback and watched-history updates; a [TMDB](https://www.themoviedb.org)
+  token adds metadata, portraits, filmographies and member reviews.
+  See [what syncs](#trakt-playback-progress) before setting up a second device.
 
 Only direct HTTP(S) streams play. Torrents and magnet links are not supported.
+
+<img src="docs/screenshots/iphone-home.jpg" width="300" alt="loge on iPhone: artwork-led Home with built-in movie and series catalogs">
 
 ## Installing
 
@@ -90,6 +98,75 @@ That's needed once per download. For updates, download the newest `.dmg` and rep
 Settings → About shows the build's commit and date, with a link that compares it with the
 latest `main` on GitHub. Every push to `main` becomes a
 [release](https://github.com/timhlzwrt/loge/releases) numbered by commit count.
+
+## First run
+
+1. Open **Settings → Addons**. Cinemeta supplies the built-in movie and series catalogs;
+   playback needs an addon that provides streams.
+2. In **Add addon**, paste the addon's configured **Manifest URL** ending in
+   `/manifest.json`, then select **Install**. Use the manifest URL, rather than the
+   addon's configuration webpage.
+3. Open a title, choose an episode for a series, then select **Sources** and a playable
+   stream. The app remembers your selected source for subsequent playback when available.
+4. On another device, install the addon there too. Addon configuration stays on each device.
+
+Addons higher in **Your addons** are asked first. Use **Edit** to reorder on iPhone/iPad,
+drag rows on Mac, or open an addon's menu and choose **Move Up** / **Move Down** on Apple TV.
+
+## Optional accounts
+
+Browsing and playback do not require a loge account. Trakt and TMDB are separate optional
+connections, configured in Settings on each device.
+
+### Trakt playback progress
+
+1. Create your own application at [Trakt applications](https://trakt.tv/oauth/applications)
+   with redirect URI `urn:ietf:wg:oauth:2.0:oob`.
+2. In **Settings → Trakt**, enter its **Client ID** and **Client Secret**, then **Save**.
+3. Select **Sign In**, open the displayed verification URL and enter the displayed code.
+4. Sign in to the same Trakt account on each device. Use **Sync Now** to request paused
+   progress manually.
+
+loge pulls paused movie and episode progress on launch and when returning to the app, and
+sends playback scrobbles and watched/unwatched changes to Trakt. Recent completed plays
+clear unfinished local entries, keeping their original watch dates. Newer local progress
+takes precedence when merging.
+Matching requires IMDb identifiers; titles known only by another addon's identifiers may
+not sync. New titles use built-in Cinemeta or a matching installed metadata addon.
+
+**Sync scope:** Watch Later, custom lists, installed addons, source selections and settings
+stay on the device. Trakt's full watched history is not imported. There is no offline
+upload queue, so failed updates are not stored for later delivery. A Trakt connection is
+not a complete backup of your library or configuration.
+
+### TMDB metadata
+
+Open **Settings → TMDB → Connect TMDB**, paste the **API Read Access Token** from your
+[TMDB API settings](https://www.themoviedb.org/settings/api) and select **Connect**. This is
+the read access token, rather than the API key. The app checks it before saving it in the
+device's Keychain. On Apple TV, use the Apple TV Remote keyboard on your phone to enter it.
+
+## Troubleshooting
+
+- **Catalogs load, but no sources appear:** install a playback addon in Settings → Addons.
+  Check that its configuration provides streams for the selected title and that the addon
+  is reachable. Built-in catalog results do not guarantee an available stream.
+- **A source is unsupported:** only direct HTTP(S) video streams play. Torrent files,
+  info hashes and magnet links require an addon/service that supplies a direct video URL.
+- **Playback buffers:** try a smaller source or lower bitrate. The source list shows size
+  and bitrate when available, and recommends a source when it has a measured
+  connection speed to compare against. A new device may not yet have that measurement.
+- **Continue Watching differs between devices:** check the same Trakt account is connected
+  on both, pause or close playback on the first, then select **Sync Now** on the second.
+  See the [sync limits](#trakt-playback-progress), including unsupported title identifiers.
+- **A sideloaded app stops opening after a week:** refresh or reinstall its signature using
+  your sideloading tool. Free Apple ID signatures expire after seven days.
+
+For a reproducible problem, [open an issue](https://github.com/timhlzwrt/loge/issues) with
+the device and OS version, the commit from **Settings → About**, steps to reproduce and
+what you expected. Include a screenshot when useful. Redact addon manifest URLs, access
+tokens, Trakt app secrets and stream URLs containing credentials; an addon host and name
+are enough to identify the provider.
 
 ## Building
 

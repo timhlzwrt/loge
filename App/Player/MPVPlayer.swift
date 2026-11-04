@@ -468,6 +468,15 @@ final class MPVPlayer {
         setProperty("vid", isEnabled ? "auto" : "no")
     }
 
+    func restoreVideoOutput() {
+        setVideoEnabled(true)
+        guard case .loaded = loadState, !isEnded else { return }
+        // Locking can leave AVFoundation's renderer failed even if PiP kept video
+        // enabled. A seek resets mpv's decoder and flushes that renderer, including
+        // when paused, without reopening the source or changing the pause state.
+        command(["seek", "0", "relative+exact"])
+    }
+
     /// Stops playback immediately; the player can't be reused afterwards.
     func shutDown() {
         guard !isShutDown else { return }

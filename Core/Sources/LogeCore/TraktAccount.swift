@@ -22,22 +22,37 @@ public final class TraktAccount {
     private let library: LibraryStore
     private let addons: AddonStore
     private let defaults: UserDefaults
+    private let session: URLSession
+    private let saveToken: (TraktToken?) -> Void
+    private var connectionID = UUID()
+    private var refreshTask: Task<TraktToken, Error>?
 
     private static let service = "li.tjh.MediaApp.trakt"
     private static let usernameKey = "traktUsername"
 
-    public init(library: LibraryStore, addons: AddonStore, defaults: UserDefaults = .standard) {
+    public convenience init(library: LibraryStore, addons: AddonStore, defaults: UserDefaults = .standard) {
+        self.init(library: library, addons: addons, defaults: defaults, session: .shared,
+                  credentials: Self.load(TraktCredentials.self, account: "credentials"),
+                  token: Self.load(TraktToken.self, account: "token"),
+                  saveToken: { Self.save($0, account: "token") })
+    }
+
+    init(library: LibraryStore, addons: AddonStore, defaults: UserDefaults,
+         session: URLSession, credentials: TraktCredentials?, token: TraktToken?,
+         saveToken: @escaping (TraktToken?) -> Void) {
         self.library = library
         self.addons = addons
         self.defaults = defaults
-        credentials = Self.load(TraktCredentials.self, account: "credentials")
-        token = Self.load(TraktToken.self, account: "token")
+        self.session = session
+        self.credentials = credentials
+        self.token = token
+        self.saveToken = saveToken
         if token != nil, let username = defaults.string(forKey: Self.usernameKey) {
             state = .signedIn(username: username)
         }
     }
 
-    private var client: TraktClient? { credentials.map { TraktClient(credentials: $0) } }
+    private var client: TraktClient? { credentials.map { TraktClient(credentials: $0, session: session) } }
 
     /// Changing the app the device signs in with also signs it out.
     public func setCredentials(_ credentials: TraktCredentials?) {
@@ -52,15 +67,20 @@ public final class TraktAccount {
     /// Shows a code for the user to enter on Trakt's site, then waits for their approval.
     public func signIn() async throws {
         guard let client else { throw TraktError.notSignedIn }
+        let connectionID = connectionID
         let code = try await client.deviceCode()
+        try checkConnection(connectionID)
         state = .awaitingApproval(code)
         do {
             while Date.now < code.expiresAt {
                 try await Task.sleep(for: .seconds(code.interval))
+                try checkConnection(connectionID)
                 guard let token = try await client.token(for: code) else { continue }
+                try checkConnection(connectionID)
                 let username = try await client.username(token: token)
+                try checkConnection(connectionID)
                 self.token = token
-                Self.save(token, account: "token")
+                saveToken(token)
                 defaults.set(username, forKey: Self.usernameKey)
                 state = .signedIn(username: username)
                 await pullProgress()
@@ -68,14 +88,17 @@ public final class TraktAccount {
             }
             throw TraktError.codeExpired
         } catch {
-            if case .awaitingApproval = state { state = .signedOut }
+            if self.connectionID == connectionID, case .awaitingApproval = state { state = .signedOut }
             throw error
         }
     }
 
     public func signOut() {
+        connectionID = UUID()
+        refreshTask?.cancel()
+        refreshTask = nil
         token = nil
-        Self.save(TraktToken?.none, account: "token")
+        saveToken(nil)
         defaults.removeObject(forKey: Self.usernameKey)
         state = .signedOut
     }
@@ -84,6 +107,9 @@ public final class TraktAccount {
 
     /// - Parameter progress: 0–100.
     public func scrobble(_ action: TraktClient.ScrobbleAction, _ item: WatchItem, progress: Double) {
+        // Trakt completes a stop at 80%; keep partially watched items consistent
+        // with the library's later credits threshold instead.
+        let action = action == .stop && progress < LibraryStore.finishedFraction * 100 ? .pause : action
         send("scrobble") { client, token in try await client.scrobble(action, item, progress: progress, token: token) }
     }
 
@@ -98,24 +124,63 @@ public final class TraktAccount {
     /// Brings in progress from other devices. Titles not yet in the library are looked up
     /// through the installed addons for their names, artwork and runtime.
     public func pullProgress() async {
-        guard let client, let token = try? await validToken() else { return }
+        guard let client else { return }
+        let connectionID = connectionID
         let entries: [TraktPlayback]
+        let historySince = library.progress.values.filter { !$0.isFinished }.map(\.updatedAt).min()
+        var watched: [TraktPlayback] = []
         do {
+            let token = try await validToken()
+            try checkConnection(connectionID)
             entries = try await client.playback(token: token)
+            try checkConnection(connectionID)
+            if let historySince {
+                do {
+                    watched = try await client.watchedHistory(since: historySince, token: token)
+                    try checkConnection(connectionID)
+                } catch is CancellationError {
+                    return
+                } catch {
+                    log.error("Couldn't load watched history: \(error)")
+                }
+            }
+        } catch is CancellationError {
+            return
+        } catch TraktError.notSignedIn {
+            return
         } catch {
             log.error("Couldn't load playback progress: \(error)")
             return
         }
+        guard self.connectionID == connectionID, !Task.isCancelled else { return }
         var metas: [String: Meta] = [:]
         var attemptedIDs: Set<String> = []
+        // A completed play disappears from Trakt's paused playback feed. Merge its
+        // actual timestamp so it clears stale progress without undoing a newer rewatch.
+        for entry in watched {
+            guard let saved = library.progress.values.first(where: {
+                $0.item.metaID == entry.imdbID && $0.item.season == entry.season && $0.item.episode == entry.episode
+            }) else { continue }
+            library.mergeRemote(saved.item, fraction: 1, estimatedDuration: max(saved.duration, 1), at: entry.pausedAt)
+        }
         for entry in entries {
             let type = entry.season == nil ? "movie" : "series"
+            if let saved = library.progress.values.first(where: {
+                $0.item.metaID == entry.imdbID && $0.item.season == entry.season && $0.item.episode == entry.episode
+            }) {
+                library.mergeRemote(saved.item, fraction: entry.progress / 100,
+                                    estimatedDuration: saved.duration > 0 ? saved.duration : (type == "movie" ? 6_600 : 2_700),
+                                    at: entry.pausedAt)
+                continue
+            }
             // Several paused episodes can share a show; unavailable metadata should only be requested once per sync.
             if attemptedIDs.insert(entry.imdbID).inserted,
-               let meta = try? await addons.addons.metaClient(type: type, id: entry.imdbID)?
+               let provider = addons.addons.metaClient(type: type, id: entry.imdbID),
+               let meta = try? await AddonClient(manifestURL: provider.manifestURL, session: session)
                 .meta(type: type, id: entry.imdbID) {
                 metas[entry.imdbID] = meta
             }
+            guard self.connectionID == connectionID, !Task.isCancelled else { return }
             guard let meta = metas[entry.imdbID], let item = Self.item(for: entry, in: meta) else { continue }
             // Without a runtime, a typical length stands in until the file is played here.
             let minutes = Self.minutes(meta.runtime) ?? (type == "movie" ? 110 : 45)
@@ -128,27 +193,54 @@ public final class TraktAccount {
     /// Runs a request in the background; Trakt being unreachable shouldn't disturb playback.
     private func send(_ what: String, _ request: @escaping @Sendable (TraktClient, TraktToken) async throws -> Void) {
         guard let client, token != nil else { return }
+        let connectionID = connectionID
         Task {
             do {
-                try await request(client, try await validToken())
+                let token = try await validToken()
+                try checkConnection(connectionID)
+                try await request(client, token)
+            } catch is CancellationError {
+                return
             } catch {
                 log.error("Couldn't send \(what, privacy: .public) to Trakt: \(error)")
             }
         }
     }
 
+    private func checkConnection(_ id: UUID) throws {
+        try Task.checkCancellation()
+        guard connectionID == id else { throw CancellationError() }
+    }
+
     private func validToken() async throws -> TraktToken {
         guard let client, let token else { throw TraktError.notSignedIn }
         guard token.needsRefresh else { return token }
+        let connectionID = connectionID
+        let task: Task<TraktToken, Error>
+        if let refreshTask {
+            task = refreshTask
+        } else {
+            task = Task { try await client.refresh(token) }
+            refreshTask = task
+        }
         do {
-            let refreshed = try await client.refresh(token)
-            self.token = refreshed
-            Self.save(refreshed, account: "token")
+            let refreshed = try await task.value
+            try checkConnection(connectionID)
+            // Every waiter uses the same refreshed token; only the first persists it.
+            if self.token == token {
+                self.token = refreshed
+                saveToken(refreshed)
+            }
+            refreshTask = nil
             return refreshed
-        } catch TraktError.httpStatus(401) {
-            // The refresh token was revoked, e.g. from Trakt's connected apps page.
-            signOut()
-            throw TraktError.notSignedIn
+        } catch {
+            guard self.connectionID == connectionID else { throw CancellationError() }
+            refreshTask = nil
+            if error as? TraktError == .httpStatus(401) {
+                signOut()
+                throw TraktError.notSignedIn
+            }
+            throw error
         }
     }
 

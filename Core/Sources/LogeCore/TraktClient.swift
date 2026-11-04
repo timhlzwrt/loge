@@ -143,6 +143,28 @@ public struct TraktClient: Sendable {
         return entries.compactMap(\.playback)
     }
 
+    /// Completed plays newer than the progress this device still considers unfinished.
+    public func watchedHistory(since date: Date, token: TraktToken) async throws -> [TraktPlayback] {
+        var result: [TraktPlayback] = []
+        var page = 1
+        while true {
+            try Task.checkCancellation()
+            let query = [URLQueryItem(name: "start_at", value: date.ISO8601Format()),
+                         URLQueryItem(name: "limit", value: "100"),
+                         URLQueryItem(name: "page", value: String(page))]
+            let (data, response) = try await response("sync/history", token: token, query: query)
+            let entries = try Self.decoder.decode([HistoryEntry].self, from: data)
+            result.append(contentsOf: entries.compactMap(\.playback))
+            if let count = response?.value(forHTTPHeaderField: "X-Pagination-Page-Count").flatMap(Int.init) {
+                if page >= count { break }
+            } else if entries.count < 100 {
+                break
+            }
+            page += 1
+        }
+        return result
+    }
+
     // MARK: Request bodies
 
     /// Trakt identifies titles by IMDb ID, which is what Cinemeta uses. Items from addons
@@ -221,6 +243,19 @@ public struct TraktClient: Sendable {
         }
     }
 
+    private struct HistoryEntry: Decodable {
+        var watched_at: Date
+        var type: String
+        var movie: PlaybackEntry.Titled?
+        var show: PlaybackEntry.Titled?
+        var episode: PlaybackEntry.Episode?
+
+        var playback: TraktPlayback? {
+            PlaybackEntry(progress: 100, paused_at: watched_at, type: type,
+                          movie: movie, show: show, episode: episode).playback
+        }
+    }
+
     static let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
         // Trakt sends fractional seconds, which `.iso8601` rejects.
@@ -239,7 +274,13 @@ public struct TraktClient: Sendable {
     }
 
     private func request(_ path: String, body: [String: Any]? = nil, token: TraktToken? = nil) async throws -> Data {
-        var request = URLRequest(url: Self.baseURL.appending(path: path))
+        try await response(path, body: body, token: token).0
+    }
+
+    private func response(_ path: String, body: [String: Any]? = nil, token: TraktToken? = nil,
+                          query: [URLQueryItem] = []) async throws -> (Data, HTTPURLResponse?) {
+        let url = Self.baseURL.appending(path: path).appending(queryItems: query)
+        var request = URLRequest(url: url)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("2", forHTTPHeaderField: "trakt-api-version")
         request.setValue(credentials.clientID, forHTTPHeaderField: "trakt-api-key")
@@ -254,6 +295,6 @@ public struct TraktClient: Sendable {
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
             throw TraktError.httpStatus(http.statusCode)
         }
-        return data
+        return (data, response as? HTTPURLResponse)
     }
 }

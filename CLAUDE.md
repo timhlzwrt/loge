@@ -166,6 +166,76 @@ Next, in plan order:
 3. Check the Home lag fix on the Apple TV itself (simulator only so far; simulator 4K
    rendering still shows 90–170 ms frame gaps per move).
 
+Todo added 4 November 2026 (implementation status updated below):
+
+- [x] Fix Continue Watching for shows: episode progress does not save correctly.
+  Reproduce saving, closing/relaunching, resuming the same episode, and advancing to
+  the next episode; verify the saved episode, position and Up Next agree.
+- [ ] Fix cross-device Continue Watching and review cross-device sync generally.
+  Use the existing Trakt integration; check progress, watched history and lists,
+  identify what currently syncs, and propose any expansion of scope before building.
+  Cover newer local versus remote progress, offline changes, reconnect and sign-out;
+  confirm handoff in both directions between devices with the same Trakt account.
+- [ ] Fix black video after turning the screen off and back on during playback.
+  Reproduce lock/unlock and background/foreground transitions with the existing
+  playback fixture; verify visible video returns, the timeline advances, controls
+  work and audio stays in sync. Confirm actual screen-off recovery on hardware.
+- [x] Smoother user experience, navigation/focus first pass: present concrete ideas and tradeoffs to the user
+  before building. Review browse-to-play steps, resume behavior, loading/error
+  feedback and returning from playback; agree on changes before implementation.
+- [x] Smoother user interface, navigation/focus first pass: present concrete ideas and tradeoffs to the user
+  before building. Inspect scrolling, navigation transitions, artwork loading and
+  tvOS focus; measure stutters and preserve the existing artwork-led visual style.
+- [x] Improve GitHub discoverability ("SEO") and expand the project page. Review
+  the repository description/topics and README for clear searchable wording,
+  platform screenshots, installation guidance, addon setup, feature explanations,
+  troubleshooting and honest limitations. Check any GitHub Pages landing content
+  separately from the existing SideStore source feed.
+
+4 November implementation: progress saves on pause, background and playback end;
+remote percentage resumes wait for the actual file duration and keep their saved
+position until the seek takes effect. Trakt refreshes on foreground, shares token
+refresh requests, rejects results after sign-out and imports completed plays to
+clear stale Continue Watching entries without overwriting newer rewatches. Stops
+use the same 92% completion threshold locally and remotely; explicit Next completes
+the episode. Video output resets after backgrounding, including PiP sessions.
+The iPhone playback regressions, iPad background/PiP restoration and tvOS library
+focus navigation passed. Core: 201 tests passed; all three platform builds passed
+with Swift warnings treated as errors (Xcode still emits its AppIntents metadata
+extraction warning). Native Mac library layout and simulator screenshots inspected.
+The fresh-install browse flow passed after updating stale test labels.
+
+The user chose navigation/scroll/focus smoothness before other UX/UI work. The first
+pass reuses per-item focus reporting in Continue Watching and Watch Later; the same
+simulator remote sequence reduced row body evaluations from 13 to 2 and 10 to 1,
+respectively. This measures view work, not hardware frame rate. Further visual or
+interaction changes still need ideas reviewed first. GitHub description/topics
+are updated; the expanded README includes setup, sync limits, troubleshooting and
+a fresh-install iPhone screenshot.
+
+Still open: physical screen-lock recovery (simulators establish background/foreground
+recovery only), live two-device Trakt handoff, and broader configuration sync.
+The user prioritised addon setup and app settings, and requested a design before
+implementation. Proposed: one encrypted configuration file on a user-owned HTTPS
+WebDAV endpoint, with its recovery key and endpoint credentials in each device's
+Keychain. Sync ordered manifest URLs, audio/subtitle preferences, subtitle size,
+automatic source size limit and accent; keep account tokens, remembered stream URLs
+and connection measurements local. Use conditional writes, explicit conflict handling
+and persisted removal intent; validate a complete incoming configuration before
+applying it. Pull on launch/foreground and push deliberate settings changes. No
+configuration sync implementation or server setup has been started.
+
+Verification for these tasks: reuse `LibraryStoreTests`, `TraktTests`,
+`UITests/FlowTests.swift`, `UITests/PlaybackRegressionTests.swift`,
+`Tools/test-addon.py` and the existing playback fixtures as appropriate; extend
+these flows for meaningful regressions rather than creating a separate harness.
+Use Xcode's built-in iPhone/iPad and Apple TV simulators, retain screenshots, and
+check tvOS focus with `UITests/RemoteDriverTests.swift`; inspect macOS in the native
+app. For app changes, run Core tests and warning-free builds for all three
+platforms. Report simulator results separately from live Trakt, cross-device and
+hardware-only checks; do not mark untested behavior as verified. Use subagents
+when there are useful independent investigations or verification tasks.
+
 Open from the 2 November list (the rest shipped in PR #9):
 
 - Check on real devices: the Close button always closes, intro/recap/credits skip offers
