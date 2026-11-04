@@ -45,11 +45,14 @@ jobs:
           plist=.build/xcode/Build/Products/Release-iphoneos/loge.app/Info.plist
           version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$plist")
           build=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$plist")
-          previous=$(git tag --list 'build-*' --sort=-v:refname | head -1)
+          # A failed publish can leave its tag behind. Only published releases
+          # belong in the changelog baseline, excluding this build on a rerun.
+          previous=$(gh release list --exclude-drafts --limit 100 --json tagName \
+            --jq "[.[] | select(.tagName != \"build-$build\")][0].tagName // empty")
           range=${previous:+$previous..}HEAD
           git log --no-merges --format='- %s' -n 20 "$range" > notes.md
-          gh release create "build-$build" .build/ipa/loge-iOS.ipa .build/ipa/loge-tvOS.ipa .build/dmg/loge-macOS.dmg \
-            --target "$GITHUB_SHA" --title "$version ($build)" --notes-file notes.md
+          Tools/publish-release.sh "build-$build" "$version ($build)" "$GITHUB_SHA" notes.md \
+            .build/ipa/loge-iOS.ipa .build/ipa/loge-tvOS.ipa .build/dmg/loge-macOS.dmg
 
       - name: Write the SideStore source
         env:
