@@ -108,7 +108,8 @@ latest `main` on GitHub. Every push to `main` becomes a
    addon's configuration webpage.
 3. Open a title, choose an episode for a series, then select **Sources** and a playable
    stream. The app remembers your selected source for subsequent playback when available.
-4. On another device, install the addon there too. Addon configuration stays on each device.
+4. On another device, install the addon there too, or connect your own server in
+   **Settings → Sync** to share addon setup and preferences.
 
 Addons higher in **Your addons** are asked first. Use **Edit** to reorder on iPhone/iPad,
 drag rows on Mac, or open an addon's menu and choose **Move Up** / **Move Down** on Apple TV.
@@ -134,10 +135,20 @@ takes precedence when merging.
 Matching requires IMDb identifiers; titles known only by another addon's identifiers may
 not sync. New titles use built-in Cinemeta or a matching installed metadata addon.
 
-**Sync scope:** Watch Later, custom lists, installed addons, source selections and settings
-stay on the device. Trakt's full watched history is not imported. There is no offline
+**Trakt scope:** Watch Later, custom lists, addon setup, source selections and settings
+are not carried by Trakt. Trakt's full watched history is not imported. There is no offline
 upload queue, so failed updates are not stored for later delivery. A Trakt connection is
 not a complete backup of your library or configuration.
+
+### Addon and settings sync
+
+**Settings → Sync** optionally connects to your own HTTPS CouchDB sync endpoint.
+There is no default server. Share ordered addons, audio/subtitle preferences,
+subtitle size, automatic source size limit and accent across your devices.
+Configurations are encrypted on-device; credentials and the recovery key stay in
+Keychain. A setup code connects additional devices, including Apple TV. See the
+[setup and self-hosting guide](docs/CONFIGURATION_SYNC.md) for deployment, conflict
+handling and recovery-key precautions.
 
 ### TMDB metadata
 

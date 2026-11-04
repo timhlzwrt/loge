@@ -17,6 +17,8 @@ enum DiscoveryFixture {
     @ViewBuilder
     static var screen: some View {
         switch ProcessInfo.processInfo.environment["DISCOVERY_SCREEN"] {
+        case "settings":
+            SettingsView()
         case "library":
             if let library = library {
                 ScrollView {

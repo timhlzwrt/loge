@@ -213,17 +213,30 @@ interaction changes still need ideas reviewed first. GitHub description/topics
 are updated; the expanded README includes setup, sync limits, troubleshooting and
 a fresh-install iPhone screenshot.
 
-Still open: physical screen-lock recovery (simulators establish background/foreground
-recovery only), live two-device Trakt handoff, and broader configuration sync.
-The user prioritised addon setup and app settings, and requested a design before
-implementation. Proposed: one encrypted configuration file on a user-owned HTTPS
-WebDAV endpoint, with its recovery key and endpoint credentials in each device's
-Keychain. Sync ordered manifest URLs, audio/subtitle preferences, subtitle size,
-automatic source size limit and accent; keep account tokens, remembered stream URLs
-and connection measurements local. Use conditional writes, explicit conflict handling
-and persisted removal intent; validate a complete incoming configuration before
-applying it. Pull on launch/foreground and push deliberate settings changes. No
-configuration sync implementation or server setup has been started.
+The user confirmed the playback fixes work on iPhone. Live two-device Trakt
+handoff and Apple TV hardware checks remain open. Addon/settings sync is now
+implemented as opt-in Settings > Sync with a user-entered HTTPS endpoint and no
+default server. The user approved a self-hosted CouchDB design after infrastructure
+review: AES-GCM encrypted configuration, device-local Keychain credentials/recovery
+key, encrypted persisted baseline, revision-checked writes, automatic foreground
+pull/debounced edits, and explicit conflicts preserving independent changes.
+Share ordered addon URLs, audio/subtitle preferences, subtitle size, automatic
+source size limit and accent. Keep account tokens, remembered stream URLs and
+connection measurements local. Public self-hosting files live under
+Tools/configuration-sync and docs/CONFIGURATION_SYNC.md; personal infrastructure
+and credentials remain outside this public repo. The backend was deployed from
+the separate private infrastructure checkout.
+
+Verification: final Core suite reported 219 tests, with both live HTTPS sync tests
+passing (encrypted protocol and two independent account stores exchanging addon
+order/removal and preferences both ways); two unrelated opt-in provider tests were
+skipped. All three final platform builds passed with Swift warnings as errors;
+only the existing AppIntents metadata extraction warning remains. iPhone and iPad
+Settings opt-in flows passed; native Mac settings inspected; tvOS remote navigation
+and key generation passed with screenshots. Backend authentication, route/query
+restrictions, concurrent writes, restart and directory backup/restore passed.
+These are independent-store live integration and simulator results, not a physical
+phone-to-Apple-TV sync handoff. Full Proxmox guest restoration was not tested.
 
 Verification for these tasks: reuse `LibraryStoreTests`, `TraktTests`,
 `UITests/FlowTests.swift`, `UITests/PlaybackRegressionTests.swift`,

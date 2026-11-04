@@ -7,6 +7,7 @@ struct SettingsView: View {
     @Environment(AddonStore.self) private var store
     @Environment(TraktAccount.self) private var trakt
     @Environment(TMDBAccount.self) private var tmdb
+    @Environment(ConfigurationSyncAccount.self) private var sync
     @AppStorage(Accent.storageKey) private var accent = Accent.white
 
     var body: some View {
@@ -26,6 +27,11 @@ struct SettingsView: View {
                     SettingsPage("TMDB") { TMDBSection() }
                 } label: {
                     LabeledContent("TMDB", value: tmdb.isConfigured ? "Connected" : "Off")
+                }
+                NavigationLink {
+                    ConfigurationSyncView()
+                } label: {
+                    LabeledContent("Sync", value: sync.isConnected ? sync.status : "Off")
                 }
             }
 

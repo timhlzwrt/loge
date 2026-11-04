@@ -11,6 +11,7 @@ struct LogeApp: App {
     @State private var trakt: TraktAccount
     @State private var tmdb: TMDBAccount
     @State private var playback: PlaybackSession
+    @State private var configurationSync: ConfigurationSyncAccount
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(Accent.storageKey) private var accent = Accent.white
 
@@ -32,6 +33,7 @@ struct LogeApp: App {
         let addonStore = AddonStore()
         let library = LibraryStore()
         _addonStore = State(initialValue: addonStore)
+        _configurationSync = State(initialValue: ConfigurationSyncAccount(addons: addonStore))
         _library = State(initialValue: library)
         let trakt = TraktAccount(library: library, addons: addonStore)
         _trakt = State(initialValue: trakt)
@@ -54,6 +56,7 @@ struct LogeApp: App {
                 .environment(playback)
                 .environment(trakt)
                 .environment(tmdb)
+                .environment(configurationSync)
                 .preferredColorScheme(.dark)
                 // White unless the user picks another accent: artwork carries the colour.
                 .tint(accent.color)
@@ -62,6 +65,7 @@ struct LogeApp: App {
                     if ProcessInfo.processInfo.arguments.contains("--discovery-ui-test")
                         || ProcessInfo.processInfo.arguments.contains("--playback-ui-test") { return }
                     #endif
+                    await configurationSync.sync()
                     await addonStore.refreshManifests()
                     // Needs the addons to look up titles started on other devices.
                     await trakt.pullProgress()
@@ -75,7 +79,10 @@ struct LogeApp: App {
                     if ProcessInfo.processInfo.arguments.contains("--discovery-ui-test")
                         || ProcessInfo.processInfo.arguments.contains("--playback-ui-test") { return }
                     #endif
-                    Task { await trakt.pullProgress() }
+                    Task {
+                        await configurationSync.sync()
+                        await trakt.pullProgress()
+                    }
                 }
         }
         #if os(macOS)

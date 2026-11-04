@@ -24,6 +24,27 @@ final class FlowTests: XCTestCase {
     }
 
     @MainActor
+    func testConfigurationSyncIsOptional() throws {
+        openTab("Settings")
+        let sync = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Sync' AND label CONTAINS 'Off'")).firstMatch
+        guard sync.waitForExistence(timeout: 5) else {
+            throw XCTSkip("Use a simulator without an existing sync connection.")
+        }
+        sync.tap()
+        let endpoint = app.textFields["sync.endpoint"]
+        XCTAssertTrue(endpoint.waitForExistence(timeout: 5))
+        XCTAssertEqual(endpoint.value as? String, "HTTPS configuration URL", "A personal server must never be prefilled")
+        app.swipeUp()
+        let connect = app.buttons["Connect"]
+        XCTAssertTrue(connect.waitForExistence(timeout: 5))
+        XCTAssertFalse(connect.isEnabled)
+        screenshot("sync-settings-optional")
+        app.buttons["Generate New Recovery Key"].tap()
+        XCTAssertFalse(connect.isEnabled, "Generating a key must not opt into sync")
+        screenshot("sync-settings-key")
+    }
+
+    @MainActor
     func test4KPlaybackAdvances() {
         installTestAddonIfNeeded(name: "4K Playback Test", manifestURL: "http://127.0.0.1:8768/manifest.json")
         openSeries("Lanterns")

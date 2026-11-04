@@ -96,6 +96,15 @@ public final class AddonStore {
         save()
     }
 
+    /// Apply a validated snapshot without network requests or losing cached manifests.
+    public func replaceManifestURLs(_ urls: [String]) throws {
+        _ = try SyncedConfiguration(addonURLs: urls).validated()
+        let cached = Dictionary(uniqueKeysWithValues: addons.map { ($0.id, $0) })
+        addons = urls.map { cached[$0] ?? InstalledAddon(manifestURL: $0) }
+        unreachable.formIntersection(Set(urls))
+        save()
+    }
+
     /// Re-fetches every manifest so addon updates (new catalogs, renamed addons) take effect.
     public func refreshManifests() async {
         let loadManifest = loadManifest
