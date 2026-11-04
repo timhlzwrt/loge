@@ -16,6 +16,8 @@ jobs:
     runs-on: xcode-27
     steps:
       - uses: actions/checkout@v4
+      - name: Release publishing regressions
+        run: python3 -B -m unittest discover -s Tools -p test_publish_release.py
       - run: swift test
         working-directory: Core
 
