@@ -32,7 +32,9 @@ series, catalog grids and source lists use typed navigation destinations.
    persists progress. `LibraryStore` supplies Continue Watching, My List,
    watched status, remembered sources and Up Next.
 6. `TraktAccount` signs in with a device code, scrobbles playback and imports
-   remote playback progress. Startup pulls progress after manifest refresh.
+   remote playback progress. Startup pulls progress after manifest refresh, and
+   returning to the app pulls again. Recent completed plays clear unfinished
+   local entries using their watch timestamps; newer local rewatches win.
 
 ## Screens and platform behavior
 
@@ -146,9 +148,10 @@ old subtitle work cannot attach to a replacement file.
 
 ## Follow-up work
 
-- Trakt refresh requests can overlap; in-flight authentication/sync work needs
-  explicit coordination with sign-out and changed app keys. Add an injectable
-  transport and lifecycle tests before changing that flow.
+- Verify Trakt handoff against the live API on two devices. Concurrent token
+  refreshes share a request, and sign-out invalidates pending authentication and
+  sync responses; offline transport tests cover those races. Lists, settings,
+  addon configuration and an offline upload queue remain outside the sync scope.
 - Verify tvOS swipe scrubbing, actual subtitle sizing, Picture in Picture and
   audio/session behavior on real devices. Simulator checks cannot establish
   hardware decoder, HDR or Siri Remote touch behavior.
@@ -168,3 +171,11 @@ also require `Tools/test-addon.py`. Set `TEST_RUNNER_SCREENSHOT_DIR` to retain
 screenshots. `RemoteDriverTests.swift` drives tvOS focus/navigation with an
 opt-in command file. `PlayerMenuTests.swift` covers player interactions on
 request. Keep fixture requests separate from private stream-addon credentials.
+
+`PlaybackRegressionTests.swift` uses the existing local multi-audio fixture
+(`TEST_RUNNER_PLAYBACK_FIXTURE_URL=http://127.0.0.1:8766/tracks.mov`). It covers
+episode progress across pause/relaunch, remote percentage-to-duration correction,
+source replacement, and video recovery after backgrounding. Screen-lock recovery
+still needs hardware verification. `DiscoveryTVTests.testLibraryFocusMovesBetweenRows`
+and the remote driver's `TEST_RUNNER_DISCOVERY_SCREEN=library` use an isolated
+library fixture for navigation checks without changing the user's saved titles.

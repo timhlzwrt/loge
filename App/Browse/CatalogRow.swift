@@ -209,7 +209,7 @@ private struct TitleCard: View {
 #if os(tvOS)
 /// Calls `action` when the button this sits in gains focus. Each poster watches only its own
 /// focus, so a move updates the two posters involved rather than the whole row.
-private struct ReportsFocus: ViewModifier {
+struct ReportsFocus: ViewModifier {
     let action: () -> Void
     @Environment(\.isFocused) private var isFocused
 

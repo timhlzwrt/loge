@@ -17,6 +17,19 @@ enum DiscoveryFixture {
     @ViewBuilder
     static var screen: some View {
         switch ProcessInfo.processInfo.environment["DISCOVERY_SCREEN"] {
+        case "library":
+            if let library = library {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 40) {
+                        ContinueWatchingRow()
+                        MyListRow()
+                    }
+                    .padding(.vertical, 24)
+                }
+                .environment(library)
+                .background(Color.canvas)
+                .navigationTitle("Library")
+            }
         case "person":
             PersonView(route: PersonRoute(person: Person(name: "Christopher Nolan", roles: [.director], tmdbID: 525)))
         case "festival":
@@ -43,6 +56,20 @@ enum DiscoveryFixture {
             .navigationTitle("Discovery")
         }
     }
+
+    private static let library: LibraryStore? = {
+        let suite = "loge.discovery-library-fixture"
+        guard let defaults = UserDefaults(suiteName: suite) else { return nil }
+        defaults.removePersistentDomain(forName: suite)
+        let library = LibraryStore(defaults: defaults)
+        for index in (1...12).reversed() {
+            library.record(WatchItem(id: "fixture-series-\(index):1:2", type: "series",
+                                     metaID: "fixture-series-\(index)", title: "Resume \(index)",
+                                     season: 1, episode: 2), position: 600, duration: 2400)
+            library.toggleSaved(MetaPreview(id: "fixture-movie-\(index)", type: "movie", name: "Saved \(index)"))
+        }
+        return library
+    }()
 }
 
 private final class DiscoveryFixtureProtocol: URLProtocol, @unchecked Sendable {

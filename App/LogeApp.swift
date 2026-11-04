@@ -11,6 +11,7 @@ struct LogeApp: App {
     @State private var trakt: TraktAccount
     @State private var tmdb: TMDBAccount
     @State private var playback: PlaybackSession
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage(Accent.storageKey) private var accent = Accent.white
 
     init() {
@@ -65,6 +66,16 @@ struct LogeApp: App {
                     // Needs the addons to look up titles started on other devices.
                     await trakt.pullProgress()
                     await library.fillMissingArtwork(from: addonStore)
+                }
+                .onChange(of: scenePhase) { _, newPhase in
+                    if newPhase == .background { playback.sceneDidEnterBackground() }
+                    guard newPhase == .active else { return }
+                    playback.sceneDidBecomeActive()
+                    #if DEBUG
+                    if ProcessInfo.processInfo.arguments.contains("--discovery-ui-test")
+                        || ProcessInfo.processInfo.arguments.contains("--playback-ui-test") { return }
+                    #endif
+                    Task { await trakt.pullProgress() }
                 }
         }
         #if os(macOS)

@@ -3,6 +3,49 @@ import XCTest
 
 final class DiscoveryTVTests: XCTestCase {
     @MainActor
+    func testLibraryFocusMovesBetweenRows() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments += ["--discovery-ui-test"]
+        app.launchEnvironment["DISCOVERY_SCREEN"] = "library"
+        app.launch()
+        defer { app.terminate() }
+        let first = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Resume 1,'")).firstMatch
+        XCTAssertTrue(first.waitForExistence(timeout: 10))
+        let initial = expectation(for: NSPredicate { _, _ in first.hasFocus }, evaluatedWith: app)
+        wait(for: [initial], timeout: 8)
+        let remote = XCUIRemote.shared
+        for index in 2...5 {
+            remote.press(.right)
+            let next = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Resume \(index),")).firstMatch
+            let focused = expectation(for: NSPredicate { _, _ in next.exists && next.hasFocus }, evaluatedWith: app)
+            wait(for: [focused], timeout: 5)
+        }
+        remote.press(.down)
+        let saved = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Saved '"))
+        let movedDown = expectation(for: NSPredicate { _, _ in
+            saved.allElementsBoundByIndex.contains { $0.hasFocus }
+        }, evaluatedWith: app)
+        wait(for: [movedDown], timeout: 5)
+        let selected = saved.allElementsBoundByIndex.first { $0.hasFocus }?.label
+        remote.press(.right)
+        let movedRight = expectation(for: NSPredicate { _, _ in
+            saved.allElementsBoundByIndex.contains { $0.hasFocus && $0.label != selected }
+        }, evaluatedWith: app)
+        wait(for: [movedRight], timeout: 5)
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "Library rows after focus navigation"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        remote.press(.up)
+        let movedUp = expectation(for: NSPredicate { _, _ in
+            app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Resume '"))
+                .allElementsBoundByIndex.contains { $0.hasFocus }
+        }, evaluatedWith: app)
+        wait(for: [movedUp], timeout: 5)
+    }
+
+    @MainActor
     func testReviewsReadWithRemote() {
         continueAfterFailure = false
         let app = XCUIApplication()

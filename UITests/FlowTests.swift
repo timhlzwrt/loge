@@ -51,10 +51,13 @@ final class FlowTests: XCTestCase {
     @MainActor
     func testBuiltInDiscoveryWithoutAddons() {
         openTab("Settings")
+        let addons = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Addons'")).firstMatch
+        XCTAssertTrue(addons.waitForExistence(timeout: 5))
+        addons.tap()
         XCTAssertTrue(app.staticTexts["No playback addons yet"].waitForExistence(timeout: 5),
                       "Run this flow on a fresh simulator without installed addons")
         openTab("Home")
-        XCTAssertTrue(app.staticTexts["For You"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.buttons["Play"].firstMatch.waitForExistence(timeout: 20))
         XCTAssertTrue(app.staticTexts["Popular Movies"].waitForExistence(timeout: 20))
         screenshot("builtin-home")
         openTab("Search")
@@ -67,12 +70,13 @@ final class FlowTests: XCTestCase {
         movie.tap()
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'IMDb '")).firstMatch
             .waitForExistence(timeout: 15))
-        let reviews = app.links["Letterboxd reviews"]
+        let reviewLabel = NSPredicate(format: "label CONTAINS 'Letterboxd'")
+        let reviews = app.links.matching(reviewLabel).firstMatch
         for _ in 0..<5 {
             if reviews.exists && reviews.isHittable { break }
             app.swipeUp()
         }
-        XCTAssertTrue(reviews.exists || app.buttons["Letterboxd reviews"].exists)
+        XCTAssertTrue(reviews.exists || app.buttons.matching(reviewLabel).firstMatch.exists)
         screenshot("builtin-movie-ratings")
     }
 
