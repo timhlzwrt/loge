@@ -1,213 +1,339 @@
+import CoreImage.CIFilterBuiltins
 import LogeCore
 import SwiftUI
 
 struct ConfigurationSyncView: View {
-    @Environment(ConfigurationSyncAccount.self) private var sync
-    @State private var endpoint = ""
-    @State private var username = ""
-    @State private var password = ""
-    @State private var key = ""
-    @State private var showKey = false
-    @State private var showSetupCode = false
-    @State private var setupCode = ""
-    @State private var disconnectError: String?
+    @Environment(AccountSync.self) private var sync
+    @Environment(ConfigurationSyncAccount.self) private var legacy
+    @Environment(PlaybackSession.self) private var playback
+    @State private var connectionCode = ""
+    @State private var recoveryKey = ""
+    @State private var presentedSheet: SyncSheet?
+    @State private var actionError: String?
 
     var body: some View {
         SettingsPage("Sync") {
-            Section {
-                Text("Sync addon setup and app preferences through your own server. Watch progress and history use Trakt separately.")
-                    .foregroundStyle(.secondary)
-            }
             if sync.isConnected {
-                Section("Connection") {
-                    Text(sync.status)
-                    if let date = sync.lastSync {
-                        LabeledContent("Last synced") { Text(date, style: .relative) }
+                Section {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(sync.displayName ?? "Account").font(.title2.weight(.semibold))
+                        Text(sync.status).foregroundStyle(.secondary)
+                        if let date = sync.lastSync {
+                            Text("Last synced \(date, style: .relative) ago")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
                     }
+                    .padding(.vertical, 8)
                     Button("Sync Now") { Task { await sync.sync() } }
                         .disabled(sync.isSyncing || sync.needsChoice)
                 }
                 if sync.needsChoice {
-                    Section("Choose setup") {
-                        Text(sync.lastSync == nil
-                             ? "Choose the setup to start with. Your current settings stay in place until you choose."
-                             : "Choose which version to keep for the conflicting settings. Changes to different settings are combined.")
+                    Section {
+                        Text(sync.choiceSummary)
                             .foregroundStyle(.secondary)
-                        if let local = sync.choiceLocal, let remote = sync.choiceRemote {
-                            ForEach(ConfigurationField.allCases.filter { sync.conflictingFields.contains($0) }, id: \.self) { field in
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(name(for: field)).font(.headline)
-                                    Text("This device: \(value(field, in: local))")
-                                    Text("Server: \(value(field, in: remote))")
-                                        .foregroundStyle(.secondary)
+                        Button("Keep This Device’s Version") { Task { await sync.resolve(useLocal: true) } }
+                        Button("Keep Server Version") { Task { await sync.resolve(useLocal: false) } }
+                    } header: { Text("Review changes") }
+                        .disabled(sync.isSyncing)
+                }
+                Section {
+                    Button { presentedSheet = .device } label: {
+                        Label("Add my device", systemImage: "plus.rectangle.on.rectangle")
+                    }
+                    Button { presentedSheet = .share } label: {
+                        Label("Share setup", systemImage: "person.2")
+                    }
+                    Button("Join shared setup") { presentedSheet = .join }
+                } footer: {
+                    Text("Your devices share playback progress. Other people only receive the setup categories you choose.")
+                }
+                if !sync.sharedGroups.isEmpty {
+                    Section {
+                        ForEach(sync.sharedGroups) { group in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(group.name).font(.headline)
+                                Text(SyncCategory.allCases.filter { group.categories.contains($0) }.map(\.name).joined(separator: ", "))
+                                    .foregroundStyle(.secondary)
+                                Button("Leave shared setup", role: .destructive) {
+                                    Task { await sync.leaveGroup(id: group.id) }
                                 }
+                                .disabled(sync.isSyncing)
                             }
                         }
-                        Button("Use This Device’s Setup") { Task { await sync.resolve(useLocal: true) } }
-                        Button("Use Server Setup") { Task { await sync.resolve(useLocal: false) } }
+                    } header: { Text("Shared setup") } footer: {
+                        Text("Leaving a setup you created stops sharing for everyone. Other setups are removed only from your account.")
                     }
-                    .disabled(sync.isSyncing)
                 }
-                Section {
-                    Button(showSetupCode ? "Hide Setup Code" : "Show Setup Code") { showSetupCode.toggle() }
-                    if showSetupCode, let code = sync.setupCode {
-                        Text(code)
-                            .font(.system(.caption, design: .monospaced))
-                            #if !os(tvOS)
-                            .textSelection(.enabled)
-                            #endif
+                Section("Advanced") {
+                    NavigationLink("Connection & recovery") {
+                        accountDetails
                     }
-                    Button(showKey ? "Hide Recovery Key" : "Show Recovery Key") { showKey.toggle() }
-                    if showKey, let recoveryKey = sync.recoveryKey {
-                        Text(recoveryKey)
-                            .font(.system(.body, design: .monospaced))
-                            #if !os(tvOS)
-                            .textSelection(.enabled)
-                            #endif
-                            .accessibilityLabel("Recovery key: \(recoveryKey)")
-                    }
-                } footer: {
-                    Text("The setup code includes your password and recovery key. Share it only with your own devices, using the Apple TV Remote keyboard if needed. Keep the recovery key safe; your server cannot recover it.")
-                }
-                Section {
-                    Button("Disconnect", role: .destructive) {
-                        do {
-                            try sync.disconnect()
-                            password = ""
-                            key = ""
-                            showKey = false
-                            showSetupCode = false
-                            disconnectError = nil
-                        } catch {
-                            disconnectError = "Couldn’t remove the saved connection from Keychain. Try again."
-                        }
-                    }
-                    .disabled(sync.isSyncing)
-                } footer: {
-                    Text("Disconnecting keeps this device’s addons and preferences.")
                 }
             } else {
-                Section("Connect another device") {
-                    SecureField("Setup code", text: $setupCode)
+                Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Continue on your other devices")
+                            .font(.title2.weight(.semibold))
+                        Text("Keep playback progress, addons and preferences in sync through your own server.")
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 8)
+                }
+                Section {
+                    SecureField("Connection code", text: $connectionCode)
+                        .accessibilityIdentifier("sync.connectionCode")
                         .autocorrectionDisabled()
                         #if !os(macOS)
                         .textInputAutocapitalization(.never)
                         #endif
-                    Button("Use Setup Code") { importSetupCode() }
-                        .disabled(setupCode.isEmpty || sync.isSyncing)
-                }
-                Section("Your server") {
-                    TextField("HTTPS configuration URL", text: $endpoint)
-                        .accessibilityIdentifier("sync.endpoint")
-                        #if !os(macOS)
-                        .keyboardType(.URL)
-                        .textInputAutocapitalization(.never)
-                        #endif
-                    TextField("Username", text: $username)
-                        .accessibilityIdentifier("sync.username")
-                        #if !os(macOS)
-                        .textInputAutocapitalization(.never)
-                        #endif
-                    SecureField("App password", text: $password)
-                        .accessibilityIdentifier("sync.password")
-                }
-                .autocorrectionDisabled()
-                Section {
-                    SecureField("Recovery key", text: $key)
-                        .accessibilityIdentifier("sync.key")
-                        .autocorrectionDisabled()
-                        #if !os(macOS)
-                        .textInputAutocapitalization(.never)
-                        #endif
-                    Button("Generate New Recovery Key") {
-                        key = ConfigurationCipher.generateKey()
-                        showKey = true
-                    }
-                    if showKey, !key.isEmpty {
-                        Text(key)
-                            .font(.system(.body, design: .monospaced))
-                            #if !os(tvOS)
-                            .textSelection(.enabled)
-                            #endif
-                    }
-                } header: {
-                    Text("Encryption")
-                } footer: {
-                    Text("Use the existing recovery key when connecting another device. Generate a new key only for a new setup. Addon credentials are encrypted before they leave this device.")
-                }
-                Section {
-                    Button("Connect") {
-                        disconnectError = nil
-                        showKey = false
+                    Button("Connect account") {
                         Task {
-                            await sync.connect(endpoint: endpoint, username: username, password: password, key: key)
-                            if sync.isConnected { password = ""; key = "" }
+                            if legacy.isConnected {
+                                actionError = "Disconnect the previous sync connection in Advanced before connecting an account. Your local setup will be kept."
+                                return
+                            }
+                            await sync.connect(code: connectionCode, deviceName: currentDeviceName,
+                                               recoveryKey: recoveryKey.isEmpty ? nil : recoveryKey)
+                            if sync.isConnected { connectionCode = ""; recoveryKey = "" }
                         }
                     }
-                    .disabled(sync.isSyncing || endpoint.isEmpty || username.isEmpty || password.isEmpty || key.isEmpty)
-                } footer: {
-                    Text("Optional. No server is selected by default. Requires a compatible CouchDB sync endpoint; see the self-hosting guide in the project README.")
+                    .disabled(connectionCode.isEmpty || sync.isSyncing || playback.current != nil)
+                } header: { Text("Connect account") } footer: {
+                    Text("Use a code from your server administrator or one of your connected devices. On Apple TV, paste it with the Remote keyboard on your phone.")
+                }
+                Section("Advanced") {
+                    NavigationLink("Recover an existing account") {
+                        SettingsPage("Recover account") {
+                            Section {
+                                SecureField("Recovery key", text: $recoveryKey)
+                                    .autocorrectionDisabled()
+                                    #if !os(macOS)
+                                    .textInputAutocapitalization(.never)
+                                    #endif
+                            } footer: {
+                                Text("Enter the original recovery key, then return and connect with your administrator’s code. A code from your connected device already includes the key.")
+                            }
+                        }
+                    }
+                    NavigationLink(legacy.isConnected ? "Previous sync connection · Connected" : "Previous sync connection") {
+                        LegacyConfigurationSyncView()
+                    }
+                    Link("Set up your own server", destination: URL(string: "https://github.com/timhlzwrt/loge/blob/main/docs/CONFIGURATION_SYNC.md")!)
                 }
             }
-            if sync.isSyncing {
-                Section { ProgressView("Syncing…") }
+            if playback.current != nil {
+                Section { Text("Close playback before connecting or disconnecting an account.").foregroundStyle(.secondary) }
             }
-            if let message = disconnectError ?? sync.errorMessage {
+            if sync.isSyncing { Section { ProgressView("Syncing…") } }
+            if let message = actionError ?? sync.errorMessage {
                 Section { Text(message).foregroundStyle(.red) }
             }
         }
-    }
-
-    private func importSetupCode() {
-        struct Setup: Decodable {
-            let endpoint: String
-            let username: String
-            let password: String
-            let key: String
-        }
-        guard setupCode.utf8.count <= 32_768,
-              let data = Data(base64Encoded: setupCode.trimmingCharacters(in: .whitespacesAndNewlines)),
-              let setup = try? JSONDecoder().decode(Setup.self, from: data) else {
-            disconnectError = "That setup code isn’t valid. Copy it again from your connected device."
-            return
-        }
-        endpoint = setup.endpoint
-        username = setup.username
-        password = setup.password
-        key = setup.key
-        setupCode = ""
-        disconnectError = nil
-    }
-
-    private func name(for field: ConfigurationField) -> String {
-        switch field {
-        case .addonURLs: "Addons"
-        case .audioLanguage: "Audio"
-        case .subtitleLanguage: "Subtitles"
-        case .subtitleScale: "Subtitle size"
-        case .maximumSourceGigabytes: "Automatic source limit"
-        case .accent: "Accent"
+        .sheet(item: $presentedSheet) { sheet in
+            NavigationStack {
+                SyncSharingView(mode: sheet)
+            }
+            #if os(macOS)
+            .frame(minWidth: 520, minHeight: 620)
+            #endif
         }
     }
 
-    private func value(_ field: ConfigurationField, in configuration: SyncedConfiguration) -> String {
-        switch field {
-        case .addonURLs:
-            let hosts = configuration.addonURLs.prefix(5).compactMap { URL(string: $0)?.host() }
-            return configuration.addonURLs.isEmpty ? "None" : "\(configuration.addonURLs.count) — \(hosts.joined(separator: ", "))"
-        case .audioLanguage:
-            return configuration.audioLanguage.isEmpty ? "File default" : language(configuration.audioLanguage)
-        case .subtitleLanguage:
-            return configuration.subtitleLanguage.isEmpty ? "Off" : language(configuration.subtitleLanguage)
-        case .subtitleScale:
-            return PlaybackPreferences.subtitleScales.first { $0.scale == configuration.subtitleScale }?.name ?? "Normal"
-        case .maximumSourceGigabytes:
-            return configuration.maximumSourceGigabytes == 0 ? "No limit" : "\(configuration.maximumSourceGigabytes) GB"
-        case .accent: return configuration.accent.capitalized
+    private var accountDetails: some View {
+        SettingsPage("Connection & Recovery") {
+            Section {
+                if let endpoint = sync.endpoint, let host = URL(string: endpoint)?.host() {
+                    LabeledContent("Server", value: host)
+                }
+                LabeledContent("Account", value: sync.displayName ?? "Account")
+                Text("Playback progress belongs to this account. Account switching keeps each person’s local library separate.")
+                    .foregroundStyle(.secondary)
+            }
+            Section("Devices") {
+                ForEach(sync.devices) { device in
+                    LabeledContent(device.name) {
+                        Button("Revoke access", role: .destructive) {
+                            Task { await sync.revokeDevice(id: device.id) }
+                        }
+                    }
+                }
+                Button("Refresh devices") { Task { await sync.refreshDevices() } }
+            }
+            Section {
+                if let key = sync.recoveryKey {
+                    NavigationLink("Recovery key") {
+                        SettingsPage("Recovery key") {
+                            Section {
+                                Text(key).font(.system(.body, design: .monospaced))
+                                    #if !os(tvOS)
+                                    .textSelection(.enabled)
+                                    #endif
+                            }
+                        }
+                    }
+                }
+            } footer: {
+                Text("Keep your recovery key safe. Resetting a server login cannot decrypt data without this key or a connected device.")
+            }
+            Section {
+                Button("Disconnect account", role: .destructive) {
+                    do { try sync.disconnect() }
+                    catch { actionError = "Couldn’t remove this connection from Keychain. Try again." }
+                }
+                .disabled(sync.isSyncing || playback.current != nil)
+            } footer: {
+                Text("Your account library stays saved on this device. Disconnecting returns to the local library you used before connecting.")
+            }
         }
+        .task { await sync.refreshDevices() }
     }
 
-    private func language(_ code: String) -> String {
-        Locale.current.localizedString(forLanguageCode: code) ?? code
+    private var currentDeviceName: String {
+        #if os(macOS)
+        "Mac"
+        #elseif os(tvOS)
+        "Apple TV"
+        #else
+        UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone"
+        #endif
+    }
+}
+
+private enum SyncSheet: String, Identifiable {
+    case device, share, join
+    var id: Self { self }
+    var title: String {
+        #if os(tvOS)
+        switch self {
+        case .device: "Device"
+        case .share: "Share"
+        case .join: "Join"
+        }
+        #else
+        switch self {
+        case .device: "Add my device"
+        case .share: "Share setup"
+        case .join: "Join shared setup"
+        }
+        #endif
+    }
+}
+
+private struct SyncSharingView: View {
+    let mode: SyncSheet
+    @Environment(AccountSync.self) private var sync
+    @Environment(\.dismiss) private var dismiss
+    @State private var categories: Set<SyncCategory> = [.addons]
+    @State private var code = ""
+    @State private var isWorking = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        SettingsPage(mode.title) {
+            if mode == .join {
+                Section {
+                    SecureField("Invitation code", text: $code)
+                        .autocorrectionDisabled()
+                        #if !os(macOS)
+                        .textInputAutocapitalization(.never)
+                        #endif
+                    Button("Join shared setup") {
+                        Task {
+                            isWorking = true
+                            await sync.joinShare(code: code)
+                            isWorking = false
+                            if sync.errorMessage == nil { dismiss() }
+                        }
+                    }
+                    .disabled(code.isEmpty || isWorking)
+                } footer: {
+                    Text("Shared addon and preference changes sync for everyone in the group. Your playback progress stays private.")
+                }
+            } else if code.isEmpty {
+                if mode == .share {
+                    Section {
+                        categoryToggle("Addons", category: .addons)
+                        categoryToggle("Playback preferences", category: .playback)
+                        categoryToggle("Appearance", category: .appearance)
+                    } header: { Text("What to share") } footer: {
+                        Text("Members share future changes to these categories. Playback progress and account access are never included.")
+                    }
+                } else {
+                    Section {
+                        Text("This connects another device to your personal account, including playback progress. Use Share setup when inviting another person.")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Section {
+                    Button("Create connection code", action: createCode)
+                        .disabled(isWorking || (mode == .share && categories.isEmpty))
+                }
+            } else {
+                Section {
+                    SyncCodeImage(code: code)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                    Text(code)
+                        .font(.system(.caption, design: .monospaced))
+                        .accessibilityLabel("Connection code")
+                        #if !os(tvOS)
+                        .textSelection(.enabled)
+                        #endif
+                        #if !os(tvOS)
+                        ShareLink("Share code", item: code)
+                        #endif
+                } footer: {
+                    Text("This code expires and works once. Share it only with the intended person or device.")
+                }
+            }
+            if isWorking { Section { ProgressView("Creating connection…") } }
+            if let errorMessage { Section { Text(errorMessage).foregroundStyle(.red) } }
+        }
+        .toolbar { Button("Done") { dismiss() } }
+    }
+
+    private func categoryToggle(_ title: String, category: SyncCategory) -> some View {
+        Toggle(title, isOn: Binding(get: { categories.contains(category) }, set: { enabled in
+            if enabled { categories.insert(category) } else { categories.remove(category) }
+        }))
+    }
+
+    private func createCode() {
+        isWorking = true
+        errorMessage = nil
+        Task {
+            defer { isWorking = false }
+            do {
+                if mode == .device {
+                    code = try await sync.makeDeviceCode()
+                } else {
+                    code = try await sync.makeShareCode(categories: categories)
+                }
+            } catch {
+                errorMessage = "Couldn’t create a connection code. Check the connection and try again."
+            }
+        }
+    }
+}
+
+private struct SyncCodeImage: View {
+    private let image: CGImage?
+    init(code: String) {
+        let filter = CIFilter.qrCodeGenerator()
+        filter.message = Data(code.utf8)
+        filter.correctionLevel = "M"
+        image = filter.outputImage.flatMap {
+            CIContext().createCGImage($0, from: $0.extent)
+        }
+    }
+    var body: some View {
+        if let image {
+            Image(decorative: image, scale: 1)
+                .resizable().interpolation(.none).scaledToFit()
+                .frame(width: 250, height: 250)
+                .padding(16)
+                .background(.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .accessibilityLabel("Scan this connection code with your other device")
+        }
     }
 }

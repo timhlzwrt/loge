@@ -151,8 +151,18 @@ public final class LibraryStore {
     private static let savedKey = "savedTitles"
     private static let sourcesKey = "lastSources"
     private static let listsKey = "titleLists"
+    private static let activeProfileKey = "libraryActiveProfile"
+    private static let archiveKey = "playbackSyncArchive"
+    private static let removalsKey = "playbackSyncRemovals"
+    private static let titleRemovalsKey = "playbackSyncTitleRemovals"
+    private static let resumeFractionsKey = "playbackSyncResumeFractions"
 
     public private(set) var progress: [String: WatchProgress]
+    public private(set) var activeProfileID: String?
+    @ObservationIgnored private var playbackArchive: [String: WatchProgress]
+    @ObservationIgnored private var playbackRemovals: [String: Date]
+    @ObservationIgnored private var playbackTitleRemovals: [String: Date]
+    @ObservationIgnored private var remoteResumeFractions: [String: Double]
     /// Watch Later, newest first: the one list older builds saved, so it needs no migration.
     public private(set) var saved: [MetaPreview]
     /// The user's own lists, oldest first.
@@ -166,18 +176,68 @@ public final class LibraryStore {
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        progress = Self.decode(defaults.data(forKey: Self.progressKey)) ?? [:]
-        saved = Self.decode(defaults.data(forKey: Self.savedKey)) ?? []
-        lists = Self.decode(defaults.data(forKey: Self.listsKey)) ?? []
-        sources = Self.decode(defaults.data(forKey: Self.sourcesKey)) ?? [:]
+        let profile = defaults.string(forKey: Self.activeProfileKey)
+        activeProfileID = profile
+        progress = Self.decode(defaults.data(forKey: Self.storageKey(Self.progressKey, profile: profile))) ?? [:]
+        saved = Self.decode(defaults.data(forKey: Self.storageKey(Self.savedKey, profile: profile))) ?? []
+        lists = Self.decode(defaults.data(forKey: Self.storageKey(Self.listsKey, profile: profile))) ?? []
+        sources = Self.decode(defaults.data(forKey: Self.storageKey(Self.sourcesKey, profile: profile))) ?? [:]
+        playbackArchive = Self.decode(defaults.data(forKey: Self.storageKey(Self.archiveKey, profile: profile))) ?? [:]
+        playbackRemovals = Self.decode(defaults.data(forKey: Self.storageKey(Self.removalsKey, profile: profile))) ?? [:]
+        playbackTitleRemovals = Self.decode(defaults.data(forKey: Self.storageKey(Self.titleRemovalsKey, profile: profile))) ?? [:]
+        remoteResumeFractions = Self.decode(defaults.data(forKey: Self.storageKey(Self.resumeFractionsKey, profile: profile))) ?? [:]
+    }
+
+    /// Profile-local library data is kept when signing out, rather than copied into another account.
+    public func activateProfile(id: String?) {
+        guard id != activeProfileID else { return }
+        saveProgress()
+        save(saved, forKey: Self.savedKey)
+        save(lists, forKey: Self.listsKey)
+        save(sources, forKey: Self.sourcesKey)
+        activeProfileID = id
+        if let id { defaults.set(id, forKey: Self.activeProfileKey) }
+        else { defaults.removeObject(forKey: Self.activeProfileKey) }
+        progress = Self.decode(data(forKey: Self.progressKey)) ?? [:]
+        saved = Self.decode(data(forKey: Self.savedKey)) ?? []
+        lists = Self.decode(data(forKey: Self.listsKey)) ?? []
+        sources = Self.decode(data(forKey: Self.sourcesKey)) ?? [:]
+        playbackArchive = Self.decode(data(forKey: Self.archiveKey)) ?? [:]
+        playbackRemovals = Self.decode(data(forKey: Self.removalsKey)) ?? [:]
+        playbackTitleRemovals = Self.decode(data(forKey: Self.titleRemovalsKey)) ?? [:]
+        remoteResumeFractions = Self.decode(data(forKey: Self.resumeFractionsKey)) ?? [:]
+        artworkLookedUp = []
+    }
+
+    public var playbackSyncSnapshot: PlaybackSyncSnapshot {
+        PlaybackSyncSnapshot(entries: playbackArchive.merging(progress) { _, current in current },
+                             removals: playbackRemovals, titleRemovals: playbackTitleRemovals)
+    }
+
+    /// Validate everything before replacing progress. Private sources and lists are unaffected.
+    public func applyPlaybackSyncSnapshot(_ snapshot: PlaybackSyncSnapshot) throws {
+        let snapshot = try snapshot.validated()
+        let previous = playbackSyncSnapshot.entries
+        remoteResumeFractions = remoteResumeFractions.filter { snapshot.entries[$0.key]?.isFinished == false }
+        for (id, entry) in snapshot.entries where entry != previous[id] && !entry.isFinished {
+            remoteResumeFractions[id] = entry.fraction
+        }
+        progress = snapshot.entries
+        playbackArchive = [:]
+        playbackRemovals = snapshot.removals
+        playbackTitleRemovals = snapshot.titleRemovals
+        saveProgress()
     }
 
     // MARK: Progress
 
     public func record(_ item: WatchItem, position: Double, duration: Double, at date: Date = .now) {
         guard duration.isFinite, duration > 0, position.isFinite, position >= 0,
-              position >= Self.minimumResumePosition || progress[item.id] != nil else { return }
+              position >= Self.minimumResumePosition || progress[item.id] != nil || playbackArchive[item.id] != nil else { return }
         progress[item.id] = WatchProgress(item: item, position: position, duration: duration, updatedAt: date)
+        playbackArchive[item.id] = nil
+        playbackRemovals[item.id] = nil
+        remoteResumeFractions[item.id] = nil
         saveProgress()
     }
 
@@ -192,19 +252,22 @@ public final class LibraryStore {
         progress[item.id] = WatchProgress(
             item: local?.item ?? item, position: min(max(fraction, 0), 1) * duration, duration: duration,
             updatedAt: date, isEstimated: knownDuration == nil ? true : nil)
+        playbackArchive[item.id] = nil
+        playbackRemovals[item.id] = nil
+        remoteResumeFractions[item.id] = nil
         saveProgress()
     }
 
     /// For progress from another device that hasn't been played here: how far in it is,
     /// so playback can seek once the real duration is known.
     public func estimatedFraction(for id: String) -> Double? {
-        guard let entry = progress[id], entry.isEstimated == true, !entry.isFinished else { return nil }
-        return entry.fraction
+        guard let entry = progress[id] ?? playbackArchive[id], !entry.isFinished else { return nil }
+        return remoteResumeFractions[id] ?? (entry.isEstimated == true ? entry.fraction : nil)
     }
 
     /// Where to start this item, or nil to start from the beginning.
     public func resumePosition(for id: String) -> Double? {
-        guard let entry = progress[id], !entry.isFinished, entry.position >= Self.minimumResumePosition else { return nil }
+        guard let entry = progress[id] ?? playbackArchive[id], !entry.isFinished, entry.position >= Self.minimumResumePosition else { return nil }
         // Back up a little so the viewer can find their place again.
         return max(entry.position - 5, 0)
     }
@@ -230,35 +293,49 @@ public final class LibraryStore {
 
     /// Checks one title's resume state without building and sorting Continue Watching.
     public func isInProgress(metaID: String) -> Bool {
-        guard let latest = progress.values.lazy.filter({ $0.item.metaID == metaID })
-            .max(by: { $0.updatedAt < $1.updatedAt }) else { return false }
+        guard let latest = latestProgress(metaID: metaID) else { return false }
         return !latest.isFinished && latest.position >= Self.minimumResumePosition
     }
 
     /// Marks items watched without playing them, e.g. a whole season the viewer saw elsewhere.
     public func markWatched(_ items: [WatchItem], at date: Date = .now) {
         for item in items {
-            let existing = progress[item.id]
+            let existing = progress[item.id] ?? playbackArchive[item.id]
             let duration = existing?.duration ?? 1
             progress[item.id] = WatchProgress(
                 item: item, position: duration, duration: duration, updatedAt: date,
                 isEstimated: existing == nil ? true : existing?.isEstimated)
+            playbackArchive[item.id] = nil
+            playbackRemovals[item.id] = nil
+            remoteResumeFractions[item.id] = nil
         }
         saveProgress()
     }
 
-    public func markUnwatched(_ ids: [String]) {
-        ids.forEach { progress[$0] = nil }
+    public func markUnwatched(_ ids: [String], at date: Date = .now) {
+        for id in ids {
+            progress[id] = nil
+            playbackArchive[id] = nil
+            playbackRemovals[id] = date
+            remoteResumeFractions[id] = nil
+        }
         saveProgress()
     }
 
     public func isWatched(_ id: String) -> Bool {
-        progress[id]?.isFinished == true
+        (progress[id] ?? playbackArchive[id])?.isFinished == true
     }
 
     /// Hides a title from Continue Watching by forgetting its progress.
-    public func removeFromContinueWatching(metaID: String) {
-        progress = progress.filter { $0.value.item.metaID != metaID }
+    public func removeFromContinueWatching(metaID: String, at date: Date = .now) {
+        let ids = playbackSyncSnapshot.entries.values.filter { $0.item.metaID == metaID }.map(\.item.id)
+        for id in ids {
+            progress[id] = nil
+            playbackArchive[id] = nil
+            playbackRemovals[id] = date
+            remoteResumeFractions[id] = nil
+        }
+        playbackTitleRemovals[metaID] = date
         saveProgress()
     }
 
@@ -266,19 +343,27 @@ public final class LibraryStore {
     /// otherwise the one after it. Nil if nothing has been watched, or the last
     /// episode is done.
     public func upNext(metaID: String, videos: [Video]) -> UpNext? {
-        let latest = progress.values
-            .filter { $0.item.metaID == metaID }
-            .max {
-                if $0.updatedAt != $1.updatedAt { return $0.updatedAt < $1.updatedAt }
-                // A whole season marked watched shares one timestamp; advance from its last episode.
-                return ($0.item.season ?? 0, $0.item.episode ?? 0) < ($1.item.season ?? 0, $1.item.episode ?? 0)
-            }
-        guard let latest else { return nil }
+        guard let latest = latestProgress(metaID: metaID) else { return nil }
         guard latest.isFinished else {
             guard let video = videos.first(where: { $0.id == latest.item.id }) else { return nil }
             return UpNext(video: video, resumeAt: resumePosition(for: video.id))
         }
         return Self.episode(after: latest.item.id, in: videos).map { UpNext(video: $0, resumeAt: nil) }
+    }
+
+    private func latestProgress(metaID: String) -> WatchProgress? {
+        var latest: WatchProgress?
+        for entries in [progress, playbackArchive] {
+            for entry in entries.values where entry.item.metaID == metaID {
+                if let current = latest {
+                    if entry.updatedAt < current.updatedAt { continue }
+                    if entry.updatedAt == current.updatedAt,
+                       (entry.item.season ?? 0, entry.item.episode ?? 0) <= (current.item.season ?? 0, current.item.episode ?? 0) { continue }
+                }
+                latest = entry
+            }
+        }
+        return latest
     }
 
     /// The episode after `id` in viewing order, if there is one.
@@ -419,14 +504,30 @@ public final class LibraryStore {
     private func saveProgress() {
         if progress.count > Self.maximumEntries {
             let oldest = progress.values.sorted { $0.updatedAt < $1.updatedAt }.prefix(progress.count - Self.maximumEntries)
-            oldest.forEach { progress[$0.item.id] = nil }
+            for entry in oldest {
+                if activeProfileID != nil { playbackArchive[entry.item.id] = entry }
+                progress[entry.item.id] = nil
+            }
         }
         save(progress, forKey: Self.progressKey)
+        save(playbackArchive, forKey: Self.archiveKey)
+        save(playbackRemovals, forKey: Self.removalsKey)
+        save(playbackTitleRemovals, forKey: Self.titleRemovalsKey)
+        save(remoteResumeFractions, forKey: Self.resumeFractionsKey)
+    }
+
+    private static func storageKey(_ key: String, profile: String?) -> String {
+        guard let profile else { return key }
+        return "libraryProfile." + Data(profile.utf8).base64EncodedString() + "." + key
+    }
+
+    private func data(forKey key: String) -> Data? {
+        defaults.data(forKey: Self.storageKey(key, profile: activeProfileID))
     }
 
     private func save(_ value: some Encodable, forKey key: String) {
         do {
-            defaults.set(try JSONEncoder().encode(value), forKey: key)
+            defaults.set(try JSONEncoder().encode(value), forKey: Self.storageKey(key, profile: activeProfileID))
         } catch {
             log.error("Couldn't save \(key, privacy: .public): \(error)")
         }

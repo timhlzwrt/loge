@@ -238,6 +238,39 @@ restrictions, concurrent writes, restart and directory backup/restore passed.
 These are independent-store live integration and simulator results, not a physical
 phone-to-Apple-TV sync handoff. Full Proxmox guest restoration was not tested.
 
+
+Next sync expansion requested after the initial release:
+- [x] Carry playback progress, completion and explicit progress removals through the
+  self-hosted service, with offline merge and no competing Trakt import authority.
+- [x] Multiple separate accounts in one database, with private playback per person
+  and opt-in shared addon groups. Database membership alone is not document-level
+  read isolation: put authorization in a gateway and keep CouchDB private.
+- [x] Distinguish adding one's own device from inviting another person. Generate
+  new scoped sharing codes in the app; default to addons only, allow deliberate
+  settings-category sharing, and never include private progress keys in addon invites.
+- [x] Local administration UI for account creation/disablement, invite/device
+  revocation and service state; leave decrypted user data and recovery keys out.
+- [x] Redesign Sync and Settings first: simpler connection flow, visible account
+  and sharing status, shorter copy and restrained rounded grouping. Present the
+  concrete interaction/visual direction before implementing these UI changes.
+
+Implementation verified: multi-account gateway and local administration are deployed
+with legacy /configuration preserved. Account keys and shared-category keys are
+separate; invitations expire after 24 hours and work once. Pending initial imports
+and conflicts survive relaunch; profile changes preserve local libraries and
+restore the previous local addon setup. Trakt is paused while using an account.
+Core: 247-test suite passed (opt-in live tests skipped in the full run); the v2
+live two-account test passed separately using disposable accounts. Gateway: ten
+tests passed. iPhone/iPad connected sharing controls and tvOS remote navigation
+passed; native Mac grouped settings inspected. All three platform builds passed
+with Swift warnings treated as errors (existing AppIntents metadata warning only).
+Expanded directory backup/restore and production restart passed. Actual physical
+iPhone-to-Apple-TV handoff and full Proxmox guest restoration remain unverified.
+Production admin token stayed server-side; unlocked GUI interactions were tested
+with disposable local data after automatic approval review rejected token export.
+Personal enrollment was retained; verification accounts/devices were disabled.
+No commits/pushes have been made for this expansion.
+
 Verification for these tasks: reuse `LibraryStoreTests`, `TraktTests`,
 `UITests/FlowTests.swift`, `UITests/PlaybackRegressionTests.swift`,
 `Tools/test-addon.py` and the existing playback fixtures as appropriate; extend

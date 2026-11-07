@@ -23,6 +23,7 @@ final class PlaybackSession {
     @ObservationIgnored private let library: LibraryStore
     @ObservationIgnored private let addons: AddonStore
     @ObservationIgnored private let trakt: TraktAccount
+    @ObservationIgnored private let accountSync: AccountSync?
     @ObservationIgnored private var episodes: [Video] = []
     @ObservationIgnored private var isLookingUpNext = false
     @ObservationIgnored private var lastRecordedPosition: Double = 0
@@ -44,10 +45,11 @@ final class PlaybackSession {
     @ObservationIgnored private var isInBackground = false
     @ObservationIgnored private var tasks: [Task<Void, Never>] = []
 
-    init(library: LibraryStore, addons: AddonStore, trakt: TraktAccount) {
+    init(library: LibraryStore, addons: AddonStore, trakt: TraktAccount, accountSync: AccountSync? = nil) {
         self.library = library
         self.addons = addons
         self.trakt = trakt
+        self.accountSync = accountSync
     }
 
     func start(_ request: PlaybackRequest, fallbacks: [PlaybackRequest] = []) {
@@ -266,7 +268,7 @@ final class PlaybackSession {
         }
         // Often enough that a crash or force-quit loses little, rarely enough not to churn storage.
         if abs(position - lastRecordedPosition) >= 10 {
-            recordProgress()
+            recordProgress(flushSync: false)
         }
         lookUpNextIfDue()
     }
@@ -349,12 +351,15 @@ final class PlaybackSession {
         ConnectionSpeed.record(speed)
     }
 
-    private func recordProgress() {
+    private func recordProgress(flushSync: Bool = true) {
         // Live streams have no duration, and nothing is known before the file has loaded.
         guard !isOpeningFile, estimatedResumeFraction == nil, let item = current?.item, let player,
               let duration = player.duration, player.position > 0 else { return }
         library.record(item, position: player.position, duration: duration)
         lastRecordedPosition = player.position
+        if flushSync, let accountSync {
+            Task { await accountSync.sync() }
+        }
     }
 
     private func rememberSource() {

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>loge sync administration</title>
+<style>
+[hidden]{display:none!important}
+:root{color-scheme:dark;font:16px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#111214;color:#f5f5f5}body{max-width:980px;margin:36px auto;padding:0 24px 48px}h1{font-size:28px;margin-bottom:8px}h2{font-size:20px;margin:30px 0 14px}p,small{color:#a8aaaf;line-height:1.5}form,.entry{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:14px 0;border-bottom:1px solid #303236}.entry>span{flex:1;min-width:180px}input,button,textarea{font:inherit;border-radius:10px;border:1px solid #414349;padding:11px 14px}input,textarea{background:#202226;color:inherit}button{background:#f2f2f2;color:#17181a;cursor:pointer;min-height:44px}button.secondary{background:transparent;color:inherit}button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid #c4d6ed;outline-offset:3px}textarea{width:100%;box-sizing:border-box;min-height:90px;word-break:break-all}#notice{white-space:pre-wrap;color:#f5b5a8}#codeBox{background:#202226;padding:20px;border-radius:12px;margin:24px 0}#content[hidden],#codeBox[hidden]{display:none}label{display:block}small{display:block;margin-top:5px}
+</style>
+<h1>loge sync</h1>
+<p>Local account and device administration. Encrypted addon settings and playback data cannot be read or recovered here.</p>
+<form id="unlock"><label>Administrator token <input id="token" type="password" autocomplete="off" required></label><button>Unlock</button></form>
+<p id="notice" role="status"></p>
+<section id="codeBox" hidden><h2>New enrollment code</h2><p>Give this code to the account owner. It expires after 24 hours and works once. It connects a device; it does not recover a lost encryption key.</p><textarea id="code" readonly aria-label="Enrollment code"></textarea><button id="hideCode" class="secondary">Hide code</button></section>
+<main id="content" hidden>
+<button id="lock" class="secondary">Lock administration</button>
+<h2>Accounts</h2>
+<form id="create"><label>Display name <input id="name" maxlength="80" autocomplete="off" required></label><button>Create account</button></form>
+<div id="accounts"></div>
+<h2>Devices</h2><p>Revocation takes effect on the next request. A device keeps anything it already downloaded.</p><div id="devices"></div>
+<h2>Pending invitations</h2><div id="invitations"></div>
+<h2>Shared setups</h2><div id="groups"></div>
+</main>
+<script>
+let adminToken='';let names={};
+const $=id=>document.getElementById(id);
+function message(value){$('notice').textContent=value;}
+async function api(path,method='GET',data){const response=await fetch(path,{method,headers:{'X-Admin-Token':adminToken,'Content-Type':'application/json'},body:data?JSON.stringify(data):undefined,credentials:'omit'});const value=await response.json();if(!response.ok)throw Error(value.detail||'Request failed');return value;}
+function button(label,action,secondary=true){const node=document.createElement('button');node.textContent=label;if(secondary)node.className='secondary';node.onclick=async()=>{node.disabled=true;try{message('');await action();await refresh();}catch(error){message(error.message);}finally{node.disabled=false;}};return node;}
+function entry(parent,label,detail,actions){const row=document.createElement('div');row.className='entry';const text=document.createElement('span');text.textContent=label;const small=document.createElement('small');small.textContent=detail;text.append(small);row.append(text,...actions);$(parent).append(row);}
+function showInvitation(invite){$('code').value=invite.setupCode||invite.code;$('codeBox').hidden=false;}
+async function refresh(){const [accounts,access]=await Promise.all([api('/admin/accounts'),api('/admin/access')]);names=Object.fromEntries(accounts.map(account=>[account.id,account.displayName]));for(const id of ['accounts','devices','invitations','groups'])$(id).replaceChildren();for(const account of accounts){entry('accounts',account.displayName,account.enabled?'Enabled':'Disabled',[button('New device code',async()=>showInvitation(await api('/admin/accounts/'+account.id+'/invitation','POST'))),button(account.enabled?'Disable':'Enable',()=>api('/admin/accounts/'+account.id,'PATCH',{enabled:!account.enabled}))]);}for(const device of access.devices.filter(item=>!item.revoked)){entry('devices',device.name,names[device.accountID]||'Unknown account',[button('Revoke',()=>api('/admin/access/'+device.id,'DELETE'))]);}for(const invite of access.invitations.filter(item=>!item.revoked)){entry('invitations',invite.kind==='device'?'Device invitation':'Sharing invitation',(names[invite.accountID]||'Unknown account')+' · '+new Date(invite.expiresAt*1000).toLocaleString(),[button('Revoke',()=>api('/admin/access/'+invite.id,'DELETE'))]);}for(const group of access.groups){entry('groups',group.name,(names[group.ownerID]||'Unknown owner')+' · '+group.categories.join(', ')+' · '+(group.enabled?'Enabled':'Disabled'),[button(group.enabled?'Disable':'Enable',()=>api('/admin/groups/'+group.id,'PATCH',{enabled:!group.enabled}))]);}$('content').hidden=false;}
+$('unlock').onsubmit=async event=>{event.preventDefault();adminToken=$('token').value;$('token').value='';try{await refresh();$('unlock').hidden=true;message('');}catch(error){adminToken='';message(error.message);}};
+$('create').onsubmit=async event=>{event.preventDefault();try{const result=await api('/admin/accounts','POST',{displayName:$('name').value});$('name').value='';showInvitation(result.invitation);await refresh();message('');}catch(error){message(error.message);}};
+$('hideCode').onclick=()=>{$('code').value='';$('codeBox').hidden=true;};
+$('lock').onclick=()=>{adminToken='';$('code').value='';$('codeBox').hidden=true;$('content').hidden=true;$('unlock').hidden=false;message('');$('token').focus();};
+</script>
+</html>

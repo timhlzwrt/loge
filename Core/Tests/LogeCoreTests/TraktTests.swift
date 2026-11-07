@@ -268,6 +268,34 @@ struct TraktAccountTests {
         #expect(library.progress[movie.id]?.position == 600)
     }
 
+    @Test func accountProfileDoesNotImportOrExportTheDevicesTraktAccount() async throws {
+        let (account, library) = account()
+        library.activateProfile(id: "separate-person")
+        await account.pullProgress()
+        account.scrobble(.pause, movie, progress: 50)
+        account.markWatched([movie])
+        await Task.yield()
+        #expect(library.progress.isEmpty)
+        #expect(AccountTraktProtocol.count(id, path: "/sync/playback") == 0)
+        #expect(AccountTraktProtocol.count(id, path: "/scrobble/pause") == 0)
+        #expect(AccountTraktProtocol.count(id, path: "/sync/history") == 0)
+        library.activateProfile(id: nil)
+        #expect(library.progress[movie.id]?.position == 600)
+    }
+
+    @Test func profileSwitchDiscardsAnOutstandingTraktImport() async throws {
+        let (account, library) = account()
+        AccountTraktProtocol.hold(id, path: "/sync/playback")
+        let pull = Task { await account.pullProgress() }
+        try await waitForRequest("/sync/playback")
+        library.activateProfile(id: "separate-person")
+        AccountTraktProtocol.release(id, path: "/sync/playback")
+        await pull.value
+        #expect(library.progress.isEmpty)
+        library.activateProfile(id: nil)
+        #expect(library.progress[movie.id]?.position == 600)
+    }
+
     private func waitForRequest(_ path: String) async throws {
         let deadline = Date.now.addingTimeInterval(5)
         while AccountTraktProtocol.count(id, path: path) == 0, Date.now < deadline {

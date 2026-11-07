@@ -4,6 +4,7 @@ import SwiftUI
 /// Signs this device in to Trakt, which carries watch progress between devices.
 struct TraktSection: View {
     @Environment(TraktAccount.self) private var trakt
+    @Environment(AccountSync.self) private var sync
     @State private var clientID = ""
     @State private var clientSecret = ""
     @State private var signingIn: Task<Void, Never>?
@@ -15,6 +16,7 @@ struct TraktSection: View {
             case .signedIn(let username):
                 LabeledContent("Signed in as", value: username)
                 Button("Sync Now") { Task { await trakt.pullProgress() } }
+                    .disabled(sync.isConnected)
                 Button("Sign Out", role: .destructive) { trakt.signOut() }
             case .awaitingApproval(let code):
                 VStack(alignment: .leading, spacing: 6) {
@@ -52,7 +54,9 @@ struct TraktSection: View {
                     .foregroundStyle(.red)
             }
         } footer: {
-            if trakt.credentials == nil {
+            if sync.isConnected {
+                Text("Your Sync account handles playback progress. Trakt imports and scrobbling are paused to keep accounts separate; its existing connection stays saved on this device.")
+            } else if trakt.credentials == nil {
                 Text("Create an app at trakt.tv/oauth/applications with the redirect URI urn:ietf:wg:oauth:2.0:oob, then enter its keys here.")
             } else {
                 Text("Progress syncs with Trakt, so playback continues where it stopped on another device.")

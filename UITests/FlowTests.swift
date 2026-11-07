@@ -31,17 +31,53 @@ final class FlowTests: XCTestCase {
             throw XCTSkip("Use a simulator without an existing sync connection.")
         }
         sync.tap()
+        let code = app.secureTextFields["sync.connectionCode"]
+        XCTAssertTrue(code.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.textFields["sync.endpoint"].exists, "Server details belong under Advanced")
+        let connect = app.buttons["Connect account"]
+        XCTAssertTrue(connect.waitForExistence(timeout: 5))
+        XCTAssertFalse(connect.isEnabled)
+        screenshot("sync-settings-optional")
+        let previous = app.buttons["Previous sync connection"]
+        XCTAssertTrue(previous.waitForExistence(timeout: 5))
+        previous.tap()
         let endpoint = app.textFields["sync.endpoint"]
         XCTAssertTrue(endpoint.waitForExistence(timeout: 5))
         XCTAssertEqual(endpoint.value as? String, "HTTPS configuration URL", "A personal server must never be prefilled")
         app.swipeUp()
-        let connect = app.buttons["Connect"]
-        XCTAssertTrue(connect.waitForExistence(timeout: 5))
-        XCTAssertFalse(connect.isEnabled)
-        screenshot("sync-settings-optional")
         app.buttons["Generate New Recovery Key"].tap()
-        XCTAssertFalse(connect.isEnabled, "Generating a key must not opt into sync")
-        screenshot("sync-settings-key")
+        XCTAssertFalse(app.buttons["Connect"].isEnabled, "Generating a key must not opt into sync")
+        screenshot("sync-settings-legacy")
+    }
+
+    @MainActor
+    func testAccountSharingKeepsProgressPrivate() throws {
+        guard let path = ProcessInfo.processInfo.environment["SYNC_TEST_CODE_FILE"] else {
+            throw XCTSkip("Set TEST_RUNNER_SYNC_TEST_CODE_FILE to a disposable one-use account code file.")
+        }
+        app.terminate()
+        app.launchArguments = ["--sync-ui-test"]
+        app.launchEnvironment["SYNC_TEST_CODE_FILE"] = path
+        app.launch()
+        let share = app.buttons["Share setup"]
+        XCTAssertTrue(share.waitForExistence(timeout: 30))
+        XCTAssertFalse(app.buttons["Connect account"].exists)
+        screenshot("sync-account-connected")
+        share.tap()
+        let addons = app.switches["Addons"]
+        let playback = app.switches["Playback preferences"]
+        let appearance = app.switches["Appearance"]
+        XCTAssertTrue(addons.waitForExistence(timeout: 5))
+        XCTAssertEqual(addons.value as? String, "1")
+        XCTAssertEqual(playback.value as? String, "0")
+        XCTAssertEqual(appearance.value as? String, "0")
+        XCTAssertFalse(app.switches["Playback progress"].exists)
+        appearance.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        let enabled = expectation(for: NSPredicate(format: "value == '1'"), evaluatedWith: appearance)
+        wait(for: [enabled], timeout: 5)
+        screenshot("sync-sharing-categories")
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.buttons["Add my device"].exists)
     }
 
     @MainActor

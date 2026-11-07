@@ -1,109 +1,117 @@
-# Self-hosted configuration sync
+# Self-hosted sync
 
-Sync is optional and off by default. loge has no default sync server. Each user
-chooses a compatible HTTPS endpoint in **Settings → Sync**. This service carries
-addon setup and app preferences; Trakt separately carries watch progress/history.
+Sync is optional. loge has no default sync server. Your own server can carry
+private playback progress, addon setup and preferences across your devices, with
+separate accounts and deliberately shared setup categories.
 
-## Connect devices
+## Connect an account
 
-1. Deploy the single-user backend below, or obtain its configuration URL and app
-   credentials from the administrator of a compatible instance.
-2. In **Settings → Sync**, enter the full HTTPS configuration URL, username and app
-   password. Select **Generate New Recovery Key** for a new setup, then **Connect**.
-3. Keep the recovery key somewhere safe. The server cannot recover it. On the
-   connected device, **Show Setup Code** includes the connection and key for your
-   other devices. Treat this code like a password; anyone with it can read and
-   change the synchronized setup.
-4. On another device, paste the code into **Setup code**, select **Use Setup Code**,
-   then **Connect**. Apple TV accepts pasted text through the phone's Remote
-   keyboard. You can also enter the same connection and recovery key manually.
-5. If a server setup already exists, choose which initial setup to keep.
+1. Ask your server administrator to create an account in the local management
+   page and give you its connection code.
+2. Open **Settings → Sync**, paste it into **Connection code**, and select
+   **Connect account**. Apple TV accepts pasted codes through the phone's Remote
+   keyboard.
+3. Choose whether to start with this device's local setup/progress or the server
+   version. Nothing is imported into the account before that choice.
+4. For your next device, use **Add my device** on an already connected device.
+   Its new connection code includes the encryption keys needed to access your
+   account. Codes expire after 24 hours and work once.
 
-The encrypted document includes ordered addon manifest URLs, audio/subtitle
-languages, subtitle size, automatic source size limit and accent. Manifest URLs
-can contain addon credentials, so the entire configuration is AES-GCM encrypted
-before uploading. A random 256-bit key and the server credentials are stored in
-each device's Keychain. The server sees ciphertext and revision metadata.
+Your connected devices share exact movie/episode progress, watched state and
+explicit progress removals. Rewatches and backward seeks are preserved; sync does
+not simply choose the furthest position. Changes to different titles merge. When
+both devices change the same title independently, loge asks which version to keep.
+Offline edits remain saved for the next successful sync.
 
-Account tokens, remembered stream URLs, connection speed, search recents, Watch
-Later and custom lists are excluded. Sync runs on launch, foreground, manual
-request and after local settings edits. Offline edits remain on the device and
-are reconciled when sync succeeds. Changes to different settings merge; conflicting
-edits to the same setting require a choice. The ordered addon list is a single
-field, so a removed addon is not silently reinstalled by combining lists.
+Local progress is saved about every ten seconds and on pause, close, end and
+backgrounding. Network checkpoints are throttled; pause/close/background attempt
+an immediate push. Background delivery depends on the operating system, so a
+suspended device may deliver its pending changes the next time it opens.
 
-Changing server requires disconnecting and connecting again. Disconnect keeps
-local addons/preferences and removes this device's saved connection/key. Keep
-another copy of the recovery key before disconnecting your last device.
+While an account is connected, Trakt imports and scrobbling are paused so the
+same device's saved Trakt connection cannot mix another person's watch activity
+into this account. Trakt-only devices keep their existing behavior.
 
-## Deploy a backend
+## Share setup with another person
 
-The included setup uses one CouchDB node and one encrypted document for one user
-or household. It is not an open registration or multi-tenant service. Separate
-users need separate isolated instances or a separately designed authenticated
-routing layer. Arbitrary WebDAV servers are not compatible with this protocol.
+Use **Share setup**, select **Addons**, **Playback preferences**, and/or
+**Appearance**, then create a new code. Addons are selected by default. The other
+person connects their own account first, then selects **Join shared setup**.
 
-Requirements: Linux with Docker Compose, Python 3, a hostname pointing at the
-server, and an HTTPS reverse proxy. Copy the files from
-[Tools/configuration-sync](../Tools/configuration-sync) to `/opt/loge-sync`.
-Run the bootstrap once as root on a fresh directory:
+This creates a live shared setup: subsequent changes to selected categories sync
+for everyone in that group. Only one group can control each category for an
+account. Leaving a joined group stops future sharing with your account; leaving
+a group you created stops it for all its members. The local management page can
+also disable groups and revoke invitations.
 
-```sh
-sudo python3 /opt/loge-sync/bootstrap.py --directory /opt/loge-sync
-```
+Playback progress is always private to the account and is never included in a
+sharing invitation. An addon invitation includes only the separate group's
+access/key, not your account credential or personal progress key.
 
-This starts CouchDB, creates a dedicated non-admin app account, restricts database
-membership and installs a validator that permits only an encrypted configuration
-envelope. Credentials are written to `/opt/loge-sync/secrets/bootstrap.json`,
-readable only by root; retrieve them privately for app setup. Do not use the
-administrator credential in loge. The bootstrap refuses an existing secrets/data
-directory to avoid replacing an installed service's credentials.
+## Privacy, devices and recovery
 
-The sample binds CouchDB only to `127.0.0.1:5984`. Never expose port 5984 publicly.
-Use this route with Caddy running on the same host, replacing `sync.example.com`
-with your hostname. Other reverse proxies must enforce the same restrictions.
+Configurations and progress are AES-GCM encrypted on-device. The database stores
+ciphertext, account/group metadata and hashes of random device/invitation tokens.
+Personal accounts and shared setups use separate encryption keys. Device tokens
+and keys stay in Keychain. Treat connection codes as secrets: share them only
+with the intended recipient.
 
-```caddyfile
-sync.example.com {
-    @configuration {
-        path /configuration
-        method GET HEAD PUT
-    }
-    handle @configuration {
-        request_body {
-            max_size 1MB
-        }
-        rewrite * /loge/configuration?
-        reverse_proxy 127.0.0.1:5984 {
-            header_down Cache-Control "no-store"
-        }
-    }
-    respond 404
-}
-```
+Under **Connection & recovery**, inspect/revoke connected devices and save the
+recovery key. Revocation prevents future requests, but cannot erase data already
+downloaded. An administrator can disable an account or issue a new enrollment
+code, but cannot recover encrypted data without your recovery key or a connected
+device. To recover, enter the original key under **Advanced → Recover an existing
+account**, then return and connect using the administrator's new code.
 
-The trailing `?` deliberately clears query parameters. In particular,
-`new_edits=false` must not bypass revision checks. The app URL is
-`https://sync.example.com/configuration`. Keep administration, `_users`, bulk
-writes, deletion and every other endpoint off the public route. Do not enable
-request-body or credential logging. The app requires HTTPS and rejects redirects.
-For a proxy on another machine, use a private bind address and firewall port 5984
-to that proxy and management host only.
+Disconnecting returns to the previous local library/setup. Each account's local
+Watch Later, custom lists and remembered sources remain separate on that device;
+these are not currently synchronized. Stream URLs, account tokens and connection
+measurements are never included in shared setup payloads.
 
-Back up `/opt/loge-sync/data` and `secrets`, and test restoration. The recovery key
-must be backed up separately by the user; database backups contain ciphertext.
-Keep the pinned image updated deliberately and preserve the data ownership
-(uid/gid 5984). The service runs without Linux capabilities and has a 384 MiB
-memory limit. Resource usage depends on workload.
+## Host the service
 
-## Protocol and failures
+Requirements: Linux, Docker Compose, Python 3 for bootstrap, an HTTPS reverse
+proxy, and a hostname pointing at your server. This uses one private CouchDB
+application database behind an authenticated gateway. The gateway enforces
+account and group ownership; direct CouchDB membership does not isolate users'
+documents.
 
-GET returns the encrypted envelope and CouchDB `_rev`; PUT includes that revision.
-A stale write returns HTTP 409. loge rereads and merges instead of overwriting the
-new revision blindly. A missing document on first connection creates a new setup;
-a document removed after an established sync is reported for explicit recovery.
-Wrong credentials, wrong recovery keys and invalid configurations leave the local
-setup intact. Use **Sync Now** to retry after correcting the server connection.
+1. Copy [Tools/configuration-sync](../Tools/configuration-sync) to
+   `/opt/loge-sync`, then run the fresh-install bootstrap as root:
 
-References: [CouchDB document API](https://docs.couchdb.org/en/stable/api/document/common.html),
+   ```sh
+   sudo python3 /opt/loge-sync/bootstrap.py --directory /opt/loge-sync
+   ```
+
+2. Copy [Tools/sync-gateway](../Tools/sync-gateway) to
+   `/opt/loge-sync/gateway` and follow its installation guide. Set
+   `SYNC_PUBLIC_ENDPOINT` to your HTTPS address ending in `/v2` before creating
+   enrollment codes. Bootstrap preserves the existing legacy document.
+3. Keep CouchDB private. Forward `/v2/*` to the gateway on port 5985 and retain the
+   existing `/configuration` route for older clients. Use the bounded routes in
+   the gateway guide, not a generic public CouchDB proxy.
+4. Keep administration on localhost or behind a management-host firewall and SSH
+   tunnel. Never forward its port 5986 or `/admin` paths through public Caddy.
+5. Open the local management page, unlock it with the server-only administrator
+   token, then create accounts and give each person their own enrollment code.
+
+The management page supports creating/disabling accounts, issuing enrollment
+codes, revoking devices/invitations and disabling shared setups. It cannot show
+or decrypt the user's addons, preferences or playback history.
+
+Back up `/opt/loge-sync/data`, server secrets and configuration. Preserve numeric
+uid/gid 5984 and test restoration. Users must back up their recovery keys
+separately; server backups contain ciphertext. Keep the pinned images updated
+and run a single public gateway worker as documented in its guide.
+
+## Previous single-user connections
+
+The original encrypted `/configuration` endpoint remains supported under
+**Advanced → Previous sync connection**. Disconnect it before connecting an
+account; the local addon setup is kept so you can explicitly import it. This
+legacy connection synchronizes addon URLs and five preferences only, without
+playback or multi-account sharing. Arbitrary WebDAV servers are not compatible.
+
+References: [CouchDB database security](https://docs.couchdb.org/en/stable/api/database/security.html),
+[CouchDB document API](https://docs.couchdb.org/en/stable/api/document/common.html),
 [CouchDB Docker installation](https://docs.couchdb.org/en/stable/install/docker.html).

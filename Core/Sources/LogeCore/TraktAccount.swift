@@ -124,7 +124,7 @@ public final class TraktAccount {
     /// Brings in progress from other devices. Titles not yet in the library are looked up
     /// through the installed addons for their names, artwork and runtime.
     public func pullProgress() async {
-        guard let client else { return }
+        guard library.activeProfileID == nil, let client else { return }
         let connectionID = connectionID
         let entries: [TraktPlayback]
         let historySince = library.progress.values.filter { !$0.isFinished }.map(\.updatedAt).min()
@@ -152,7 +152,7 @@ public final class TraktAccount {
             log.error("Couldn't load playback progress: \(error)")
             return
         }
-        guard self.connectionID == connectionID, !Task.isCancelled else { return }
+        guard library.activeProfileID == nil, self.connectionID == connectionID, !Task.isCancelled else { return }
         var metas: [String: Meta] = [:]
         var attemptedIDs: Set<String> = []
         // A completed play disappears from Trakt's paused playback feed. Merge its
@@ -180,7 +180,7 @@ public final class TraktAccount {
                 .meta(type: type, id: entry.imdbID) {
                 metas[entry.imdbID] = meta
             }
-            guard self.connectionID == connectionID, !Task.isCancelled else { return }
+            guard library.activeProfileID == nil, self.connectionID == connectionID, !Task.isCancelled else { return }
             guard let meta = metas[entry.imdbID], let item = Self.item(for: entry, in: meta) else { continue }
             // Without a runtime, a typical length stands in until the file is played here.
             let minutes = Self.minutes(meta.runtime) ?? (type == "movie" ? 110 : 45)
@@ -192,12 +192,14 @@ public final class TraktAccount {
 
     /// Runs a request in the background; Trakt being unreachable shouldn't disturb playback.
     private func send(_ what: String, _ request: @escaping @Sendable (TraktClient, TraktToken) async throws -> Void) {
-        guard let client, token != nil else { return }
+        guard library.activeProfileID == nil, let client, token != nil else { return }
         let connectionID = connectionID
         Task {
             do {
+                guard library.activeProfileID == nil else { return }
                 let token = try await validToken()
                 try checkConnection(connectionID)
+                guard library.activeProfileID == nil else { return }
                 try await request(client, token)
             } catch is CancellationError {
                 return
