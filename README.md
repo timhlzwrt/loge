@@ -71,7 +71,7 @@ binary dependencies and what has—and has not—been tested on OS 26.
 
 Hardware-sensitive features are implemented, not a promise of every codec,
 display or output combination. See [limitations](#know-the-limits) and the
-[hardware verification backlog](ROADMAP.md#next-verification-first).
+[testing scope](ROADMAP.md#a-note-from-the-maintainer).
 
 ### Continue on your other devices
 
@@ -144,8 +144,18 @@ with iPhone title details.
   not recommendations inferred from your history. Letterboxd links/lists do not
   mean Letterboxd ratings or account sync are integrated.
 
-The [roadmap](ROADMAP.md) separates shipped work, validation gaps and deferred
-ideas. Report reproducible problems through the
+### Testing scope
+
+**A note from the maintainer:** I don't have the time to carry out real-device testing,
+so it isn't planned or required for releases. Testing focuses on iPhone, iPad and
+Apple TV simulators, alongside automated tests and Mac builds.
+
+Simulator results aren't hardware certification: HDR output, HDMI display matching,
+physical Siri Remote gestures and actual screen-lock recovery remain unverified by
+this testing process. They aren't pending roadmap tasks.
+
+The [roadmap](ROADMAP.md) separates shipped work, simulator coverage and proposed
+features. Report reproducible problems through the
 [issue forms](https://github.com/timhlzwrt/loge/issues/new/choose)—never include
 configured addon URLs, stream credentials, connection codes or recovery keys.
 

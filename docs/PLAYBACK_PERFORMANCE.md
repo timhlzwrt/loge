@@ -144,7 +144,8 @@ Screenshots are under `/tmp/loge-discovery-shots`, `/tmp/loge-rebuilt-player`,
 bundles remain under `.build/*/Logs/Test`. Xcode's existing AppIntents metadata
 notice remains; the native dependency build also reports an existing deprecated
 Core Video attachment API. Hardware 4K frame pacing, HDR and HDMI refresh
-matching still need real-device verification.
+matching aren't verified by these simulator checks. Real-device testing isn't planned
+because of maintainer time constraints; see the [testing scope](../ROADMAP.md#a-note-from-the-maintainer).
 
 ## Picture in Picture skipping
 

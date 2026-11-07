@@ -27,53 +27,98 @@ release dates. This roadmap reflects the source as of **7 November 2026**.
   drag-to-Applications installer and signed Sparkle updates.
 
 “Shipped” means implemented in the code, not validated on every hardware or
-provider combination. The current gaps are below.
+provider combination.
+
+## A note from the maintainer
+
+I don't have the time to carry out real-device testing, so it won't be part of the
+planned work or a release requirement. Testing focuses on iPhone, iPad and Apple TV
+simulators, plus automated tests and Mac builds. Hardware-testing tasks are not on
+this roadmap.
+
+That doesn't make simulator checks equivalent to hardware checks. Actual HDR output,
+HDMI frame-rate/dynamic-range switching, physical Siri Remote gestures and screen-lock
+recovery aren't established by simulator results. These limitations stay documented
+rather than becoming promises to test them later. macOS has no simulator; a Mac build
+alone doesn't verify playback or Picture in Picture at runtime.
 
 ## Next: verification first
 
-### 1. Confirm the supported OS floor
+- [ ] Extend the existing local playback fixture for pause, relaunch, resume,
+  source replacement, subtitle/audio changes and background/foreground recovery.
+  Exercise Picture in Picture only where the simulator supports it; record
+  unsupported cases as skipped, not passed.
+- [ ] Test independent account stores for offline changes, reconnect, conflicting
+  progress, explicit removals and sign-out. Exercise account connection and sharing
+  UI in simulators. Use controlled fixtures for Trakt responses; no physical
+  phone-to-TV handoff or live-provider check is a release prerequisite.
+- [ ] Cover fresh installs, browse-to-play and returning from playback on iPhone
+  and iPad, including landscape. Use the existing tvOS remote driver for button-based
+  focus/navigation checks, retaining screenshots. Don't treat those checks as
+  physical swipe or frame-pacing measurements.
+- [ ] Run the existing Core tests and warning-as-error builds for all three
+  platforms. Smoke-test supported OS simulator versions when their runtimes are
+  available, and report exactly which runtimes ran. A deployment target or successful
+  compilation isn't proof of runtime compatibility.
+- [ ] Check packaged Release builds and update feeds advertise the same minimums
+  as the app and LogeCore.
 
-- [ ] Launch the corrected **OS 26** builds on iPhone/iPad, Apple TV and Mac.
-- [ ] Exercise browse → details → sources → playback, pause/resume, relaunch
-  and settings on those minimum versions.
-- [ ] Check the packaged Release builds and update feeds advertise the same
-  minimums as the app and LogeCore.
+Reuse `UITests/PlaybackRegressionTests.swift`, `UITests/FlowTests.swift`,
+`UITests/DiscoveryTVTests.swift`, `UITests/RemoteDriverTests.swift` and the Core test
+suites instead of creating another test harness. See the
+[verification workflow](docs/APP_OVERVIEW.md#verification-workflow).
 
-OS 26 API-availability builds already pass on all targets. That is a build
-check, not a substitute for minimum-version runtime testing.
+## Features worth exploring
 
-### 2. Close the hardware playback gaps
+These are proposals, not promised releases. Agree on scope and interaction design
+before implementation.
 
-- [ ] Apple TV: confirm Siri Remote swipe-to-scrub, thumbnail behavior,
-  focus while skipping, and the Home scrolling changes on a physical device.
-- [ ] Apple TV: check HDR/dynamic-range and frame-rate matching with an
-  appropriate television, source and display settings.
-- [ ] Mac: exercise full playback, Picture in Picture and long addon source
-  names—not just browsing and settings.
-- [ ] Record PiP, AirPlay and HDR results by device/output combination.
-  Simulator checks alone cannot validate these.
+### 1. Sync Watch Later and custom lists
 
-iPhone hardware playback and PiP regression checks have passed previously;
-that does not establish Apple TV or Mac parity.
+Playback progress and setup already sync through the optional self-hosted account;
+Watch Later and custom lists should be considered separately. Carry list membership,
+names and deliberate removals between a person's devices, with defined offline-merge
+rules. Keep these lists private to the account, not part of addon-sharing invitations.
+This would expand sync scope and needs agreement before implementation.
 
-### 3. Validate real cross-device handoff
+**Test target:** independent stores converge after concurrent additions, renames and
+removals; reconnect doesn't resurrect deleted entries; another account can't read them.
 
-- [ ] Complete physical iPhone ↔ Apple TV handoff in both directions using
-  the same self-hosted account, including episode and position accuracy.
-- [ ] Repeat Trakt-only handoff with the live API, including reconnect,
-  sign-out and newer local progress versus remote progress.
-- [ ] Test interruption/offline recovery without losing rewatches,
-  backward seeks, completions or explicit progress removals.
+### 2. Search installed addons
 
-Independent-store tests and disposable-account live sync checks exist. They
-do not replace a physical two-device playback session.
+Search currently uses the built-in movie and series feeds. Offer opt-in search of
+installed catalogs that advertise search support, preserving addon order and showing
+results as each provider responds. A slow or failing addon must not block other results.
+Keep built-in search as the default to avoid sending every query to every provider.
+
+**Test target:** fixture addons cover partial failure, delayed responses, duplicate
+titles and changing the query before earlier responses finish.
+
+### 3. Narrow sources by audio, HDR and codec
+
+Build on the existing source details, sorting and bitrate limit: let users narrow a
+long list by reported audio language, dynamic range or codec. Keep unknown metadata
+visible unless explicitly excluded, and provide a clear reset when no sources match.
+These are metadata filters, not guarantees about what a device can decode or display.
+
+**Test target:** deterministic source fixtures cover mixed and missing metadata, empty
+results, filter reset and tvOS focus after the list changes.
+
+### 4. Arrange Home shelves
+
+Let people hide shelves they don't use and reorder the rest, without changing the
+artwork-led layout. Start with local preferences and a reset to the default order;
+sharing or syncing that layout would be a separate decision.
+
+**Test target:** simulator flows cover persistence after relaunch, default restoration,
+hidden/empty shelves and predictable Apple TV focus after reordering.
 
 ## On hold
 
 **Apple TV Top Shelf.** An earlier extension could be signed and installed
-through the sideloading setup, but tvOS did not launch it. Investigate the
-physical device's system logs before building more extension code. There is
-no Top Shelf support in the shipped app.
+through the sideloading setup, but tvOS did not launch it. Further investigation
+depends on physical device logs and behavior, so it isn't planned. There is no
+Top Shelf support in the shipped app.
 
 **More scrolling/image-cache work.** Profile image decoding and long catalog
 scrolls first. Keep measured regressions separate from speculative rewrites.
