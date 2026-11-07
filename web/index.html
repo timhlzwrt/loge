@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>loge · Stremio addons, native playback</title>
+    <meta name="description" content="loge is a free, open-source Stremio addon client for iPhone, iPad, Apple TV and Mac, written in SwiftUI and playing with mpv.">
+    <link rel="canonical" href="https://loge.tjh.li/">
+    <link rel="icon" href="/icon.png" type="image/png">
+    <link rel="apple-touch-icon" href="/icon.png">
+    <link rel="preload" href="/fonts/mona-sans.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/style.css">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="loge">
+    <meta property="og:description" content="A Stremio addon client for iPhone, iPad, Apple TV and Mac. Browse films and series, choose your source, play with mpv.">
+    <meta property="og:url" content="https://loge.tjh.li/">
+    <meta property="og:image" content="https://loge.tjh.li/images/overview.jpg">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="theme-color" content="#f2f4f9" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0a0d13" media="(prefers-color-scheme: dark)">
+  </head>
+
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <main id="main" class="page">
+      <section class="hero">
+        <h1 class="hero-name">loge</h1>
+        <p class="hero-line">
+          <strong>A Stremio addon client for iPhone, iPad, Apple TV and Mac.</strong>
+          <span>Browse films and series, choose your source, play with mpv.</span>
+        </p>
+        <div class="hero-actions">
+          <a class="button" href="https://github.com/timhlzwrt/loge/releases/latest">Download</a>
+          <a class="link" href="#install">How to install</a>
+          <a class="link" href="https://github.com/timhlzwrt/loge">Source on GitHub <span aria-hidden="true">↗</span></a>
+        </div>
+        <p class="label hero-meta">Free · GPL-3.0 · Pre-1.0 · Not in the App Store</p>
+      </section>
+
+      <figure class="shot shot-wide">
+        <img src="/images/overview.jpg" width="1600" height="890"
+          alt="loge on Mac and iPhone: film discovery, festival collections and title details">
+      </figure>
+
+      <div class="panes">
+        <section id="features" class="pane pane-features" aria-labelledby="features-heading">
+          <h2 id="features-heading">What it does</h2>
+          <p class="lead">
+            Your addons provide the streams. Cinemeta supplies the built-in catalogs, search
+            and IMDb ratings; add a playback addon to watch. loge does not host, bundle or sell
+            content.
+          </p>
+          <dl class="rows">
+            <div>
+              <dt class="label">Browse</dt>
+              <dd>An artwork-led Home with popular films and series, Letterboxd lists, genres,
+                festival winners and directors. Title pages with seasons, Up Next, cast and crew.</dd>
+            </div>
+            <div>
+              <dt class="label">Sources</dt>
+              <dd>Streams from every installed addon, read into resolution, HDR, codec, audio and
+                size. loge remembers what you picked and falls back to another source when one fails.</dd>
+            </div>
+            <div>
+              <dt class="label">Playback</dt>
+              <dd>mpv with hardware decoding, subtitles from files and subtitle addons, intro and
+                credits skips, Picture in Picture, and frame-rate matching on Apple TV.</dd>
+            </div>
+            <div>
+              <dt class="label">Library</dt>
+              <dd>Continue Watching, Watch Later, your own lists and a history by day. With a TMDB
+                token, More Like This and a Recommended row ranked on your device.</dd>
+            </div>
+            <div>
+              <dt class="label">Sync</dt>
+              <dd>Progress, watched state, addons and preferences between your devices, encrypted
+                on the device, through <a class="link" href="https://github.com/timhlzwrt/loge/blob/main/docs/SYNC.md">a service you host yourself</a>.
+                Trakt works as an alternative.</dd>
+            </div>
+          </dl>
+        </section>
+
+        <figure class="shot shot-phones">
+          <img src="/images/iphone-home.jpg" width="462" height="1000" loading="lazy"
+            alt="iPhone Home with a featured film and popular movie posters">
+          <img src="/images/iphone-details.jpg" width="462" height="1004" loading="lazy"
+            alt="iPhone title details with artwork, rating, playback and library actions">
+        </figure>
+
+        <section id="install" class="pane pane-install" aria-labelledby="install-heading">
+          <h2 id="install-heading">Install</h2>
+          <p class="lead">
+            Builds come from <a class="link" href="https://github.com/timhlzwrt/loge/releases">GitHub Releases</a>,
+            one for every change to main. A free Apple ID can sign the iPhone and Apple TV builds;
+            those signatures last seven days and need refreshing.
+          </p>
+          <dl class="rows">
+            <div>
+              <dt class="label">iPhone, iPad</dt>
+              <dd>Sign <code>loge-iOS.ipa</code> with a sideloading tool such as
+                <a class="link" href="https://github.com/nab138/iloader">iloader</a>, or add the
+                SideStore source below to get new builds as updates.</dd>
+            </div>
+            <div>
+              <dt class="label">Apple TV</dt>
+              <dd>Install <code>loge-tvOS.ipa</code> with
+                <a class="link" href="https://github.com/bitxeno/atvloadly">atvloadly</a> or
+                <a class="link" href="https://sideloadly.io">Sideloadly</a>.</dd>
+            </div>
+            <div>
+              <dt class="label">Mac</dt>
+              <dd>Open <code>loge-macOS.dmg</code> and drag loge into Applications. It is not
+                notarized, so the first launch needs <em>Open Anyway</em> in Privacy &amp; Security.
+                Later updates arrive in the app. Apple silicon only.</dd>
+            </div>
+            <div>
+              <dt class="label">SideStore</dt>
+              <dd><code class="source">https://tjh.li/loge/source.json</code></dd>
+            </div>
+          </dl>
+          <p class="note">
+            First run: open <strong>Settings → Addons</strong>, add your provider’s
+            <code>manifest.json</code> URL, open a title and choose <strong>Sources</strong>.
+            <a class="link" href="https://github.com/timhlzwrt/loge/blob/main/docs/INSTALLATION.md">Full guide and troubleshooting ↗</a>
+          </p>
+        </section>
+
+        <figure class="shot shot-ipad">
+          <img src="/images/ipad-details.jpg" width="1210" height="834" loading="lazy"
+            alt="iPad landscape layout: sidebar navigation and film details">
+        </figure>
+
+        <section id="limits" class="pane pane-limits" aria-labelledby="limits-heading">
+          <h2 id="limits-heading">Know the limits</h2>
+          <ul class="limits">
+            <li><strong>Direct HTTP(S) streams only.</strong> No torrents or magnet links; an addon
+              has to turn those into a playable URL.</li>
+            <li><strong>No downloads.</strong> loge streams, it does not keep files offline.</li>
+            <li><strong>No subtitles in Picture in Picture.</strong></li>
+            <li><strong>Tested in simulators.</strong> HDR output, display matching and Siri Remote
+              gestures have not been checked on hardware.</li>
+            <li><strong>English interface only.</strong> Audio and subtitle languages are set separately.</li>
+          </ul>
+        </section>
+      </div>
+
+      <footer class="pane footer">
+        <p>
+          loge is free software under the
+          <a class="link" href="https://github.com/timhlzwrt/loge/blob/main/LICENSE">GPL-3.0</a>.
+          Playback uses <a class="link" href="https://mpv.io">mpv</a> and
+          <a class="link" href="https://ffmpeg.org">FFmpeg</a> through
+          <a class="link" href="https://github.com/mpvkit/MPVKit">MPVKit</a>.
+          It is an independent project, not an official Stremio application, and uses the TMDB
+          API without being endorsed or certified by TMDB.
+        </p>
+        <p class="footer-by">
+          Made by <a class="link" href="https://tjh.li">Tim Holzwarth</a> ·
+          <a class="link" href="https://github.com/timhlzwrt/loge/issues/new/choose">Report a problem</a>
+        </p>
+      </footer>
+    </main>
+
+    <nav class="bar" aria-label="Sections">
+      <a class="bar-home" href="#main">
+        <svg width="14" height="20" viewBox="0 0 14 20" aria-hidden="true">
+          <path d="M3 2v11a5 5 0 0 0 5 5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+        </svg>
+        loge
+      </a>
+      <div class="bar-links">
+        <a href="#features">Features</a>
+        <a href="#install">Install</a>
+        <a href="#limits">Limits</a>
+      </div>
+      <a class="bar-end" href="https://github.com/timhlzwrt/loge">GitHub</a>
+    </nav>
+  </body>
+</html>
