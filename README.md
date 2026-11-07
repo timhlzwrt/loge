@@ -91,7 +91,10 @@ Needs macOS 27 on Apple silicon.
 3. Open **System Settings → Privacy & Security**, scroll to the message about loge and click
    **Open Anyway**, then confirm with your password.
 
-That's needed once per download. For updates, download the newest `.dmg` and replace the app.
+That's needed for the first installation. Subsequent builds can be downloaded and installed
+from **loge → Check for Updates…** or **Settings → About**. Enable automatic checks there
+to be notified of new builds. Updates and their feed are signed and verified before installation.
+If you're using a build without the updater, install the newest `.dmg` once to get it.
 
 ### Which build do I have?
 
@@ -198,6 +201,9 @@ Mac `.dmg` to `.build/dmg`, and
 `Tools/test-addon.py` serves a local addon with test streams at
 `http://127.0.0.1:8765/manifest.json`.
 
+Mac packaging installs a pinned `dmgbuild` into `.build/dmg-tools` for the Finder layout.
+[Mac update publishing](docs/MAC_UPDATES.md) covers Sparkle signing and the release feed.
+
 | Path             | What's in it                                                        |
 | ---------------- | ------------------------------------------------------------------- |
 | `Core/`          | `LogeCore` package: addon client, routing, addon and library stores |
@@ -213,6 +219,9 @@ Mac `.dmg` to `.build/dmg`, and
 ## Licence
 
 loge is licensed under the [GNU General Public License v3.0](LICENSE).
+
+Mac software updates use [Sparkle](https://sparkle-project.org), under its
+[included licence and third-party notices](Vendor/Sparkle-LICENSE.txt).
 
 Playback uses [mpv](https://mpv.io) and [FFmpeg](https://ffmpeg.org) through
 [MPVKit](https://github.com/mpvkit/MPVKit)'s LGPL build (1.1.0-n9.0.2, mpv 0.41.0), under

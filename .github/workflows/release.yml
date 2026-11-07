@@ -30,6 +30,11 @@ jobs:
         with:
           # The build number is the commit count, and release notes go back to the last build.
           fetch-depth: 0
+      - name: Check Mac update signing is configured
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          test -n "$SPARKLE_PRIVATE_KEY" || { echo 'Set the SPARKLE_PRIVATE_KEY repository secret before releasing.' >&2; exit 1; }
       - run: brew install xcodegen
       - uses: actions/cache@v4
         with:
@@ -41,6 +46,7 @@ jobs:
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
           plist=.build/xcode/Build/Products/Release-iphoneos/loge.app/Info.plist
           version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$plist")
@@ -51,8 +57,12 @@ jobs:
             --jq "[.[] | select(.tagName != \"build-$build\")][0].tagName // empty")
           range=${previous:+$previous..}HEAD
           git log --no-merges --format='- %s' -n 20 "$range" > notes.md
+          Tools/prepare-mac-update.sh "build-$build" notes.md
           Tools/publish-release.sh "build-$build" "$version ($build)" "$GITHUB_SHA" notes.md \
-            .build/ipa/loge-iOS.ipa .build/ipa/loge-tvOS.ipa .build/dmg/loge-macOS.dmg
+            .build/ipa/loge-iOS.ipa .build/ipa/loge-tvOS.ipa .build/dmg/loge-macOS.dmg .build/mac-update/appcast.xml
+          # Use immutable published bytes; rerunning an older release must not roll back the feed.
+          mkdir -p site
+          gh release download --pattern appcast.xml --dir site --clobber
 
       - name: Write the SideStore source
         env:

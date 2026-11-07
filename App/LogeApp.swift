@@ -6,6 +6,9 @@ struct LogeApp: App {
     #if os(iOS)
     @UIApplicationDelegateAdaptor private var appDelegate: AppDelegate
     #endif
+    #if os(macOS)
+    @StateObject private var appUpdater: AppUpdater
+    #endif
     @State private var addonStore: AddonStore
     @State private var library: LibraryStore
     @State private var trakt: TraktAccount
@@ -52,6 +55,9 @@ struct LogeApp: App {
         let playback = PlaybackSession(library: library, addons: addonStore, trakt: trakt, accountSync: accountSync)
         accountSync.beforeProfileChange = { [weak playback] in playback?.end() }
         _playback = State(initialValue: playback)
+        #if os(macOS)
+        _appUpdater = StateObject(wrappedValue: AppUpdater(beforeRelaunch: { [weak playback] in playback?.end() }))
+        #endif
 
         // Artwork is fetched through the shared session; the default cache is too
         // small to keep a screen of posters, so scrolling back re-downloads them.
@@ -64,6 +70,7 @@ struct LogeApp: App {
                 #if os(macOS)
                 // Also corrects a too-small frame the system restored from an earlier launch.
                 .frame(minWidth: 900, minHeight: 600)
+                .environmentObject(appUpdater)
                 #endif
                 .environment(addonStore)
                 .environment(library)
@@ -112,7 +119,13 @@ struct LogeApp: App {
         #if os(macOS)
         // Room for the hero and a couple of rows; the system remembers any size the user picks.
         .defaultSize(width: 1280, height: 820)
-        .commands { PlaybackCommands(playback: playback) }
+        .commands {
+            PlaybackCommands(playback: playback)
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…", action: appUpdater.checkForUpdates)
+                    .disabled(!appUpdater.canCheckForUpdates)
+            }
+        }
         #endif
         #if os(macOS)
         // A window of its own, so playback can go full screen and sit beside the browser.

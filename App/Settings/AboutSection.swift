@@ -3,10 +3,18 @@ import SwiftUI
 
 struct AboutSection: View {
     private let build = BuildInfo()
+    #if os(macOS)
+    @EnvironmentObject private var appUpdater: AppUpdater
+    #endif
 
     var body: some View {
         Section("About") {
             LabeledContent("Version", value: version)
+            #if os(macOS)
+            Button("Check for Updates…", action: appUpdater.checkForUpdates)
+                .disabled(!appUpdater.canCheckForUpdates)
+            Toggle("Automatically check for updates", isOn: $appUpdater.automaticallyChecksForUpdates)
+            #endif
             if let commit = build.commit {
                 LabeledContent("Build", value: build.summary)
                 if let branch = build.branch {
