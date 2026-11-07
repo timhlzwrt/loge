@@ -68,6 +68,7 @@ struct MetaDetailView: View {
                     }
                     ReviewsSection(preview: preview)
                     InformationSection(meta: meta, details: tmdbDetails)
+                    MoreLikeThisRow(titles: tmdbDetails?.recommendations ?? [])
                 } else if case .failed(let message) = state {
                     HStack {
                         Text(message)

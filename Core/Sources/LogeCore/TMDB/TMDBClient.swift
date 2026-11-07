@@ -27,6 +27,9 @@ public struct TMDBDetails: Sendable, Equatable {
     public var voteCount: Int?
     public var budget: Int?
     public var revenue: Int?
+    public var tmdbID: Int?
+    /// TMDB's "recommendations", or its "similar" titles when it has none, in TMDB's order.
+    public var recommendations: [TMDBCreditTitle]
 
     public init(overview: String? = nil, posterURL: String? = nil, backgroundURL: String? = nil,
                 releaseInfo: String? = nil, runtime: String? = nil, genres: [String]? = nil,
@@ -34,7 +37,8 @@ public struct TMDBDetails: Sendable, Equatable {
                 status: String? = nil, originalLanguage: String? = nil, countries: [String]? = nil,
                 studios: [String]? = nil, releaseDate: String? = nil, lastAirDate: String? = nil,
                 seasonCount: Int? = nil, episodeCount: Int? = nil, rating: Double? = nil,
-                voteCount: Int? = nil, budget: Int? = nil, revenue: Int? = nil) {
+                voteCount: Int? = nil, budget: Int? = nil, revenue: Int? = nil,
+                tmdbID: Int? = nil, recommendations: [TMDBCreditTitle] = []) {
         self.overview = overview
         self.posterURL = posterURL
         self.backgroundURL = backgroundURL
@@ -56,6 +60,8 @@ public struct TMDBDetails: Sendable, Equatable {
         self.voteCount = voteCount
         self.budget = budget
         self.revenue = revenue
+        self.tmdbID = tmdbID
+        self.recommendations = recommendations
     }
 }
 
@@ -105,7 +111,7 @@ public enum TMDBCreditRole: String, CaseIterable, Sendable {
     case otherCrew = "Other crew"
 }
 
-/// A filmography entry retains its TMDB identity until an IMDb ID is explicitly resolved.
+/// A filmography entry or recommendation retains its TMDB identity until an IMDb ID is explicitly resolved.
 public struct TMDBCreditTitle: Sendable, Hashable, Identifiable {
     public var tmdbID: Int
     public var type: String
@@ -161,7 +167,7 @@ public struct TMDBClient: Sendable {
         guard let id = match?.id, id > 0 else { throw TMDBError.notFound }
         let resource = type == MediaType.movie ? "movie" : "tv"
         let response: DetailsResponse = try await fetch("\(resource)/\(id)", query: [
-            .init(name: "append_to_response", value: "credits"),
+            .init(name: "append_to_response", value: "credits,recommendations,similar"),
         ])
         guard response.id == id else { throw TMDBError.invalidResponse }
         return response.details(isMovie: type == MediaType.movie)

@@ -83,7 +83,8 @@ scrolls first. Keep measured regressions separate from speculative rewrites.
 - Offline downloads, a torrent engine or built-in content hosting.
 - A default hosted sync backend or iCloud sync.
 - Promised App Store distribution, notarization or Intel Mac support.
-- A personalized recommendation engine or Letterboxd account/rating integration.
+- A server-side recommendation engine (recommendations are ranked on the device
+  from TMDB's suggestions) or Letterboxd account/rating integration.
 - Interface localization is not scheduled; the UI is currently English.
 
 Watch Later/custom-list sync is **not implemented**. Any expansion of the

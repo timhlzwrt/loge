@@ -46,6 +46,9 @@ binary dependencies and what has—and has not—been tested on OS 26.
 - **People and festivals:** TMDB-backed portraits and filmographies, role
   filters, member reviews, and dated festival editions with award filters.
   TMDB features require your own read access token.
+- **Recommendations:** with a TMDB token, "More Like This" on titles and a Recommended row on
+  Home built from what you watched and saved. TMDB supplies the suggestions and
+  the ranking happens on your device; TMDB sees only the title lookups.
 - **Your library:** Continue Watching, Watch Later, custom lists and history
   grouped by day. Search includes recent queries.
 

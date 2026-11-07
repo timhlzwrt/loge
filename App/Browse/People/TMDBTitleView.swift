@@ -49,7 +49,8 @@ struct TMDBTitleView: View {
             }
         }
         .background(Color.canvas)
-        .navigationTitle(title.name)
+        // The resolved page names the title in its own hero, like any other details page.
+        .navigationTitle(isResolved ? "" : title.name)
         .task(id: LoadKey(revision: tmdb.revision, attempt: attempt)) {
             state = .loading
             do {
@@ -117,6 +118,10 @@ struct TMDBTitleView: View {
             .padding(.vertical, 32)
         }
         .accessibilityIdentifier("title-metadata")
+    }
+
+    private var isResolved: Bool {
+        if case .loaded = state { true } else { false }
     }
 
     private var profileURL: URL {

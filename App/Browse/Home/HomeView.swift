@@ -15,6 +15,7 @@ struct HomeView: View {
                 FeaturedCarousel(movies: sources[0], series: sources[1])
                 ContinueWatchingRow()
                 MyListRow()
+                RecommendedRow()
                 // Genres follow the popular shelves, ahead of the narrower ones.
                 ForEach(sources.prefix(3)) { CatalogRow(source: $0) }
                 GenreRow()

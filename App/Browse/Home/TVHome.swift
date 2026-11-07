@@ -39,6 +39,7 @@ struct TVHome: View {
                         VStack(alignment: .leading, spacing: 24) {
                             ContinueWatchingRow(onFocus: focus.show)
                             MyListRow(onFocus: focus.show)
+                            RecommendedRow(onFocus: focus.show)
                             ForEach(sources.prefix(3)) { source in
                                 CatalogRow(source: source, isPrimary: source == sources.first, onFocus: focus.show)
                             }

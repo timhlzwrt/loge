@@ -10,6 +10,10 @@ struct TMDBCreditTile: View {
             Artwork(url: title.posterURL)
                 .aspectRatio(2 / 3, contentMode: .fit)
                 .clipShape(.rect(cornerRadius: Metrics.posterRadius))
+                #if os(tvOS)
+                // Only the poster lifts; a card around the text clipped its first letters.
+                .hoverEffect(.highlight)
+                #endif
             Text(title.name).font(.cardTitle).lineLimit(2)
             CreditMetaLines(title: title, roleLineLimit: 2)
         }
