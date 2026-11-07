@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="216" viewBox="0 0 1200 216" role="img" aria-labelledby="title description">
+  <title id="title">loge</title>
+  <desc id="description">Stremio addons. Native playback. For iPhone, iPad, Apple TV and Mac.</desc>
+  <rect width="1200" height="216" rx="12" fill="#141417"/>
+  <path d="M70 57v78a19 19 0 0 0 19 19" fill="none" stroke="#fff" stroke-width="15" stroke-linecap="round"/>
+  <text x="120" y="133" fill="#fff" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="76" font-weight="600" letter-spacing="-4">loge</text>
+  <path d="M330 57v102" stroke="#414146"/>
+  <text x="374" y="98" fill="#fff" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="30" font-weight="500">Stremio addons. Native playback.</text>
+  <text x="374" y="139" fill="#aaaab2" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="21">iPhone, iPad, Apple TV and Mac</text>
+</svg>

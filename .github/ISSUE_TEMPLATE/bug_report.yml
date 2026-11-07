@@ -1,0 +1,63 @@
+name: Bug report
+description: Report a reproducible installation, browsing, playback or sync problem.
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check the installation guide and existing issues first. Do not include full configured addon URLs, stream credentials, tokens, sync connection codes or recovery keys. Use provider names/hosts and redact screenshots and logs.
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - iPhone
+        - iPad
+        - Apple TV
+        - Mac
+        - Self-hosted sync service
+        - Multiple platforms
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Device and OS version
+      placeholder: "e.g. Apple TV 4K, tvOS 26.0; physical device or simulator"
+    validations:
+      required: true
+  - type: input
+    id: build
+    attributes:
+      label: loge build and commit
+      description: Copy the build/commit from Settings → About; include the release tag if known.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Include the install method, affected screen and relevant source properties. For sync, name the sync mode and affected devices—never account credentials.
+      placeholder: "1. Open…"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      description: Add a redacted screenshot or a short relevant log excerpt if useful.
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Before submitting
+      options:
+        - label: I checked that this report and its attachments contain no credentials, private URLs, connection codes or recovery keys.
+          required: true
