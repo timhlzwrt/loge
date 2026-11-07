@@ -143,9 +143,9 @@ with iPhone title details.
 - **No Apple TV Top Shelf extension.** Continue Watching inside the app works;
   system Home Screen integration is on hold.
 - **English interface only.** Audio and subtitle language preferences are separate.
-- **No personalized recommendation engine.** Home uses managed discovery feeds,
-  not recommendations inferred from your history. Letterboxd links/lists do not
-  mean Letterboxd ratings or account sync are integrated.
+- **Recommendations need a TMDB token.** Without one, Home has only its discovery
+  feeds. Letterboxd links/lists do not mean Letterboxd ratings or account sync
+  are integrated.
 
 The [roadmap](ROADMAP.md) separates shipped work, validation gaps and deferred
 ideas. Report reproducible problems through the

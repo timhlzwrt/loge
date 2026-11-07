@@ -11,6 +11,8 @@ release dates. This roadmap reflects the source as of **7 November 2026**.
 - [x] Native iPhone, iPad, Apple TV and Mac browsing and playback.
 - [x] Built-in Cinemeta discovery/search, genre shelves, festival editions,
   director discovery and optional TMDB metadata, filmographies and reviews.
+- [x] TMDB-based recommendations: More Like This on details and a Recommended
+  Home row ranked on the device from watched and saved titles.
 - [x] Addon management, structured source selection, remembered sources,
   connection-aware recommendations and automatic fallback.
 - [x] mpv playback, subtitles and timing controls, timeline previews,
