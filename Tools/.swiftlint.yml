@@ -1,0 +1,3 @@
+# One-off developer scripts: failing loudly on the first error is the intended behaviour.
+disabled_rules:
+  - force_try

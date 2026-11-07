@@ -1,16 +1,9 @@
+import LogeCore
 import SwiftUI
 
 /// The colour of the app's highlights: the primary button, progress, focus and selection.
 /// Each one is light enough for the black text drawn on it and stands out on the canvas.
-enum Accent: String, CaseIterable, Identifiable {
-    case white, amber, coral, mint, sky
-
-    static let storageKey = "accentColor"
-
-    var id: Self { self }
-
-    var name: String { rawValue.capitalized }
-
+extension Accent {
     var color: Color {
         switch self {
         case .white: .white

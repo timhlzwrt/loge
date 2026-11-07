@@ -1,35 +1,49 @@
 # Account sync gateway
 
-This optional gateway adds isolated accounts, device enrollment and selective live
-setup sharing to the existing CouchDB backend. One private application database
-holds account metadata, hashed device/invitation credentials and encrypted payloads.
-CouchDB is never exposed as a multi-user document API: its database permissions
-cannot isolate individual documents from other database members.
+The gateway adds isolated accounts, device enrollment and selective live setup
+sharing in front of one private CouchDB application database. That database
+holds account metadata, hashed device/invitation credentials and encrypted
+payloads. CouchDB is never exposed as a multi-user document API: its database
+permissions cannot isolate individual documents from other database members, so
+the gateway's login is its only member.
 
 ## Installation
 
-First bootstrap the existing backend using `Tools/configuration-sync`. Copy this
-directory to `/opt/loge-sync/gateway`, then run as root:
+Copy this directory to `/opt/loge-sync`, then run as root:
 
 ```sh
-python3 /opt/loge-sync/gateway/bootstrap.py
+python3 /opt/loge-sync/bootstrap.py
 export SYNC_PUBLIC_ENDPOINT=https://sync.example.com/v2
 cd /opt/loge-sync
-docker compose -f docker-compose.yml -f gateway/compose.yml up -d --build
+docker compose up -d --build
 ```
 
-The bootstrap preserves the legacy configuration document, adds a separate scoped
-service credential and updates its write validator. Administrative secrets remain
-under `secrets/`; no encryption key belongs on the server. Keep `data/`, secrets,
-source and Compose configuration in your backup and test a restore.
+The bootstrap creates a CouchDB administrator, the database, a scoped gateway
+login and an administration token under `secrets/`; no encryption key belongs on
+the server. It is safe to run again. Keep `data/`, secrets, source and Compose
+configuration in your backup and test a restore.
 
-Forward only `/v2/*` from the HTTPS reverse proxy to `127.0.0.1:5985`; retain the
-existing `/configuration` route for older clients. Cap request bodies at 1 MiB and
+### Upgrading an endpoint-sync server
+
+A server set up for the earlier single-user sync (with `docker-compose.yml` and a
+`gateway/` subdirectory) keeps its data. Copy this directory's files into
+`/opt/loge-sync`, run `bootstrap.py`, then
+`docker compose -f compose.yml up -d --build --remove-orphans` and delete the old
+`docker-compose.yml` and `gateway/`. The bootstrap removes the old `loge-sync`
+login's database access and installs the gateway-only validator; it does not
+delete the old encrypted `configuration` document, which no current app reads.
+
+Forward only `/v2/*` from the HTTPS reverse proxy to `127.0.0.1:5985`. Cap request bodies at 1 MiB and
 set `Cache-Control: no-store`. Disable access/body logging. Do not forward `/admin`
 or port 5986. If the proxy runs on another host, bind the gateway on a private
 address and firewall it to the proxy. Administrative port 5986 must remain
 localhost-only or restricted to a management host reached through an SSH tunnel.
 The admin application additionally checks Host, Origin and a separate token.
+For internal HTTPS access, set `SYNC_ADMIN_ORIGIN` to one exact HTTPS origin
+(without a path), forward it through your internal proxy, and permit only that
+proxy and management host on port 5986. Keep the admin route off the public proxy.
+The default empty value allows only localhost SSH-tunnel access. Cross-origin
+requests remain rejected, and the administrator token is still required.
 
 Open `http://localhost:5986` locally (or through an SSH tunnel) and privately read
 `secrets/gateway-admin-token` to unlock it. The token stays only in that browser

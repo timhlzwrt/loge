@@ -4,7 +4,6 @@ import SwiftUI
 /// Signs this device in to Trakt, which carries watch progress between devices.
 struct TraktSection: View {
     @Environment(TraktAccount.self) private var trakt
-    @Environment(AccountSync.self) private var sync
     @State private var clientID = ""
     @State private var clientSecret = ""
     @State private var signingIn: Task<Void, Never>?
@@ -16,7 +15,7 @@ struct TraktSection: View {
             case .signedIn(let username):
                 LabeledContent("Signed in as", value: username)
                 Button("Sync Now") { Task { await trakt.pullProgress() } }
-                    .disabled(sync.isConnected)
+                    .disabled(trakt.isPaused)
                 Button("Sign Out", role: .destructive) { trakt.signOut() }
             case .awaitingApproval(let code):
                 VStack(alignment: .leading, spacing: 6) {
@@ -54,8 +53,11 @@ struct TraktSection: View {
                     .foregroundStyle(.red)
             }
         } footer: {
-            if sync.isConnected {
-                Text("Your Sync account handles playback progress. Trakt imports and scrobbling are paused to keep accounts separate; its existing connection stays saved on this device.")
+            if trakt.isPaused {
+                Text("""
+                    Your Sync account handles playback progress. Trakt imports and scrobbling are paused to \
+                    keep accounts separate; its existing connection stays saved on this device.
+                    """)
             } else if trakt.credentials == nil {
                 Text("Create an app at trakt.tv/oauth/applications with the redirect URI urn:ietf:wg:oauth:2.0:oob, then enter its keys here.")
             } else {
@@ -77,8 +79,10 @@ struct TraktSection: View {
                 errorMessage = "Trakt declined the sign-in."
             } catch TraktError.httpStatus(401) {
                 errorMessage = "Trakt didn't accept the app keys. Check the Client ID and Secret."
+            } catch TraktError.unavailable(let code) {
+                errorMessage = "Couldn't reach Trakt. \(URLError(code).localizedDescription)"
             } catch {
-                errorMessage = "Couldn't reach Trakt. \(error.localizedDescription)"
+                errorMessage = "Couldn't sign in to Trakt. Try again."
             }
         }
     }

@@ -17,6 +17,10 @@ final class MPVPlayer {
     enum Status: Equatable {
         case idle, loading, playing, paused, buffering, ended
         case failed(String)
+
+        var isFailed: Bool {
+            if case .failed = self { true } else { false }
+        }
     }
 
     var status: Status {
@@ -886,13 +890,7 @@ final class MPVPlayer {
     /// A `replyID` of 0 asks for no reply handling beyond logging a failure.
     private func command(_ args: [String], ignoringShutdown: Bool = false, replyID: UInt64 = 0) {
         guard !isShutDown || ignoringShutdown else { return }
-        var cArgs: [UnsafeMutablePointer<CChar>?] = args.map { strdup($0) } + [nil]
-        defer { cArgs.forEach { free($0) } }
-        let status = cArgs.withUnsafeMutableBufferPointer { buffer in
-            buffer.baseAddress!.withMemoryRebound(to: UnsafePointer<CChar>?.self, capacity: buffer.count) {
-                mpv_command_async(handle, replyID, $0)
-            }
-        }
+        let status = withMPVArguments(args) { mpv_command_async(handle, replyID, $0) }
         if replyID != 0 {
             if status < 0 { apply(.commandReply(replyID, status)) }
         } else {
@@ -916,5 +914,14 @@ final class MPVPlayer {
         if status < 0 {
             log.error("\(context): \(String(cString: mpv_error_string(status)))")
         }
+    }
+}
+
+/// Calls `body` with `args` as the NULL-terminated C string array mpv's commands take.
+func withMPVArguments<Result>(_ args: [String], _ body: (UnsafeMutablePointer<UnsafePointer<CChar>?>) -> Result) -> Result {
+    var cArgs: [UnsafeMutablePointer<CChar>?] = args.map { strdup($0) } + [nil]
+    defer { cArgs.forEach { free($0) } }
+    return cArgs.withUnsafeMutableBufferPointer { buffer in
+        buffer.baseAddress!.withMemoryRebound(to: UnsafePointer<CChar>?.self, capacity: buffer.count, body)
     }
 }

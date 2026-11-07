@@ -5,9 +5,15 @@ import threading
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 
+from pathlib import Path
+
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from gateway import create_app, digest
+
+# The same examples the app's Core tests send and decode, so a field renamed on either side fails.
+CONTRACT = json.loads((Path(__file__).resolve().parents[2]
+                       / 'Core/Tests/LogeCoreTests/Fixtures/sync-gateway-contract.json').read_text())
 
 
 class MemoryStore:
@@ -133,7 +139,75 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual(self.public.post('/v2/redeem', json=request).status_code, 428)
         result = self.public.post('/v2/redeem', json=request | {'hasRecoveryKey': True})
         self.assertEqual(result.status_code, 200)
-        self.assertTrue(result.json()['requiresRecoveryKey'])
+        self.assertEqual(set(result.json()), {'token', 'accountID', 'displayName', 'deviceID'})
+
+    def test_each_revoke_route_only_revokes_its_own_kind_of_record(self):
+        account, authorization = self.account('A')
+        invitation = self.public.post('/v2/invitations', headers=authorization, json={'kind': 'device'}).json()
+        self.assertEqual(self.public.delete('/v2/devices/' + invitation['id'], headers=authorization).status_code, 404)
+        self.assertEqual(self.public.delete('/v2/invitations/' + account['deviceID'], headers=authorization).status_code, 404)
+        self.assertEqual(self.public.get('/v2/me', headers=authorization).status_code, 200)
+        self.assertEqual(self.public.delete('/v2/invitations/' + invitation['id'], headers=authorization).status_code, 200)
+        self.assertEqual(self.public.post('/v2/redeem', json={'code': invitation['code'], 'deviceName': 'Late'}).status_code, 410)
+
+    def test_disabled_owner_stops_sharing_for_existing_members(self):
+        owner, auth_a = self.account('A')
+        _, auth_b = self.account('B')
+        invitation = self.public.post('/v2/invitations', headers=auth_a,
+            json={'kind': 'share', 'categories': ['addons']}).json()
+        path = '/v2/groups/' + invitation['groupID'] + '/document'
+        self.assertEqual(self.public.put(path, headers=auth_a, json=self.envelope).status_code, 200)
+        self.assertEqual(self.public.post('/v2/join', headers=auth_b, json={'code': invitation['code']}).status_code, 200)
+        self.assertEqual(self.public.get(path, headers=auth_b).status_code, 200)
+        self.admin.patch('/admin/accounts/' + owner['accountID'], headers=self.admin_headers, json={'enabled': False})
+        self.assertEqual(self.public.get(path, headers=auth_b).status_code, 404)
+        self.assertEqual(self.public.get('/v2/me', headers=auth_b).json()['groups'], [])
+
+    def test_malformed_record_ids_are_not_found_on_every_route(self):
+        _, authorization = self.account('A')
+        for path in ('/v2/devices/..%2Faccount', '/v2/invitations/not-a-digest'):
+            self.assertEqual(self.public.delete(path, headers=authorization).status_code, 404)
+        for method, path in (('patch', '/admin/accounts/x'), ('patch', '/admin/groups/x'),
+                             ('post', '/admin/accounts/x/invitation'), ('delete', '/admin/access/x')):
+            body = {} if method == 'delete' else {'json': {'enabled': False}}
+            response = getattr(self.admin, method)(path, headers=self.admin_headers, **body)
+            self.assertEqual(response.status_code, 404, path)
+
+    def test_responses_match_the_shared_app_contract(self):
+        def keys(value):
+            return set(value[0] if isinstance(value, list) else value)
+        def check(name, response):
+            self.assertEqual(response.status_code, 200, name)
+            self.assertEqual(keys(response.json()), keys(CONTRACT[name]['response']), name)
+
+        created = self.admin.post('/admin/accounts', headers=self.admin_headers, json={'displayName': 'A'}).json()
+        redeem = self.public.post('/v2/redeem', json=CONTRACT['redeem']['request'] | {'code': created['invitation']['code']})
+        check('redeem', redeem)
+        auth_a = {'Authorization': 'Bearer ' + redeem.json()['token']}
+        _, auth_b = self.account('B')
+        check('inviteDevice', self.public.post('/v2/invitations', headers=auth_a, json=CONTRACT['inviteDevice']['request']))
+        share = self.public.post('/v2/invitations', headers=auth_a, json=CONTRACT['inviteShare']['request'])
+        check('inviteShare', share)
+        check('join', self.public.post('/v2/join', headers=auth_b, json=CONTRACT['join']['request'] | {'code': share.json()['code']}))
+        check('me', self.public.get('/v2/me', headers=auth_b))
+        check('putDocument', self.public.put('/v2/documents/progress', headers=auth_a, json=CONTRACT['putDocument']['request']))
+        check('getDocument', self.public.get('/v2/documents/progress', headers=auth_a))
+        check('devices', self.public.get('/v2/devices', headers=auth_a))
+
+    def test_explicit_https_admin_origin_preserves_authentication_and_origin_checks(self):
+        from unittest.mock import patch
+        with patch.dict("os.environ", {"SYNC_ADMIN_ORIGIN": "https://sync.lan.example"}):
+            admin = TestClient(create_app(self.store, mode="admin", admin_secret="a" * 40),
+                               base_url="https://sync.lan.example")
+        self.assertEqual(admin.get("/").status_code, 200)
+        self.assertEqual(admin.get("/admin/accounts").status_code, 401)
+        headers = self.admin_headers | {"Origin": "https://sync.lan.example"}
+        self.assertEqual(admin.get("/admin/accounts", headers=headers).status_code, 200)
+        for origin in ("https://attacker.example", "http://sync.lan.example", "http://localhost"):
+            self.assertEqual(admin.get("/admin/accounts", headers=headers | {"Origin": origin}).status_code, 403)
+        self.assertEqual(admin.get("/", headers={"Host": "attacker.example"}).status_code, 403)
+        self.assertEqual(admin.get("/", headers={"Host": "sync.lan.example.attacker.example"}).status_code, 403)
+        self.assertEqual(admin.get("/admin/accounts", headers=self.admin_headers | {"Host": "localhost"}).status_code, 200)
 
     def test_admin_requires_secret_local_host_and_same_origin(self):
         self.assertEqual(self.admin.get('/admin/accounts').status_code, 401)

@@ -24,7 +24,7 @@ final class FlowTests: XCTestCase {
     }
 
     @MainActor
-    func testConfigurationSyncIsOptional() throws {
+    func testSyncIsOptional() throws {
         openTab("Settings")
         let sync = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Sync' AND label CONTAINS 'Off'")).firstMatch
         guard sync.waitForExistence(timeout: 5) else {
@@ -33,21 +33,11 @@ final class FlowTests: XCTestCase {
         sync.tap()
         let code = app.secureTextFields["sync.connectionCode"]
         XCTAssertTrue(code.waitForExistence(timeout: 5))
-        XCTAssertFalse(app.textFields["sync.endpoint"].exists, "Server details belong under Advanced")
         let connect = app.buttons["Connect account"]
         XCTAssertTrue(connect.waitForExistence(timeout: 5))
         XCTAssertFalse(connect.isEnabled)
+        XCTAssertFalse(app.buttons["Previous sync connection"].exists, "The endpoint sync was removed")
         screenshot("sync-settings-optional")
-        let previous = app.buttons["Previous sync connection"]
-        XCTAssertTrue(previous.waitForExistence(timeout: 5))
-        previous.tap()
-        let endpoint = app.textFields["sync.endpoint"]
-        XCTAssertTrue(endpoint.waitForExistence(timeout: 5))
-        XCTAssertEqual(endpoint.value as? String, "HTTPS configuration URL", "A personal server must never be prefilled")
-        app.swipeUp()
-        app.buttons["Generate New Recovery Key"].tap()
-        XCTAssertFalse(app.buttons["Connect"].isEnabled, "Generating a key must not opt into sync")
-        screenshot("sync-settings-legacy")
     }
 
     @MainActor
@@ -340,7 +330,16 @@ final class FlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["Season"].waitForExistence(timeout: 5))
     }
 
-    /// iPhone browsing stays upright when the phone turns; iPad turns with it.
+    /// Waits for the window to take the shape the device turned to.
+    @MainActor
+    private func waitForWindow(landscape: Bool, timeout: TimeInterval = 5) -> Bool {
+        let window = app.windows.firstMatch
+        let turned = NSPredicate { _, _ in (window.frame.width > window.frame.height) == landscape }
+        return XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: turned, object: nil)], timeout: timeout) == .completed
+    }
+
+    /// iPhone browsing stays upright when the phone turns; iPad turns with it. The waits
+    /// before checking give a wrong turn time to happen.
     @MainActor
     func testRotationAndPullToRefresh() {
         XCTAssertTrue(app.staticTexts["Popular Movies"].waitForExistence(timeout: 15))
@@ -374,17 +373,15 @@ final class FlowTests: XCTestCase {
 
         // The test clips are 10 seconds long, so both turns happen well before the end.
         XCUIDevice.shared.orientation = .landscapeLeft
-        sleep(1)
+        XCTAssertTrue(waitForWindow(landscape: true), "The player didn't turn")
         screenshot("rotated-while-playing")
-        let frame = app.windows.firstMatch.frame
-        XCTAssertGreaterThan(frame.width, frame.height, "The player didn't turn")
 
         // A tap toggles the controls; aim above the middle, where the play button sits.
         if !app.buttons["Close"].exists { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap() }
         XCTAssertTrue(app.buttons["Close"].waitForExistence(timeout: 3), "Player closed when rotated")
         if pause.exists { pause.tap() }
         XCUIDevice.shared.orientation = .portrait
-        sleep(2)
+        XCTAssertTrue(waitForWindow(landscape: false), "The player didn't turn back")
         screenshot("rotated-while-paused")
         if !app.buttons["Close"].exists { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap() }
         app.buttons["Close"].tap()
@@ -406,9 +403,8 @@ final class FlowTests: XCTestCase {
             throw XCTSkip("Picture in Picture isn't available on this simulator")
         }
         pip.tap()
-        sleep(3)
+        XCTAssertTrue(pip.waitForNonExistence(timeout: 5), "The player screen stayed open")
         screenshot("pip-started")
-        XCTAssertFalse(app.buttons["Picture in Picture"].exists, "The player screen stayed open")
 
         // The floating window belongs to SpringBoard, labelled in the simulator's language.
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
@@ -435,8 +431,7 @@ final class FlowTests: XCTestCase {
         let close = windowButton("Close Picture in Picture", "Bild-in-Bild schließen")
         XCTAssertTrue(close.waitForExistence(timeout: 5))
         close.tap()
-        sleep(2)
-        XCTAssertFalse(restore.exists, "The floating window stayed")
+        XCTAssertTrue(restore.waitForNonExistence(timeout: 5), "The floating window stayed")
         XCTAssertFalse(app.buttons["Picture in Picture"].exists, "The player came back")
     }
 
@@ -816,14 +811,6 @@ final class FlowTests: XCTestCase {
         }
         XCTAssertTrue(poster.waitForExistence(timeout: 15), "\(name) isn't on Home or in search")
         poster.tap()
-    }
-
-    @MainActor
-    private func screenshot(_ name: String) {
-        guard let directory = ProcessInfo.processInfo.environment["SCREENSHOT_DIR"] else { return }
-        let url = URL(fileURLWithPath: directory).appending(path: "\(name).png")
-        try? FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
-        try? XCUIScreen.main.screenshot().pngRepresentation.write(to: url)
     }
 }
 #endif

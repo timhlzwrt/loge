@@ -149,7 +149,7 @@ setup categories while keeping viewing progress private. Expiring connection
 codes connect devices or invite someone to a shared setup; addon invitations do
 not include account access. Payloads are encrypted on-device and keys stay in
 Keychain. A local management page creates accounts and revokes access. See the
-[setup and self-hosting guide](docs/CONFIGURATION_SYNC.md) for deployment, conflict
+[setup and self-hosting guide](docs/SYNC.md) for deployment, conflict
 handling and recovery-key precautions.
 
 ### TMDB metadata

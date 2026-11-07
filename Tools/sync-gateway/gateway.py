@@ -17,11 +17,20 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
-from starlette.concurrency import run_in_threadpool
+from fastapi.concurrency import run_in_threadpool
 
 MAX_BODY = 1_048_576
 CATEGORIES = {"addons", "playback", "appearance"}
 ID = re.compile(r"^[a-f0-9]{32}$")
+# Invitation and device records are named by the SHA-256 digest of their secret.
+RECORD_ID = re.compile(r"^[a-f0-9]{64}$")
+
+
+def checked(identifier, pattern=ID):
+    """Path parameters become document IDs, so anything else is simply not found."""
+    if not pattern.fullmatch(identifier):
+        fail(404, "Not found.")
+    return identifier
 
 
 def fail(status, message):
@@ -143,8 +152,7 @@ class Service:
             if kind == "device":
                 document["device"] = {"id": identifier, "name": device_name, "createdAt": now(), "tokenHash": digest(secret)}
                 return {"token": identifier + "." + secret, "accountID": owner["id"],
-                        "displayName": owner["displayName"], "deviceID": identifier,
-                        "requiresRecoveryKey": requires_key}
+                        "displayName": owner["displayName"], "deviceID": identifier}
             if account_id == document["accountID"]:
                 fail(400, "You already own this group.")
             group = self.store.get("group:" + document["groupID"])
@@ -159,8 +167,10 @@ class Service:
     def groups(self, account_id):
         joined = {document.get("groupID") for document in self.store.list("invitation:")
                   if document.get("joinedBy") == account_id and not document.get("revoked")}
+        # Disabling an account also stops what it shares, as it stops new members joining.
         return [group for group in self.store.list("group:")
-                if group.get("enabled") and (group["ownerID"] == account_id or group["id"] in joined)]
+                if group.get("enabled") and (group["ownerID"] == account_id or group["id"] in joined)
+                and (self.store.get("account:" + group["ownerID"]) or {}).get("enabled")]
 
     def group(self, account_id, group_id):
         if not ID.fullmatch(group_id):
@@ -241,13 +251,29 @@ def create_app(store=None, mode=None, admin_secret=None):
         if len(secret) < 32:
             raise ValueError("Administrative secret must contain at least 32 characters")
 
-        def administrator(request):
-            # A local page still needs origin checks: hostile websites can target localhost.
+        configured_origin = os.environ.get("SYNC_ADMIN_ORIGIN", "")
+        configured_host = None
+        if configured_origin:
+            parsed = urllib.parse.urlsplit(configured_origin)
+            if (parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password
+                    or parsed.path or parsed.query or parsed.fragment):
+                raise ValueError("SYNC_ADMIN_ORIGIN must be an HTTPS origin without a path")
+            configured_host = parsed.netloc
+
+        def check_admin_origin(request):
+            # Keep the SSH-tunnel path and allow only the explicitly configured LAN origin.
             host = request.headers.get("host", "")
-            if not re.fullmatch(r"(?:localhost|127\.0\.0\.1)(?::[0-9]+)?", host):
-                fail(403, "Open the admin page through a localhost SSH tunnel.")
-            if request.headers.get("origin") not in (None, "http://" + host):
+            if re.fullmatch(r"(?:localhost|127\.0\.0\.1)(?::[0-9]+)?", host):
+                expected_origin = "http://" + host
+            elif configured_host and host == configured_host:
+                expected_origin = configured_origin
+            else:
+                fail(403, "Use the configured internal admin address or a localhost SSH tunnel.")
+            if request.headers.get("origin") not in (None, expected_origin):
                 fail(403, "Origin is not allowed.")
+
+        def administrator(request):
+            check_admin_origin(request)
             token = request.headers.get("X-Admin-Token", "")
             if not hmac.compare_digest(token.encode(), secret.encode()):
                 fail(401, "Enter the local administrator token.")
@@ -261,9 +287,7 @@ def create_app(store=None, mode=None, admin_secret=None):
 
         @app.get("/")
         def admin_page(request: Request):
-            host = request.headers.get("host", "")
-            if not re.fullmatch(r"(?:localhost|127\.0\.0\.1)(?::[0-9]+)?", host):
-                fail(403, "Use a localhost SSH tunnel.")
+            check_admin_origin(request)
             return HTMLResponse(Path(__file__).with_name("admin.html").read_text(),
                 headers={"Content-Security-Policy": "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'"})
 
@@ -287,13 +311,13 @@ def create_app(store=None, mode=None, admin_secret=None):
             value = await body(request)
             if not isinstance(value.get("enabled"), bool):
                 fail(400, "Choose an account state.")
-            await run_in_threadpool(service.update, "account:" + account_id, lambda document: document.update(enabled=value["enabled"]))
+            await run_in_threadpool(service.update, "account:" + checked(account_id), lambda document: document.update(enabled=value["enabled"]))
             return {"ok": True}
 
         @app.post("/admin/accounts/{account_id}/invitation")
         def enrollment(account_id: str, request: Request):
             administrator(request)
-            account = store.get("account:" + account_id)
+            account = store.get("account:" + checked(account_id))
             if not account or not account.get("enabled"):
                 fail(404, "Enabled account not found.")
             return enrollment_code(service.invitation(account_id, "device"))
@@ -317,7 +341,7 @@ def create_app(store=None, mode=None, admin_secret=None):
         @app.delete("/admin/access/{identifier}")
         def revoke(identifier: str, request: Request):
             administrator(request)
-            service.update("invitation:" + identifier, lambda document: document.update(revoked=True))
+            service.update("invitation:" + checked(identifier, RECORD_ID), lambda document: document.update(revoked=True))
             return {"ok": True}
 
         @app.patch("/admin/groups/{group_id}")
@@ -326,7 +350,7 @@ def create_app(store=None, mode=None, admin_secret=None):
             value = await body(request)
             if not isinstance(value.get("enabled"), bool):
                 fail(400, "Choose a group state.")
-            await run_in_threadpool(service.update, "group:" + group_id, lambda document: document.update(enabled=value["enabled"]))
+            await run_in_threadpool(service.update, "group:" + checked(group_id), lambda document: document.update(enabled=value["enabled"]))
             return {"ok": True}
         return app
 
@@ -450,21 +474,23 @@ def create_app(store=None, mode=None, admin_secret=None):
                 for entry in store.list("invitation:") if entry["accountID"] == account["id"]
                 and not entry["consumed"] and not entry["revoked"] and entry["expires"] > time.time()]
 
-    def revoke_own(request, identifier):
+    def revoke_own(request, identifier, device):
+        """A device is a consumed invitation; each route revokes only its own kind of record."""
         account, _ = service.authenticate(request)
         def change(document):
-            if document["accountID"] != account["id"]:
+            is_device = bool(document.get("device"))
+            if document["accountID"] != account["id"] or is_device != device or (not device and document["consumed"]):
                 fail(404, "Access record not found.")
             document["revoked"] = True
-        service.update("invitation:" + identifier, change)
+        service.update("invitation:" + checked(identifier, RECORD_ID), change)
         return {"ok": True}
 
     @app.delete("/v2/devices/{identifier}")
     def revoke_device(identifier: str, request: Request):
-        return revoke_own(request, identifier)
+        return revoke_own(request, identifier, device=True)
 
     @app.delete("/v2/invitations/{identifier}")
     def revoke_invite(identifier: str, request: Request):
-        return revoke_own(request, identifier)
+        return revoke_own(request, identifier, device=False)
 
     return app

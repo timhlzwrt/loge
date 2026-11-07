@@ -1,3 +1,5 @@
-__pycache__
-*.pyc
-test_*.py
+# The image needs only the gateway source; never send data or credentials to the build.
+*
+!requirements.txt
+!gateway.py
+!admin.html

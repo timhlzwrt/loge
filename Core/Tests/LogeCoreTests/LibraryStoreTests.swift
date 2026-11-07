@@ -262,7 +262,28 @@ struct LibraryMarkingTests {
     }
 
     @Test func continuingPicksTheSameBingeGroup() throws {
-        let json = #"[{"url":"https://a/1","behaviorHints":{"bingeGroup":"x|720p"}},{"url":"https://a/2","behaviorHints":{"bingeGroup":"x|1080p"}},{"infoHash":"00","behaviorHints":{"bingeGroup":"x|4k"}}]"#
+        let json = #"""
+            [
+              {
+                "url": "https://a/1",
+                "behaviorHints": {
+                  "bingeGroup": "x|720p"
+                }
+              },
+              {
+                "url": "https://a/2",
+                "behaviorHints": {
+                  "bingeGroup": "x|1080p"
+                }
+              },
+              {
+                "infoHash": "00",
+                "behaviorHints": {
+                  "bingeGroup": "x|4k"
+                }
+              }
+            ]
+            """#
         let streams = try JSONDecoder().decode([StreamSource].self, from: Data(json.utf8))
         #expect(StreamSource.continuing(bingeGroup: "x|1080p", in: streams)?.url == "https://a/2")
         #expect(StreamSource.continuing(bingeGroup: "x|4k", in: streams) == nil)

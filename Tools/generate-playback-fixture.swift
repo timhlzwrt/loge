@@ -13,7 +13,7 @@ import Foundation
         while cursor < duration {
             let span = CMTimeMinimum(sourceDuration, duration - cursor)
             try targetVideo.insertTimeRange(CMTimeRange(start: .zero, duration: span), of: sourceVideo, at: cursor)
-            cursor = cursor + span
+            cursor += span
         }
         targetVideo.preferredTransform = try await sourceVideo.load(.preferredTransform)
         for (name, language) in [("en", "eng"), ("de", "deu")] {
@@ -28,13 +28,16 @@ import Foundation
         if FileManager.default.fileExists(atPath: output.path) {
             try FileManager.default.removeItem(at: output)
         }
-        guard let exporter = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetPassthrough) else { fatalError("Cannot export fixture") }
+        guard let exporter = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetPassthrough) else {
+            fatalError("Cannot export fixture")
+        }
         try await exporter.export(to: output, as: .mov)
         let result = AVURLAsset(url: output)
         let tracks = try await result.loadTracks(withMediaType: .audio)
         print("Exported \(output.path); duration=\(try await result.load(.duration).seconds), audio tracks=\(tracks.count)")
         for track in tracks {
-            print("audio \(track.trackID): language=\(try await track.load(.languageCode) ?? "none"), tag=\(try await track.load(.extendedLanguageTag) ?? "none")")
+            let language = try await track.load(.languageCode) ?? "none"
+            print("audio \(track.trackID): language=\(language), tag=\(try await track.load(.extendedLanguageTag) ?? "none")")
         }
     }
 }

@@ -201,13 +201,7 @@ final class ScrubPreview {
 
     private func command(_ args: [String], ignoringShutdown: Bool = false, asynchronously: Bool = false) {
         guard !isShutDown || ignoringShutdown else { return }
-        var cArgs: [UnsafeMutablePointer<CChar>?] = args.map { strdup($0) } + [nil]
-        defer { cArgs.forEach { free($0) } }
-        let status = cArgs.withUnsafeMutableBufferPointer { buffer in
-            buffer.baseAddress!.withMemoryRebound(to: UnsafePointer<CChar>?.self, capacity: buffer.count) {
-                asynchronously ? mpv_command_async(handle, 0, $0) : mpv_command(handle, $0)
-            }
-        }
+        let status = withMPVArguments(args) { asynchronously ? mpv_command_async(handle, 0, $0) : mpv_command(handle, $0) }
         check(status, args[0])
         if status < 0 && asynchronously { apply(.failed) }
     }

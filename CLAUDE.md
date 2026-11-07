@@ -23,7 +23,7 @@ accent, system font, no cards/gradients/badges.
   (a second, silent mpv instance for timeline thumbnails), `PlayerView`,
   controls and menus, `PictureInPicture`, `NowPlaying`, next-episode countdown, tvOS remote
   swipe reader.
-- `App/Settings/` — an index of pages: addons (install/reorder/remove), Trakt, TMDB, accent;
+- `App/Settings/` — an index of pages: Sync, addons (install/reorder/remove), Trakt, TMDB, accent;
   playback preferences inline; About with version, credits and the Data Sources page
   (all attribution lives there rather than under artwork).
 - `Tools/run-device.sh` — Debug build onto the connected iPhone/iPad with the free Personal Team.
@@ -89,7 +89,7 @@ after about a second.
 - Before finishing: build all three platforms with no warnings, run Core tests, and check
   UI changes in the simulators (screenshots), including tvOS focus with the remote driver.
 - Platform differences use `#if os(...)` in place; sizes live in `Metrics`
-  (`App/Browse/BrowseComponents.swift`), iPad/landscape via size classes.
+  (`App/Browse/Components/BrowseComponents.swift`), iPad/landscape via size classes.
 - No co-author or "generated with" lines in commits or PRs; commit only when asked.
 
 ## Privacy
@@ -223,7 +223,7 @@ pull/debounced edits, and explicit conflicts preserving independent changes.
 Share ordered addon URLs, audio/subtitle preferences, subtitle size, automatic
 source size limit and accent. Keep account tokens, remembered stream URLs and
 connection measurements local. Public self-hosting files live under
-Tools/configuration-sync and docs/CONFIGURATION_SYNC.md; personal infrastructure
+Tools/sync-gateway and docs/SYNC.md; personal infrastructure
 and credentials remain outside this public repo. The backend was deployed from
 the separate private infrastructure checkout.
 
@@ -255,7 +255,7 @@ Next sync expansion requested after the initial release:
   concrete interaction/visual direction before implementing these UI changes.
 
 Implementation verified: multi-account gateway and local administration are deployed
-with legacy /configuration preserved. Account keys and shared-category keys are
+with legacy /configuration preserved (since removed, see below). Account keys and shared-category keys are
 separate; invitations expire after 24 hours and work once. Pending initial imports
 and conflicts survive relaunch; profile changes preserve local libraries and
 restore the previous local addon setup. Trakt is paused while using an account.
@@ -270,6 +270,17 @@ Production admin token stayed server-side; unlocked GUI interactions were tested
 with disposable local data after automatic approval review rejected token export.
 Personal enrollment was retained; verification accounts/devices were disabled.
 No commits/pushes have been made for this expansion.
+
+7 November, code-health pass (desloppify): the single-user endpoint sync (v1:
+`ConfigurationSyncAccount`, `Tools/configuration-sync`, Settings > Previous sync connection)
+is removed at the user's request; launch deletes its Keychain login. Account sync is the only
+sync: `SyncedSettings` and `SyncError` replace the v1 types, `Accent` and the synced settings
+keys live in Core, `Tools/sync-gateway` sets up its own CouchDB with the gateway as the only
+database member, and one throwing `Keychain` helper serves Trakt, TMDB and sync. Core sources
+and tests are grouped by domain (Addons, Sync, TMDB, Trakt, Discovery, Playback) and App/Browse
+by screen (Components, Home, Details, Sources, People, Discovery); `.swiftlint.yml` files record
+the lint conventions. `SourceSelection` (Core) holds source grouping, remembered-source and
+fallback choice; a shared contract file checks the app client and the gateway against each other.
 
 Verification for these tasks: reuse `LibraryStoreTests`, `TraktTests`,
 `UITests/FlowTests.swift`, `UITests/PlaybackRegressionTests.swift`,

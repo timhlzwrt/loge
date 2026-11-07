@@ -7,8 +7,7 @@ struct SettingsView: View {
     @Environment(AddonStore.self) private var store
     @Environment(TraktAccount.self) private var trakt
     @Environment(TMDBAccount.self) private var tmdb
-    @Environment(ConfigurationSyncAccount.self) private var sync
-    @Environment(AccountSync.self) private var accountSync
+    @Environment(AccountSync.self) private var sync
     @AppStorage(Accent.storageKey) private var accent = Accent.white
 
     var body: some View {
@@ -31,9 +30,9 @@ struct SettingsView: View {
     @ViewBuilder private var sections: some View {
         Section {
             NavigationLink {
-                ConfigurationSyncView()
+                SyncSettingsView()
             } label: {
-                LabeledContent("Sync", value: accountSync.isConnected ? (accountSync.displayName ?? "Connected") : (sync.isConnected ? "Previous connection" : "Off"))
+                LabeledContent("Sync", value: sync.isConnected ? (sync.displayName ?? "Connected") : "Off")
             }
         }
         Section {

@@ -11,7 +11,6 @@ struct LogeApp: App {
     @State private var trakt: TraktAccount
     @State private var tmdb: TMDBAccount
     @State private var playback: PlaybackSession
-    @State private var configurationSync: ConfigurationSyncAccount
     @State private var accountSync: AccountSync
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(Accent.storageKey) private var accent = Accent.white
@@ -41,7 +40,6 @@ struct LogeApp: App {
         let addonStore = AddonStore(defaults: defaults)
         let library = LibraryStore(defaults: defaults)
         _addonStore = State(initialValue: addonStore)
-        _configurationSync = State(initialValue: ConfigurationSyncAccount(addons: addonStore, defaults: defaults))
         #if DEBUG
         let accountSync = AccountSync(addons: addonStore, library: library, defaults: defaults, temporaryConnection: syncUITest)
         #else
@@ -72,7 +70,6 @@ struct LogeApp: App {
                 .environment(playback)
                 .environment(trakt)
                 .environment(tmdb)
-                .environment(configurationSync)
                 .environment(accountSync)
                 .preferredColorScheme(.dark)
                 // White unless the user picks another accent: artwork carries the colour.
@@ -91,8 +88,7 @@ struct LogeApp: App {
                     if ProcessInfo.processInfo.arguments.contains("--discovery-ui-test")
                         || ProcessInfo.processInfo.arguments.contains("--playback-ui-test") { return }
                     #endif
-                    if accountSync.isConnected { await accountSync.sync() }
-                    else { await configurationSync.sync() }
+                    await accountSync.sync()
                     await addonStore.refreshManifests()
                     // Needs the addons to look up titles started on other devices.
                     await trakt.pullProgress()
@@ -108,8 +104,7 @@ struct LogeApp: App {
                         || ProcessInfo.processInfo.arguments.contains("--playback-ui-test") { return }
                     #endif
                     Task {
-                        if accountSync.isConnected { await accountSync.sync() }
-                        else { await configurationSync.sync() }
+                        await accountSync.sync()
                         await trakt.pullProgress()
                     }
                 }
@@ -136,7 +131,7 @@ struct LogeApp: App {
     private var initialBrowseView: some View {
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--sync-ui-test") {
-            NavigationStack { ConfigurationSyncView() }
+            NavigationStack { SyncSettingsView() }
         } else if ProcessInfo.processInfo.arguments.contains("--playback-ui-test") {
             PlaybackFixtureView()
         } else if ProcessInfo.processInfo.arguments.contains("--discovery-ui-test") {
@@ -210,7 +205,7 @@ struct RootView: View {
             #if os(macOS)
             TabSection("Catalogs") {
                 ForEach(DiscoveryCatalogs.home) { source in
-                    Tab(source.title, systemImage: source.catalog.type == "series" ? "tv" : "rectangle.portrait") {
+                    Tab(source.title, systemImage: source.catalog.type == MediaType.series ? "tv" : "rectangle.portrait") {
                         BrowseStack { CatalogGridView(source: source) }
                     }
                 }

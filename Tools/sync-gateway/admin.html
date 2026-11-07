@@ -1,38 +1,138 @@
 <!doctype html>
 <html lang="en">
+<head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>loge sync administration</title>
+<title>loge · Sync administration</title>
 <style>
-[hidden]{display:none!important}
-:root{color-scheme:dark;font:16px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#111214;color:#f5f5f5}body{max-width:980px;margin:36px auto;padding:0 24px 48px}h1{font-size:28px;margin-bottom:8px}h2{font-size:20px;margin:30px 0 14px}p,small{color:#a8aaaf;line-height:1.5}form,.entry{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:14px 0;border-bottom:1px solid #303236}.entry>span{flex:1;min-width:180px}input,button,textarea{font:inherit;border-radius:10px;border:1px solid #414349;padding:11px 14px}input,textarea{background:#202226;color:inherit}button{background:#f2f2f2;color:#17181a;cursor:pointer;min-height:44px}button.secondary{background:transparent;color:inherit}button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid #c4d6ed;outline-offset:3px}textarea{width:100%;box-sizing:border-box;min-height:90px;word-break:break-all}#notice{white-space:pre-wrap;color:#f5b5a8}#codeBox{background:#202226;padding:20px;border-radius:12px;margin:24px 0}#content[hidden],#codeBox[hidden]{display:none}label{display:block}small{display:block;margin-top:5px}
+:root{color-scheme:dark;font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#eeeff0;background:#141517;--muted:#a0a2a8;--line:#303136;--surface:#1b1c1f}
+*{box-sizing:border-box}[hidden]{display:none!important}body{margin:0}button,input,textarea{font:inherit}button,a,input,textarea{-webkit-tap-highlight-color:transparent}button{min-height:44px;padding:10px 18px;border:1px solid transparent;border-radius:9px;background:#eeeef0;color:#191a1c;font-weight:600;cursor:pointer}button:hover{background:#fff}button:disabled{opacity:.45;cursor:wait}button.secondary{color:#d5d6da;background:transparent;border-color:#3c3e44}button.secondary:hover{background:#2a2c30}button.quiet{background:transparent;color:#b8bac0;padding:8px 12px;font-weight:500}button.quiet:hover{background:#292b2f;color:#fff}button.danger{color:#efb0a5}button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid #eee;outline-offset:4px}input,textarea{width:100%;min-height:46px;border:1px solid #41434a;border-radius:8px;background:#161719;color:#f4f4f5;padding:11px 13px}input::placeholder{color:#7d8088}label{display:block;font-size:13px;font-weight:600;margin-bottom:8px}h1,h2,p{margin:0}h1{font-size:32px;line-height:1.2;font-weight:600;letter-spacing:-1px}h2{font-size:22px;line-height:1.3;letter-spacing:-.4px}p{color:var(--muted)}small{font-size:13px;color:var(--muted)}
+.topbar{height:88px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 40px;gap:20px}.brand{display:flex;align-items:baseline;gap:18px}.wordmark{font-size:31px;letter-spacing:-2px;font-weight:650;color:#fff;line-height:1}.brand span{font-size:13px;color:var(--muted);border-left:1px solid #484a50;padding-left:18px}.top-actions{display:flex;align-items:center;gap:16px}.session{font-size:12px;color:var(--muted)}
+#unlock{max-width:410px;margin:clamp(64px,13vh,150px) auto 64px;padding:0 24px}.eyebrow{font-size:11px;letter-spacing:1.8px;text-transform:uppercase;color:#9699a0;margin-bottom:14px}#unlock h1{margin-bottom:16px}#unlock>p{margin-bottom:32px}#unlock button{width:100%;margin-top:16px}#unlock small{display:block;margin-top:22px;line-height:1.6}
+.workspace{max-width:1320px;margin:auto;display:grid;grid-template-columns:220px minmax(0,1fr);min-height:calc(100vh - 88px)}.sidebar{border-right:1px solid var(--line);padding:38px 22px;display:flex;flex-direction:column;gap:38px}nav{display:flex;flex-direction:column;gap:6px}nav button{display:flex;justify-content:space-between;align-items:center;text-align:left;color:#a7a9b0;background:transparent;font-weight:500;padding:11px 14px}nav button:hover{background:#222327;color:#fff}nav button[aria-current=page]{background:#2a2b30;color:#fff}nav span{font-size:12px;color:#94979f;font-variant-numeric:tabular-nums}.sidebar-note{padding:0 14px;max-width:180px;font-size:12px;line-height:1.7;color:#858891}.sidebar-note strong{display:block;color:#b9bbc1;font-weight:500;margin-bottom:7px}.main{padding:46px 48px 64px;min-width:0}.section-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;margin-bottom:32px}.section-heading p{margin-top:10px;max-width:510px;font-size:14px;line-height:1.6}.toolbar{display:flex;gap:12px;align-items:center;padding-bottom:18px;border-bottom:1px solid var(--line)}.toolbar input{max-width:300px;min-height:42px;background:var(--surface);font-size:14px}.toolbar small{margin-left:auto}.entry{display:flex;align-items:center;gap:16px;padding:23px 0;border-bottom:1px solid var(--line)}.identity{flex:1;min-width:0}.entry-title{font-size:15px;font-weight:550;overflow-wrap:anywhere}.entry small{display:block;margin-top:5px;font-size:12px;line-height:1.6;overflow-wrap:anywhere}.row-actions{display:flex;gap:6px;flex-shrink:0}.entry .state{color:#b8babf}.entry .disabled{color:#9a8580}.empty{padding:64px 16px;text-align:center}.empty h2{font-size:17px;margin-bottom:8px;letter-spacing:0}.empty p{font-size:14px;max-width:360px;margin:auto}.notice{max-width:1224px;margin:16px auto 0;padding:14px 18px;border:1px solid #68504b;background:#2a2221;border-radius:8px;color:#f0c1b7;font-size:14px;overflow-wrap:anywhere}.page-footer{margin-top:32px;font-size:12px;color:#858891}
+dialog{color:inherit;background:#202124;border:1px solid #44464b;border-radius:16px;width:min(500px,calc(100% - 32px));max-height:calc(100% - 40px);padding:30px;box-shadow:0 24px 100px #0008}dialog::backdrop{background:#0009}dialog h2{margin-bottom:12px}dialog p{font-size:14px;margin-bottom:24px;line-height:1.65}dialog .dialog-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:26px}dialog textarea{font:12px/1.6 ui-monospace,SFMono-Regular,monospace;min-height:126px;resize:vertical;word-break:break-all}dialog small{display:block;margin-top:12px}.dialog-notice{color:#efb0a5;font-size:13px;margin-top:12px}.code-meta{font-size:12px;color:#c7c9ce;margin-bottom:16px}.copy-status{min-height:20px}
+@media(min-width:1500px){.topbar{padding-inline:max(40px,calc((100vw - 1240px)/2))}}
+@media(max-width:850px){.topbar{padding:0 24px;height:76px}.workspace{grid-template-columns:180px minmax(0,1fr);min-height:calc(100vh - 76px)}.sidebar{padding:28px 12px}.main{padding:34px 26px}.section-heading{flex-wrap:wrap;gap:18px}.row-actions{flex-wrap:wrap;justify-content:flex-end;max-width:165px}.entry{gap:10px}}
+@media(max-width:600px){.topbar{height:72px;padding:0 20px}.wordmark{font-size:29px}.brand{gap:12px}.brand span{padding-left:12px;font-size:12px}.session{display:none}.topbar button{padding:8px 12px}.workspace{display:block;min-height:0}.sidebar{border:0;border-bottom:1px solid var(--line);padding:14px 16px;gap:0}nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}nav button{font-size:13px;padding:10px 12px}.sidebar-note{display:none}.main{padding:30px 20px 48px}h1{font-size:28px}.section-heading{margin-bottom:25px}.section-heading>button{width:100%}.toolbar input{min-width:0;flex:1}.toolbar small{white-space:nowrap;font-size:12px}.entry{align-items:flex-start;flex-wrap:wrap;padding:20px 0}.identity{flex-basis:100%}.row-actions{max-width:none;margin-left:-12px;justify-content:flex-start;gap:4px}.empty{padding:44px 0}.notice{margin:14px 20px 0}dialog{padding:24px}dialog .dialog-actions{flex-wrap:wrap}#unlock{margin-top:64px}.page-footer{line-height:1.7}}
+@media(max-width:380px){.brand span{display:none}}
 </style>
-<h1>loge sync</h1>
-<p>Local account and device administration. Encrypted addon settings and playback data cannot be read or recovered here.</p>
-<form id="unlock"><label>Administrator token <input id="token" type="password" autocomplete="off" required></label><button>Unlock</button></form>
-<p id="notice" role="status"></p>
-<section id="codeBox" hidden><h2>New enrollment code</h2><p>Give this code to the account owner. It expires after 24 hours and works once. It connects a device; it does not recover a lost encryption key.</p><textarea id="code" readonly aria-label="Enrollment code"></textarea><button id="hideCode" class="secondary">Hide code</button></section>
-<main id="content" hidden>
-<button id="lock" class="secondary">Lock administration</button>
-<h2>Accounts</h2>
-<form id="create"><label>Display name <input id="name" maxlength="80" autocomplete="off" required></label><button>Create account</button></form>
-<div id="accounts"></div>
-<h2>Devices</h2><p>Revocation takes effect on the next request. A device keeps anything it already downloaded.</p><div id="devices"></div>
-<h2>Pending invitations</h2><div id="invitations"></div>
-<h2>Shared setups</h2><div id="groups"></div>
-</main>
+</head>
+<body>
+<header class="topbar"><div class="brand"><div class="wordmark">loge</div><span>Sync administration</span></div><div class="top-actions" id="sessionActions" hidden><span class="session">Administrator session</span><button id="lock" class="secondary">Lock panel</button></div></header>
+<div id="notice" class="notice" role="status" hidden></div>
+<form id="unlock">
+<div class="eyebrow">Your sync server</div><h1>Manage your sync.</h1>
+<p>Manage accounts, connected devices and the setups they share.</p>
+<label for="token">Administrator code</label><input id="token" type="password" autocomplete="off" spellcheck="false" required autofocus>
+<button type="submit">Unlock panel</button><small>Your code stays in this browser tab for this session. Encrypted settings and playback data stay private.</small>
+</form>
+<div id="content" class="workspace" hidden>
+<aside class="sidebar"><nav aria-label="Administration">
+<button data-view="accounts" aria-current="page">Accounts <span id="accountsCount">0</span></button>
+<button data-view="devices">Devices <span id="devicesCount">0</span></button>
+<button data-view="invitations">Invitations <span id="invitationsCount">0</span></button>
+<button data-view="groups">Shared setups <span id="groupsCount">0</span></button>
+</nav><p class="sidebar-note"><strong>Private by design</strong>This panel manages access. It cannot read synced settings or playback, or recover encryption keys.</p></aside>
+<main class="main">
+<div class="section-heading"><div><h1 id="viewTitle" tabindex="-1">Accounts</h1><p id="viewDescription">Each account keeps its own playback progress. Addons and settings can be shared separately.</p></div><button id="newAccount">Create account</button></div>
+<div class="toolbar"><input id="search" type="search" aria-label="Search accounts" placeholder="Search accounts…" autocomplete="off"><small id="resultCount" role="status"></small><button id="reload" class="quiet">Refresh</button></div>
+<section id="accounts" aria-label="Accounts"></section><section id="devices" aria-label="Devices" hidden></section><section id="invitations" aria-label="Invitations" hidden></section><section id="groups" aria-label="Shared setups" hidden></section>
+<p class="page-footer" id="viewFooter">Disabling an account pauses access for all of its devices.</p>
+</main></div>
+<dialog id="createDialog" aria-labelledby="createTitle"><form id="create"><h2 id="createTitle">Create an account</h2><p>Give it a name the account owner will recognise. You’ll get a one-time code to connect their first device.</p><label for="name">Display name</label><input id="name" maxlength="80" autocomplete="off" placeholder="e.g. Alex" required><div id="createNotice" class="dialog-notice" role="status"></div><div class="dialog-actions"><button type="button" class="secondary" id="cancelCreate">Cancel</button><button type="submit">Create account</button></div></form></dialog>
+<dialog id="codeDialog" aria-labelledby="codeTitle"><h2 id="codeTitle">Connect a device</h2><p id="codeDescription"></p><div id="codeExpiry" class="code-meta"></div><label for="code">Enrollment code</label><textarea id="code" readonly spellcheck="false"></textarea><small>In loge, open Settings → Sync, paste this into Connection code, then choose Connect account. Existing encrypted data also needs the account’s recovery key.</small><small id="copyStatus" class="copy-status" role="status"></small><div class="dialog-actions"><button id="hideCode" class="secondary">Done</button><button id="copyCode">Copy code</button></div></dialog>
+<dialog id="confirmDialog" aria-labelledby="confirmTitle"><form id="confirm"><h2 id="confirmTitle"></h2><p id="confirmDescription"></p><div class="dialog-actions"><button type="button" class="secondary" id="cancelConfirm">Cancel</button><button id="confirmAction" type="submit">Confirm</button></div></form></dialog>
 <script>
-let adminToken='';let names={};
 const $=id=>document.getElementById(id);
-function message(value){$('notice').textContent=value;}
-async function api(path,method='GET',data){const response=await fetch(path,{method,headers:{'X-Admin-Token':adminToken,'Content-Type':'application/json'},body:data?JSON.stringify(data):undefined,credentials:'omit'});const value=await response.json();if(!response.ok)throw Error(value.detail||'Request failed');return value;}
-function button(label,action,secondary=true){const node=document.createElement('button');node.textContent=label;if(secondary)node.className='secondary';node.onclick=async()=>{node.disabled=true;try{message('');await action();await refresh();}catch(error){message(error.message);}finally{node.disabled=false;}};return node;}
-function entry(parent,label,detail,actions){const row=document.createElement('div');row.className='entry';const text=document.createElement('span');text.textContent=label;const small=document.createElement('small');small.textContent=detail;text.append(small);row.append(text,...actions);$(parent).append(row);}
-function showInvitation(invite){$('code').value=invite.setupCode||invite.code;$('codeBox').hidden=false;}
-async function refresh(){const [accounts,access]=await Promise.all([api('/admin/accounts'),api('/admin/access')]);names=Object.fromEntries(accounts.map(account=>[account.id,account.displayName]));for(const id of ['accounts','devices','invitations','groups'])$(id).replaceChildren();for(const account of accounts){entry('accounts',account.displayName,account.enabled?'Enabled':'Disabled',[button('New device code',async()=>showInvitation(await api('/admin/accounts/'+account.id+'/invitation','POST'))),button(account.enabled?'Disable':'Enable',()=>api('/admin/accounts/'+account.id,'PATCH',{enabled:!account.enabled}))]);}for(const device of access.devices.filter(item=>!item.revoked)){entry('devices',device.name,names[device.accountID]||'Unknown account',[button('Revoke',()=>api('/admin/access/'+device.id,'DELETE'))]);}for(const invite of access.invitations.filter(item=>!item.revoked)){entry('invitations',invite.kind==='device'?'Device invitation':'Sharing invitation',(names[invite.accountID]||'Unknown account')+' · '+new Date(invite.expiresAt*1000).toLocaleString(),[button('Revoke',()=>api('/admin/access/'+invite.id,'DELETE'))]);}for(const group of access.groups){entry('groups',group.name,(names[group.ownerID]||'Unknown owner')+' · '+group.categories.join(', ')+' · '+(group.enabled?'Enabled':'Disabled'),[button(group.enabled?'Disable':'Enable',()=>api('/admin/groups/'+group.id,'PATCH',{enabled:!group.enabled}))]);}$('content').hidden=false;}
-$('unlock').onsubmit=async event=>{event.preventDefault();adminToken=$('token').value;$('token').value='';try{await refresh();$('unlock').hidden=true;message('');}catch(error){adminToken='';message(error.message);}};
-$('create').onsubmit=async event=>{event.preventDefault();try{const result=await api('/admin/accounts','POST',{displayName:$('name').value});$('name').value='';showInvitation(result.invitation);await refresh();message('');}catch(error){message(error.message);}};
-$('hideCode').onclick=()=>{$('code').value='';$('codeBox').hidden=true;};
-$('lock').onclick=()=>{adminToken='';$('code').value='';$('codeBox').hidden=true;$('content').hidden=true;$('unlock').hidden=false;message('');$('token').focus();};
+const views={
+  accounts:{title:'Accounts',description:'Each account keeps its own playback progress. Addons and settings can be shared separately.',empty:'No accounts yet',hint:'Create an account to connect the first device.',footer:'Disabling an account pauses access for all of its devices.'},
+  devices:{title:'Devices',description:'Devices connected to accounts on this server.',empty:'No connected devices',hint:'Create a device code from Accounts, then enter it in loge.',footer:'Revocation takes effect on the next request. Previously downloaded data stays on the device.'},
+  invitations:{title:'Invitations',description:'Unused codes for connecting a device or joining a shared setup.',empty:'No pending invitations',hint:'New device and sharing codes appear here until used or expired.',footer:'Only unused, unexpired invitations are shown. Codes work once and expire after 24 hours.'},
+  groups:{title:'Shared setups',description:'Addons and settings shared between accounts. Playback progress stays private.',empty:'No shared setups',hint:'Use Share setup in the loge app to choose what to share.',footer:'Disabling a setup pauses access for everyone sharing it.'}
+};
+let adminToken='',session=0,currentView='accounts',records={accounts:[],devices:[],invitations:[],groups:[]},names={},pendingAction=null;
+function message(value){$('notice').textContent=value;$('notice').hidden=!value;}
+async function api(path,method='GET',data){
+  const generation=session;
+  const response=await fetch(path,{method,headers:{'X-Admin-Token':adminToken,'Content-Type':'application/json'},body:data?JSON.stringify(data):undefined,credentials:'omit'});
+  let value;try{value=await response.json();}catch{throw Error('The server returned an unreadable response. Try refreshing.');}
+  if(generation!==session)throw Error('The panel was locked. Unlock it to continue.');
+  if(!response.ok)throw Error(typeof value.detail==='string'?value.detail:'The request failed. Try again.');
+  return value;
+}
+async function busy(node,action){node.disabled=true;try{await action();}finally{node.disabled=false;}}
+function date(value){return new Date(typeof value==='number'?value*1000:value).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});}
+function owner(id){return names[id]||'Unknown account';}
+function confirmAction(title,description,action){pendingAction=action;$('confirmTitle').textContent=title;$('confirmDescription').textContent=description;$('confirmAction').textContent=title;$('confirmDialog').showModal();}
+function actionButton(label,action,danger=false){
+  const node=document.createElement('button');node.textContent=label;node.className='quiet'+(danger?' danger':'');
+  node.onclick=()=>busy(node,async()=>{message('');try{await action();}catch(error){message(error.message);}});return node;
+}
+function entry(label,detail,actions,state){
+  const row=document.createElement('div');row.className='entry';const identity=document.createElement('div');identity.className='identity';
+  const title=document.createElement('div');title.className='entry-title';title.textContent=label;
+  const subtitle=document.createElement('small');subtitle.textContent=detail;
+  if(state){const status=document.createElement('span');status.className=state==='Disabled'?'disabled':'state';status.textContent=' · '+state;subtitle.append(status);}
+  identity.append(title,subtitle);const controls=document.createElement('div');controls.className='row-actions';controls.append(...actions);row.append(identity,controls);return row;
+}
+async function update(path,method,data){await api(path,method,data);try{await refresh();}catch(error){message('Change saved. Could not reload the list: '+error.message);}}
+function showInvitation(invite,name){
+  $('code').value=invite.setupCode||invite.code;$('codeDescription').textContent='Give this code to '+name+' to connect one device to their account.';
+  $('codeExpiry').textContent='One use · Expires '+date(invite.expiresAt);$('copyStatus').textContent='';$('codeDialog').showModal();
+}
+function render(){
+  const query=$('search').value.trim().toLocaleLowerCase();const view=views[currentView];const container=$(currentView);container.replaceChildren();
+  const items=records[currentView].filter(item=>[item.displayName,item.name,item.kind,(item.accountID||item.ownerID)?owner(item.accountID||item.ownerID):''].filter(Boolean).join(' ').toLocaleLowerCase().includes(query));
+  $('resultCount').textContent=items.length+' '+(items.length===1?'item':'items');
+  for(const item of items){
+    let row;
+    if(currentView==='accounts'){
+      const actions=[];
+      if(item.enabled)actions.push(actionButton('New device code',async()=>{showInvitation(await api('/admin/accounts/'+item.id+'/invitation','POST'),item.displayName);try{await refresh();}catch(error){message('Code created. Could not reload the list: '+error.message);}}));
+      actions.push(actionButton(item.enabled?'Disable':'Enable',()=>confirmAction((item.enabled?'Disable':'Enable')+' account',item.enabled?'Pause access for every device on '+item.displayName+'? You can enable the account again.':'Restore device access for '+item.displayName+'?',()=>update('/admin/accounts/'+item.id,'PATCH',{enabled:!item.enabled})),item.enabled));
+      const count=records.devices.filter(device=>device.accountID===item.id).length;
+      row=entry(item.displayName,count+' '+(count===1?'device':'devices'),actions,item.enabled?'Enabled':'Disabled');
+    }else if(currentView==='groups'){
+      const categories={addons:'Addons',playback:'Playback settings',appearance:'Appearance'};
+      row=entry(item.name,owner(item.ownerID)+' · '+item.categories.map(value=>categories[value]||value).join(', '),[actionButton(item.enabled?'Disable':'Enable',()=>confirmAction((item.enabled?'Disable':'Enable')+' shared setup',(item.enabled?'Pause':'Restore')+' sharing for '+item.name+'?',()=>update('/admin/groups/'+item.id,'PATCH',{enabled:!item.enabled})),item.enabled)],item.enabled?'Enabled':'Disabled');
+    }else{
+      const device=currentView==='devices';const label=device?item.name:(item.kind==='device'?'Device invitation':'Sharing invitation');
+      const detail=owner(item.accountID)+' · '+(device?'Connected '+date(item.createdAt):'Expires '+date(item.expiresAt));
+      row=entry(label,detail,[actionButton('Revoke',()=>confirmAction(device?'Revoke device':'Revoke invitation',device?'Disconnect '+item.name+'? To reconnect, the owner will need a new code.':'Invalidate this unused code for '+owner(item.accountID)+'?',()=>update('/admin/access/'+item.id,'DELETE')),true)]);
+    }
+    container.append(row);
+  }
+  if(!items.length){const empty=document.createElement('div');empty.className='empty';const title=document.createElement('h2');title.textContent=query?'No matches':view.empty;const hint=document.createElement('p');hint.textContent=query?'Try a different name.':view.hint;empty.append(title,hint);container.append(empty);}
+}
+function selectView(id,focus=false){
+  currentView=id;const view=views[id];$('viewTitle').textContent=view.title;$('viewDescription').textContent=view.description;$('viewFooter').textContent=view.footer;$('search').value='';$('search').placeholder='Search '+view.title.toLowerCase()+'…';$('search').setAttribute('aria-label','Search '+view.title.toLowerCase());$('newAccount').hidden=id!=='accounts';
+  for(const key of Object.keys(views))$(key).hidden=key!==id;
+  for(const node of document.querySelectorAll('[data-view]')){if(node.dataset.view===id)node.setAttribute('aria-current','page');else node.removeAttribute('aria-current');}
+  render();if(focus)$('viewTitle').focus();
+}
+async function refresh(){
+  const generation=session;const [accounts,access]=await Promise.all([api('/admin/accounts'),api('/admin/access')]);if(generation!==session)return;
+  names=Object.fromEntries(accounts.map(account=>[account.id,account.displayName]));
+  records={accounts,devices:access.devices.filter(item=>!item.revoked),invitations:access.invitations.filter(item=>!item.revoked&&item.expiresAt>Date.now()/1000),groups:access.groups};
+  for(const key of Object.keys(views))$(key+'Count').textContent=records[key].length;
+  render();
+}
+$('unlock').onsubmit=event=>{event.preventDefault();busy($('unlock').querySelector('button'),async()=>{
+  adminToken=$('token').value;$('token').value='';try{await refresh();$('unlock').hidden=true;$('content').hidden=false;$('sessionActions').hidden=false;message('');$('viewTitle').focus();}catch(error){adminToken='';message(error.message);$('token').focus();}
+});};
+$('newAccount').onclick=()=>{$('createNotice').textContent='';$('createDialog').showModal();$('name').focus();};
+$('cancelCreate').onclick=()=>$('createDialog').close();
+$('create').onsubmit=event=>{event.preventDefault();busy($('create').querySelector('[type=submit]'),async()=>{
+  const name=$('name').value.trim();if(!name){$('createNotice').textContent='Enter a display name.';return;}
+  try{const result=await api('/admin/accounts','POST',{displayName:name});$('name').value='';$('createDialog').close();showInvitation(result.invitation,name);try{await refresh();}catch(error){message('Account created. Could not reload the list: '+error.message);}}catch(error){$('createNotice').textContent=error.message;}
+});};
+$('confirm').onsubmit=event=>{event.preventDefault();const action=pendingAction;$('confirmDialog').close();pendingAction=null;if(action)busy($('reload'),async()=>{try{await action();}catch(error){message(error.message);}});};
+$('cancelConfirm').onclick=()=>$('confirmDialog').close();$('confirmDialog').onclose=()=>{pendingAction=null;};
+$('codeDialog').onclose=()=>{$('code').value='';$('copyStatus').textContent='';};$('hideCode').onclick=()=>$('codeDialog').close();
+$('copyCode').onclick=async()=>{try{await navigator.clipboard.writeText($('code').value);$('copyStatus').textContent='Code copied.';}catch{$('code').focus();$('code').select();$('copyStatus').textContent='Select and copy the code above.';}};
+$('reload').onclick=()=>busy($('reload'),async()=>{message('');try{await refresh();}catch(error){message(error.message);}});
+$('search').oninput=render;for(const node of document.querySelectorAll('[data-view]'))node.onclick=()=>selectView(node.dataset.view,true);
+$('lock').onclick=()=>{session++;adminToken='';names={};for(const dialog of document.querySelectorAll('dialog'))dialog.close();for(const key of Object.keys(records)){records[key]=[];$(key).replaceChildren();}pendingAction=null;$('name').value='';$('content').hidden=true;$('sessionActions').hidden=true;$('unlock').hidden=false;selectView('accounts');message('');$('token').focus();};
 </script>
+</body>
 </html>

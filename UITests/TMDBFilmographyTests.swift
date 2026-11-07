@@ -94,13 +94,5 @@ final class TMDBFilmographyTests: XCTestCase {
         XCTAssertTrue(app.segmentedControls.buttons.matching(NSPredicate(format: "label BEGINSWITH 'All ('")).firstMatch.exists)
         screenshot("tmdb-director-filmography")
     }
-
-    @MainActor
-    private func screenshot(_ name: String) {
-        guard let directory = ProcessInfo.processInfo.environment["SCREENSHOT_DIR"] else { return }
-        let url = URL(fileURLWithPath: directory).appending(path: "\(name).png")
-        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try? XCUIScreen.main.screenshot().pngRepresentation.write(to: url)
-    }
 }
 #endif

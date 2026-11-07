@@ -1,0 +1,12 @@
+# Scenario tests read top to bottom and grow with each regression they pin; size and
+# branching limits meant for production types don't fit them.
+disabled_rules:
+  - file_length
+  - type_body_length
+  - function_body_length
+  - cyclomatic_complexity
+  - large_tuple
+
+line_length:
+  # Inline JSON fixtures stay on one line, like the request or response they stand for.
+  warning: 200

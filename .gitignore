@@ -6,3 +6,10 @@
 DerivedData/
 xcuserdata/
 .swiftpm/
+
+# desloppify local state
+.desloppify/
+
+__pycache__/
+# Finder clippings can hold copied addon URLs with keys.
+*.textClipping
