@@ -88,6 +88,9 @@ after about a second.
 
 - Before finishing: build all three platforms with no warnings, run Core tests, and check
   UI changes in the simulators (screenshots), including tvOS focus with the remote driver.
+- Real-device testing isn't planned (maintainer's time; ROADMAP.md): verify in simulators
+  and automated tests, don't ask for or schedule hardware checks, and name what a
+  simulator can't establish (HDR, display matching, remote swipes, screen lock) as a limit.
 - Platform differences use `#if os(...)` in place; sizes live in `Metrics`
   (`App/Browse/Components/BrowseComponents.swift`), iPad/landscape via size classes.
 - No co-author or "generated with" lines in commits or PRs; commit only when asked.
@@ -156,15 +159,18 @@ Picture is required; downloads are out of scope; UI is English only for now.
 
 Next, in plan order:
 
-1. Phase 2 leftovers: tvOS swipe-to-scrub and Mac playback need checking by hand.
-2. tvOS Top Shelf with Continue Watching, on hold. Tested 2 November (branch
+Hardware-only checks in the notes below (swipe-to-scrub, HDR, display matching, physical
+handoff, Top Shelf logs) stay unverified limits since the 7 November testing-scope decision.
+
+1. Simulator and automated-test priorities, then the proposed features, as in ROADMAP.md.
+2. tvOS Top Shelf with Continue Watching, not planned. Tested 2 November (branch
    `claude/top-shelf-test`): atvloadly signs and installs a Top Shelf extension with a free
    Apple ID and registers the App Group (`group.li.tjh.MediaApp.<team ID>`; the real name has
    to be read from the embedded provisioning profile), but tvOS never launches the extension:
    no process, no crash log, the shelf stays empty. The reason is only in the Apple TV's live
-   log (Console.app with the paired device); read it before building more.
-3. Check the Home lag fix on the Apple TV itself (simulator only so far; simulator 4K
-   rendering still shows 90–170 ms frame gaps per move).
+   log (Console.app with the paired device), which is hardware-only.
+3. The Home lag fix is measured in the simulator only (4K rendering still shows 90–170 ms
+   frame gaps per move); keep simulator measurements comparable.
 
 Todo added 4 November 2026 (implementation status updated below):
 

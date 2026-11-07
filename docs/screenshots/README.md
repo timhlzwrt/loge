@@ -52,7 +52,8 @@ not redrawn. No artificial device frames, playback sources or credentials were a
 A new tvOS screenshot was not captured in this pass: the connected Device panel
 exposes iPhone/iPad simulators, not an Apple TV target. Do not substitute an
 iPad/Mac image or a mockup as a tvOS screenshot. Apple TV has a separate
-focus-driven layout; its hardware validation remains on the [roadmap](../../ROADMAP.md).
+focus-driven layout. The tvOS remote driver (`UITests/RemoteDriverTests.swift`) can
+drive the Apple TV simulator for screenshots; see the [roadmap](../../ROADMAP.md).
 
 ## Updating these images
 
