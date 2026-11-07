@@ -1,0 +1,29 @@
+name: Website
+
+# Publishes web/ to Cloudflare Pages (project "loge", served at https://loge.tjh.li).
+# Kept apart from the release workflow: the page changes rarely and needs no app build,
+# and tjh.li/loge on GitHub Pages stays the home of the SideStore source and Mac appcast.
+on:
+  push:
+    branches: [main]
+    paths: [web/**, .github/workflows/web.yml]
+  workflow_dispatch:
+
+concurrency:
+  group: web
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy web --project-name=loge --branch=main
