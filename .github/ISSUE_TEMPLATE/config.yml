@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Installation and troubleshooting
+    url: https://github.com/timhlzwrt/loge/blob/main/docs/INSTALLATION.md
+    about: Signing, updates, addon setup, accounts and common playback problems.
+  - name: Roadmap and known limits
+    url: https://github.com/timhlzwrt/loge/blob/main/ROADMAP.md
+    about: Check shipped work, hardware validation gaps and deferred features.

@@ -4,8 +4,8 @@ options:
   bundleIdPrefix: li.tjh
   deploymentTarget:
     iOS: "26.0"
-    tvOS: "27.0"
-    macOS: "27.0"
+    tvOS: "26.0"
+    macOS: "26.0"
 
 packages:
   LogeCore:

@@ -1,15 +1,16 @@
 # loge: implementation overview
 
-Updated 2 November 2026. loge is a SwiftUI streaming app for
+Updated 7 November 2026. loge is a SwiftUI streaming app for
 iPhone, iPad, Apple TV and Mac. `li.tjh.MediaApp` remains the bundle
 identifier so existing installations keep their data.
 
 ## Application and data flow
 
-`App/LogeApp.swift` creates five observable, main-actor owners and injects them
-through the SwiftUI environment: `AddonStore`, `LibraryStore`, `TraktAccount`
-`PlaybackSession` and `TMDBAccount`. Each browsing tab has its own navigation stack. Movies,
-series, catalog grids and source lists use typed navigation destinations.
+`App/LogeApp.swift` creates six observable, main-actor owners and injects them
+through the SwiftUI environment: `AddonStore`, `LibraryStore`, `TraktAccount`,
+`PlaybackSession`, `TMDBAccount` and `AccountSync`. Each browsing tab has its own
+navigation stack. Movies, series, catalog grids and source lists use typed
+navigation destinations.
 
 1. `AddonStore` loads the installed addon list and cached manifests from
    UserDefaults. Startup refreshes manifests concurrently, preserving cached
@@ -35,6 +36,10 @@ series, catalog grids and source lists use typed navigation destinations.
    remote playback progress. Startup pulls progress after manifest refresh, and
    returning to the app pulls again. Recent completed plays clear unfinished
    local entries using their watch timestamps; newer local rewatches win.
+7. `AccountSync` optionally connects to the self-hosted account gateway, carrying
+   encrypted progress, watched state, addon setup and preferences. Separate shared
+   setup categories never include private viewing progress. Trakt imports and
+   scrobbling pause while an account is connected. See [Private sync](SYNC.md).
 
 ## Screens and platform behavior
 
@@ -45,17 +50,17 @@ series, catalog grids and source lists use typed navigation destinations.
   grids, with genre filtering when the addon advertises it.
 - `MetaDetailView.swift`: title details, seasons, episode cards, watched
   actions and next episode selection.
-- `PersonView.swift`: Cast & Crew on details and a person's titles, found by
-  searching Cinemeta for the name and keeping results that credit them.
+- `PersonView.swift`: person details and role-filtered TMDB filmographies when
+  connected, with a Cinemeta name/credit fallback without TMDB.
 - `SourcesView.swift`: source selection, autoplay and fallback candidates. Resolution
   groups retain addon order for ties, with cached-first, bitrate and file-size
   sorting plus a reported-bitrate cap; unknown rates stay visible.
 - `SearchView.swift`: debounced search across built-in movie/series feeds and local
   recent searches.
-- `App/Settings`: addon installation/order/removal, playback preferences and
-  Trakt app keys/sign-in/sync.
+- `App/Settings`: addon installation/order/removal, playback preferences,
+  self-hosted sync/sharing, Trakt/TMDB connections and the Mac updater.
 
-The shared visual language lives in `BrowseComponents.swift`: charcoal canvas,
+The shared visual language lives in `App/Browse/Components`: charcoal canvas,
 white controls, artwork-led hierarchy, platform-specific `Metrics` and font
 sizes. Platform differences stay inline behind `#if os(...)`. Mac playback
 uses a separate window; iOS/tvOS use a full-screen presentation.

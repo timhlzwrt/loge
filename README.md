@@ -1,231 +1,196 @@
-# loge — Stremio client for iOS, tvOS and macOS
+<p align="center">
+  <img src="docs/assets/wordmark.svg" width="960" alt="loge — Stremio addons. Native playback.">
+</p>
 
-A native SwiftUI client for Stremio addons on iPhone, iPad, Apple TV and Mac. Browse
-movie and TV catalogs, track episodes and play direct video streams with mpv.
+<p align="center">
+  A SwiftUI Stremio addon client for <strong>iPhone, iPad, Apple TV and Mac</strong>.<br>
+  Browse films and series, choose your source, and play with mpv.
+</p>
 
-[Install](#installing) · [First run](#first-run) · [Accounts and sync](#optional-accounts) ·
-[Troubleshooting](#troubleshooting) · [Build from source](#building)
+<p align="center">
+  <a href="https://github.com/timhlzwrt/loge/releases/latest"><strong>Download</strong></a> ·
+  <a href="docs/INSTALLATION.md">Install & set up</a> ·
+  <a href="#features">Features</a> ·
+  <a href="ROADMAP.md">Roadmap</a> ·
+  <a href="CONTRIBUTING.md">Contribute</a>
+</p>
 
-Requires **iOS/iPadOS 26**, **tvOS 27** or **macOS 27 on Apple silicon**.
+![loge on Mac and iPhone: film discovery, festival collections and title details](docs/screenshots/overview.png)
 
-Movies, series, search and IMDb ratings work out of the box through Cinemeta. To watch
-something, add a Stremio addon that provides streams. **loge has no content of its own**:
-what plays, and whether you may watch it, depends entirely on the addons you add.
+**Your addons provide the streams.** Cinemeta supplies built-in movie and series
+catalogs, search and IMDb ratings. Add a playback addon to watch. loge does not
+host, bundle or sell content; only use sources you are entitled to access.
 
-## What it does
+## Platforms
 
-- **Home:** popular and Letterboxd lists, genres, festival winners and directors, Continue
-  Watching, Watch Later and your own lists.
-- **Details:** seasons and episodes with Up Next, cast and crew, reviews, and marking
-  things watched. History lists everything you played, by day.
-- **Sources:** every stream from your addons, read into resolution, HDR, codec, audio,
-  size and bitrate. The best one your connection keeps up with is marked as recommended.
-- **Player:** mpv with hardware decoding, HDR, Picture in Picture, AirPlay, subtitles from
-  the file, the stream or subtitle addons (with timing adjustment), skipping of intros,
-  recaps and credits, and the next episode starting by itself.
-- **Accounts, both optional:** [Trakt](https://trakt.tv) brings in paused playback progress
-  and receives playback and watched-history updates; a [TMDB](https://www.themoviedb.org)
-  token adds metadata, portraits, filmographies and member reviews.
-  See [what syncs](#trakt-playback-progress) before setting up a second device.
+- **iPhone:** iOS 26.0 or later. Portrait browsing, landscape playback.
+- **iPad:** iPadOS 26.0 or later. Adaptive browsing and full-screen playback.
+- **Apple TV:** tvOS 26.0 or later. Focus-driven browsing and Siri Remote controls.
+- **Mac:** macOS 26.0 or later. Sidebar navigation, a separate player window and
+  signed in-app updates. The distributed build is for Apple silicon.
 
-Only direct HTTP(S) streams play. Torrents and magnet links are not supported.
+These are the deployment minimums for this source revision, not the SDK version
+used to build it. The inspected **`build-97`** downloads still require **tvOS 27**
+and **macOS 27**; newly built binaries use the corrected OS 26 targets.
+[Requirements and verification](docs/REQUIREMENTS.md) explains the API floor,
+binary dependencies and what has—and has not—been tested on OS 26.
 
-<img src="docs/screenshots/iphone-home.jpg" width="300" alt="loge on iPhone: artwork-led Home with built-in movie and series catalogs">
+## Features
 
-## Installing
+### Find something worth watching
 
-loge isn't in the App Store. You sign it yourself with a free Apple ID; no paid developer
-account is needed.
+- **Artwork-led Home:** popular films and series, IMDb favourites, Letterboxd
+  lists, genres, festival winners and directors.
+- **Title details:** seasons, episodes, Up Next, cast and crew, watched actions,
+  and IMDb ratings with their source and scale.
+- **People and festivals:** TMDB-backed portraits and filmographies, role
+  filters, member reviews, and dated festival editions with award filters.
+  TMDB features require your own read access token.
+- **Your library:** Continue Watching, Watch Later, custom lists and history
+  grouped by day. Search includes recent queries.
 
-### iPhone and iPad: iloader (works now)
+### Choose a source, not a mystery filename
 
-Since October 2026, SideStore and AltStore can't sign in to Apple from the phone (error
-`-80045`) after a change on Apple's servers. Until they're fixed, sign loge from a computer:
+- Streams from installed addons, grouped by resolution with HDR, codec, audio,
+  file size and bitrate parsed when the provider supplies them.
+- Remembered source selection, automatic fallback and a connection-aware
+  recommendation once the device has measured playback download speed.
+- A configurable size limit for automatic series-source selection; the default
+  is **50 GB per episode**. Movies and manual selections are unrestricted.
 
-1. Download `loge-iOS.ipa` from the
-   [latest release](https://github.com/timhlzwrt/loge/releases/latest).
-2. Open [iloader](https://iloader.app) on a Mac, Windows or Linux computer, sign in with your
-   Apple ID and plug in the phone.
-3. Choose **Import IPA** and pick the downloaded file.
+### Play with mpv
 
-The free signature lasts 7 days: import again each week, which also brings you the newest
-build. If iloader says the maximum number of certificates is reached, revoke only ones you
-don't use elsewhere; apps signed with a revoked certificate stop opening.
+- Hardware decoding and an AVFoundation video output, with HDR support dependent
+  on the device, display and source.
+- Embedded and external subtitles, subtitle addons, preferred audio/subtitle
+  languages, subtitle sizing, and audio/subtitle timing adjustment.
+- Timeline previews, playback speed, chapter/community-based intro, recap and
+  credits skips when timing data is available, and an automatic next episode.
+- Picture in Picture where supported, system Now Playing controls, an iOS
+  AirPlay audio route picker, and Apple TV frame-rate/dynamic-range matching.
 
-### iPhone and iPad: SideStore (once its sign-in works again)
+Hardware-sensitive features are implemented, not a promise of every codec,
+display or output combination. See [limitations](#know-the-limits) and the
+[hardware verification backlog](ROADMAP.md#next-verification-first).
 
-1. Set up [SideStore](https://sidestore.io) once, following its guide.
-2. In SideStore, open **Sources**, tap **+** and add:
+### Continue on your other devices
 
-   ```
-   https://tjh.li/loge/source.json
-   ```
+**Self-hosted sync** carries movie/episode progress, watched state, ordered addons
+and preferences between your devices. Separate accounts can share selected setup
+categories without sharing viewing progress. Payloads are encrypted on-device;
+there is **no default hosted service**. [Set up private sync →](docs/SYNC.md)
 
-3. Install loge from the source. New builds appear there as updates. SideStore refreshes
-   the 7-day signature in the background.
+**Trakt** is an alternative for paused progress, playback scrobbling and
+watched/unwatched updates. It is paused while a self-hosted account is connected,
+so two services do not compete over your watch activity.
+[Connect Trakt or TMDB →](docs/INSTALLATION.md#optional-accounts)
 
-The same source works in [AltStore](https://altstore.io) Classic.
+**What stays local:** Watch Later, custom lists and remembered stream selections
+are not synchronized by either service. Trakt does not carry addon configuration
+or preferences and does not import your full watched history. Self-hosted sync
+retains offline edits; Trakt has no offline upload queue.
 
-### Apple TV
+## Install and start watching
 
-SideStore doesn't run on tvOS. Download `loge-tvOS.ipa` from the
-[latest release](https://github.com/timhlzwrt/loge/releases/latest) and install it with a
-computer-based sideloader such as [Sideloadly](https://sideloadly.io). The free signature
-lasts 7 days, so reinstall or refresh it each week.
+loge is **pre-1.0**, not in the App Store, and distributed through
+[GitHub Releases](https://github.com/timhlzwrt/loge/releases).
 
-### Building your own (with a Mac and Xcode)
+- **iPhone / iPad:** download `loge-iOS.ipa` and sign it with a sideloading tool
+  such as [iloader](https://github.com/nab138/iloader). A SideStore / AltStore
+  Classic source is also available in the [installation guide](docs/INSTALLATION.md).
+- **Apple TV:** download `loge-tvOS.ipa` and install with a tvOS-capable tool such
+  as [atvloadly](https://github.com/bitxeno/atvloadly) or
+  [Sideloadly](https://sideloadly.io).
+- **Mac:** download `loge-macOS.dmg` and drag loge into Applications. The app is
+  ad-hoc signed, **not notarized**; the first launch needs macOS's **Open Anyway**
+  approval. Later updates are verified by Sparkle.
 
-With Xcode signed in to your Apple ID, `Tools/install.sh` builds loge and installs it on a
-connected iPhone, iPad or, through [atvloadly](https://github.com/bitxeno/atvloadly) (set
-`ATVLOADLY` to its address), an Apple TV. Xcode's own signing isn't affected by the sign-in problem above.
+A free Apple ID can sign the iOS/tvOS builds; those signatures need refreshing
+every seven days. Mac installation does not use that seven-day signing cycle.
+Follow the [platform-specific instructions](docs/INSTALLATION.md) for signing,
+Gatekeeper, updates and troubleshooting.
 
-### Mac
+**First run:** open **Settings → Addons**, install your provider's configured
+`/manifest.json` URL, open a title, and choose **Sources**. Built-in catalogs do
+not imply that a playable source is available. No loge, Trakt or TMDB account is
+required for basic browsing and playback.
 
-Needs macOS 27 on Apple silicon.
+## Screenshots
 
-1. Download `loge-macOS.dmg` from the
-   [latest release](https://github.com/timhlzwrt/loge/releases/latest), open it and drag
-   **loge** to **Applications**.
-2. Open loge. macOS refuses the first time, since the app is ad-hoc signed rather than
-   notarized by Apple; click **Done**.
-3. Open **System Settings → Privacy & Security**, scroll to the message about loge and click
-   **Open Anyway**, then confirm with your password.
+<p align="center">
+  <img src="docs/screenshots/iphone-home.jpg" width="260" alt="iPhone Home with a featured film and popular movie posters">
+  &nbsp;
+  <img src="docs/screenshots/iphone-details.png" width="260" alt="iPhone title details with artwork, rating, playback and library actions">
+</p>
 
-That's needed for the first installation. Subsequent builds can be downloaded and installed
-from **loge → Check for Updates…** or **Settings → About**. Enable automatic checks there
-to be notified of new builds. Updates and their feed are signed and verified before installation.
-If you're using a build without the updater, install the newest `.dmg` once to get it.
+Real app captures, not UI mockups. The overview combines a Mac discovery capture
+with iPhone title details.
 
-### Which build do I have?
+![iPad landscape layout: sidebar navigation and film details](docs/screenshots/ipad-details.png)
 
-Settings → About shows the build's commit and date, with a link that compares it with the
-latest `main` on GitHub. Every push to `main` becomes a
-[release](https://github.com/timhlzwrt/loge/releases) numbered by commit count.
+[Full-size images and capture notes →](docs/screenshots/README.md)
 
-## First run
+## Know the limits
 
-1. Open **Settings → Addons**. Cinemeta supplies the built-in movie and series catalogs;
-   playback needs an addon that provides streams.
-2. In **Add addon**, paste the addon's configured **Manifest URL** ending in
-   `/manifest.json`, then select **Install**. Use the manifest URL, rather than the
-   addon's configuration webpage.
-3. Open a title, choose an episode for a series, then select **Sources** and a playable
-   stream. The app remembers your selected source for subsequent playback when available.
-4. On another device, install the addon there too, or connect your own server in
-   **Settings → Sync** to share addon setup and preferences.
+- **Direct HTTP(S) streams only.** No torrent engine, info-hash playback or magnet
+  support. An addon/service must turn those into a playable video URL.
+- **No offline downloads.** Streaming is the playback model; downloads are out of scope.
+- **No subtitles in Picture in Picture.** The current subtitle layer is separate
+  from the video layer captured by PiP.
+- **No Apple TV Top Shelf extension.** Continue Watching inside the app works;
+  system Home Screen integration is on hold.
+- **English interface only.** Audio and subtitle language preferences are separate.
+- **No personalized recommendation engine.** Home uses managed discovery feeds,
+  not recommendations inferred from your history. Letterboxd links/lists do not
+  mean Letterboxd ratings or account sync are integrated.
 
-Addons higher in **Your addons** are asked first. Use **Edit** to reorder on iPhone/iPad,
-drag rows on Mac, or open an addon's menu and choose **Move Up** / **Move Down** on Apple TV.
+The [roadmap](ROADMAP.md) separates shipped work, validation gaps and deferred
+ideas. Report reproducible problems through the
+[issue forms](https://github.com/timhlzwrt/loge/issues/new/choose)—never include
+configured addon URLs, stream credentials, connection codes or recovery keys.
 
-## Optional accounts
+## Build from source
 
-Browsing and playback do not require a loge account. Trakt and TMDB are separate optional
-connections, configured in Settings on each device.
-
-### Trakt playback progress
-
-1. Create your own application at [Trakt applications](https://trakt.tv/oauth/applications)
-   with redirect URI `urn:ietf:wg:oauth:2.0:oob`.
-2. In **Settings → Trakt**, enter its **Client ID** and **Client Secret**, then **Save**.
-3. Select **Sign In**, open the displayed verification URL and enter the displayed code.
-4. Sign in to the same Trakt account on each device. Use **Sync Now** to request paused
-   progress manually.
-
-loge pulls paused movie and episode progress on launch and when returning to the app, and
-sends playback scrobbles and watched/unwatched changes to Trakt. Recent completed plays
-clear unfinished local entries, keeping their original watch dates. Newer local progress
-takes precedence when merging.
-Matching requires IMDb identifiers; titles known only by another addon's identifiers may
-not sync. New titles use built-in Cinemeta or a matching installed metadata addon.
-
-**Trakt scope:** Watch Later, custom lists, addon setup, source selections and settings
-are not carried by Trakt. Trakt's full watched history is not imported. There is no offline
-upload queue, so failed updates are not stored for later delivery. A Trakt connection is
-not a complete backup of your library or configuration.
-
-### Private sync and shared setup
-
-**Settings → Sync** optionally connects to your own HTTPS sync service. There is
-no default server. Your account carries playback progress, watched state, ordered
-addons and preferences across your devices. Separate accounts can share selected
-setup categories while keeping viewing progress private. Expiring connection
-codes connect devices or invite someone to a shared setup; addon invitations do
-not include account access. Payloads are encrypted on-device and keys stay in
-Keychain. A local management page creates accounts and revokes access. See the
-[setup and self-hosting guide](docs/SYNC.md) for deployment, conflict
-handling and recovery-key precautions.
-
-### TMDB metadata
-
-Open **Settings → TMDB → Connect TMDB**, paste the **API Read Access Token** from your
-[TMDB API settings](https://www.themoviedb.org/settings/api) and select **Connect**. This is
-the read access token, rather than the API key. The app checks it before saving it in the
-device's Keychain. On Apple TV, use the Apple TV Remote keyboard on your phone to enter it.
-
-## Troubleshooting
-
-- **Catalogs load, but no sources appear:** install a playback addon in Settings → Addons.
-  Check that its configuration provides streams for the selected title and that the addon
-  is reachable. Built-in catalog results do not guarantee an available stream.
-- **A source is unsupported:** only direct HTTP(S) video streams play. Torrent files,
-  info hashes and magnet links require an addon/service that supplies a direct video URL.
-- **Playback buffers:** try a smaller source or lower bitrate. The source list shows size
-  and bitrate when available, and recommends a source when it has a measured
-  connection speed to compare against. A new device may not yet have that measurement.
-- **Continue Watching differs between devices:** check the same Trakt account is connected
-  on both, pause or close playback on the first, then select **Sync Now** on the second.
-  See the [sync limits](#trakt-playback-progress), including unsupported title identifiers.
-- **A sideloaded app stops opening after a week:** refresh or reinstall its signature using
-  your sideloading tool. Free Apple ID signatures expire after seven days.
-
-For a reproducible problem, [open an issue](https://github.com/timhlzwrt/loge/issues) with
-the device and OS version, the commit from **Settings → About**, steps to reproduce and
-what you expected. Include a screenshot when useful. Redact addon manifest URLs, access
-tokens, Trakt app secrets and stream URLs containing credentials; an addon host and name
-are enough to identify the provider.
-
-## Building
-
-Needs Xcode 27 and [XcodeGen](https://github.com/yonaskolb/XcodeGen).
+These instructions are verified with **Xcode 27.2 / Swift 6.4.2** and
+[XcodeGen](https://github.com/yonaskolb/XcodeGen), in Swift 6 language mode.
+The app needs OS 26-era APIs; the oldest working Xcode version has not been
+established. Older toolchains are not verified; the runtime target remains OS 26.
 
 ```sh
-xcodegen generate              # after adding or removing files
-(cd Core && swift test)        # Core unit tests
-xcodebuild -project loge.xcodeproj -scheme loge \
-  -destination 'generic/platform=iOS Simulator' -derivedDataPath .build/xcode build
+git clone https://github.com/timhlzwrt/loge.git
+cd loge
+xcodegen generate
+(cd Core && swift test)
+xcodebuild build -project loge.xcodeproj -scheme loge \
+  -destination 'generic/platform=iOS Simulator' \
+  -derivedDataPath .build/xcode SWIFT_TREAT_WARNINGS_AS_ERRORS=YES
 ```
 
-Swap the destination for `generic/platform=tvOS Simulator` or `platform=macOS`.
-`Tools/build-ipa.sh` writes unsigned `.ipa` files to `.build/ipa`, `Tools/build-dmg.sh` the
-Mac `.dmg` to `.build/dmg`, and
-`Tools/test-addon.py` serves a local addon with test streams at
-`http://127.0.0.1:8765/manifest.json`.
+For Apple TV use `generic/platform=tvOS Simulator`; for Mac use `platform=macOS`.
+Initial builds download the vendored MPVKit binary dependencies. See
+[Contributing](CONTRIBUTING.md) for all checks, fixture-based UI tests and packaging.
 
-Mac packaging installs a pinned `dmgbuild` into `.build/dmg-tools` for the Finder layout.
-[Mac update publishing](docs/MAC_UPDATES.md) covers Sparkle signing and the release feed.
+### Project guides
 
-| Path             | What's in it                                                        |
-| ---------------- | ------------------------------------------------------------------- |
-| `Core/`          | `LogeCore` package: addon client, routing, addon and library stores |
-| `App/Browse/`    | Home, catalog rows, details, sources, search                        |
-| `App/Player/`    | mpv player, controls, Picture in Picture, next episode              |
-| `App/Settings/`  | Addons, accounts, playback preferences, About                       |
-| `Vendor/MPVKit/` | MPVKit with a patched libmpv that adds an AVFoundation video output |
-| `Tools/`         | Test addon, `.ipa` builder, device install scripts, icon renderer   |
+- [Architecture and data flow](docs/APP_OVERVIEW.md)
+- [Platform requirements and verification](docs/REQUIREMENTS.md)
+- [Installation, accounts and troubleshooting](docs/INSTALLATION.md)
+- [Private sync and shared setups](docs/SYNC.md)
+- [Playback diagnostics and performance](docs/PLAYBACK_PERFORMANCE.md)
+- [Mac updater signing and publishing](docs/MAC_UPDATES.md)
+- [CI](https://github.com/timhlzwrt/loge/actions/workflows/ci.yml) ·
+  [Release workflow](https://github.com/timhlzwrt/loge/actions/workflows/release.yml)
 
-[The app overview](docs/APP_OVERVIEW.md) covers data flow and platform behaviour, and
-[playback performance](docs/PLAYBACK_PERFORMANCE.md) the source size limits and diagnostics.
+## Licence and credits
 
-## Licence
+loge is [GPL-3.0](LICENSE). Playback uses [mpv](https://mpv.io) and
+[FFmpeg](https://ffmpeg.org) through the LGPL build of
+[MPVKit](https://github.com/mpvkit/MPVKit) (1.1.0-n9.0.2, mpv 0.41.0).
+The [vendored patches and rebuild instructions](Vendor/MPVKit) are included.
+Mac updates use [Sparkle](https://sparkle-project.org), with its
+[licence and third-party notices](Vendor/Sparkle-LICENSE.txt).
 
-loge is licensed under the [GNU General Public License v3.0](LICENSE).
-
-Mac software updates use [Sparkle](https://sparkle-project.org), under its
-[included licence and third-party notices](Vendor/Sparkle-LICENSE.txt).
-
-Playback uses [mpv](https://mpv.io) and [FFmpeg](https://ffmpeg.org) through
-[MPVKit](https://github.com/mpvkit/MPVKit)'s LGPL build (1.1.0-n9.0.2, mpv 0.41.0), under
-the LGPL. The patches applied to libmpv and the script that rebuilds it from MPVKit's
-source are in [`Vendor/MPVKit`](Vendor/MPVKit). Data sources and
-image credits are listed in the app under Settings → About → Data Sources. This product uses
-the TMDB API but is not endorsed or certified by TMDB.
+Film artwork and metadata belong to their respective owners. Full data-source
+and image credits are in **Settings → About → Data Sources**. This product uses
+the TMDB API but is not endorsed or certified by TMDB. loge is an independent
+project, not an official Stremio application.
