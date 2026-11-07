@@ -105,7 +105,7 @@ loge is **pre-1.0**, not in the App Store, and distributed through
   as [atvloadly](https://github.com/bitxeno/atvloadly) or
   [Sideloadly](https://sideloadly.io).
 - **Mac:** download `loge-macOS.dmg` and drag loge into Applications. The app is
-  ad-hoc signed, **not notarized**; the first launch needs macOS's **Open Anyway**
+  self-signed, **not notarized**; the first launch needs macOS's **Open Anyway**
   approval. Later updates are verified by Sparkle.
 
 A free Apple ID can sign the iOS/tvOS builds; those signatures need refreshing

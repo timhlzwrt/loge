@@ -38,8 +38,8 @@ accent, system font, no cards/gradients/badges.
   `vo=avfoundation` (an `AVSampleBufferDisplayLayer`, for Picture in Picture and HDR). Rebuild
   with `rebuild-libmpv.sh`; see its README.
 - `.github/workflows/ci.yml` — Core tests and warning-free builds for iOS, tvOS and macOS.
-- `.github/workflows/release.yml` — every push to main: unsigned iOS and tvOS `.ipa` files and an
-  ad-hoc signed Mac `.dmg` (`Tools/build-dmg.sh`; not notarized, so Gatekeeper needs "Open
+- `.github/workflows/release.yml` — every push to main: unsigned iOS and tvOS `.ipa` files and a
+  self-signed Mac `.dmg` (`Tools/build-dmg.sh`; not notarized, so Gatekeeper needs "Open
   Anyway" once) as release `build-<commit count>`, and the SideStore source (`Tools/sidestore-source.py`) on
   GitHub Pages at `https://tjh.li/loge/source.json` (the account's custom Pages domain).
 

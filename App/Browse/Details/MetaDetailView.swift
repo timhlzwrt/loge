@@ -303,8 +303,8 @@ struct MetaDetailView: View {
         .padding(.horizontal, Metrics.gutter)
     }
 
-    /// On a phone Play takes the full width and the other actions sit in a row beneath it,
-    /// each named under its icon; wider screens keep them on one line.
+    /// On a phone Play takes the full width and the other actions sit in a row beneath it;
+    /// wider screens keep them on one line. The icons go unnamed: a pointer shows their names.
     @ViewBuilder
     private var buttons: some View {
         if synopsisUnderButtons {
@@ -351,7 +351,8 @@ struct MetaDetailView: View {
                 route.autoplay = false
                 choosingSource = route
             }
-            .buttonStyle(GlassIconButtonStyle(caption: "Sources", isBare: isBare))
+            .buttonStyle(GlassIconButtonStyle(isBare: isBare))
+            .help("Choose a Source")
         }
     }
 
@@ -411,11 +412,14 @@ private struct MyListButton: View {
 
     var body: some View {
         Button(action: toggle) {
-            Label(isSaved ? "Remove from Watch Later" : "Add to Watch Later", systemImage: isSaved ? "checkmark" : "plus")
+            Label(title, systemImage: isSaved ? "checkmark" : "plus")
                 .contentTransition(.symbolEffect(.replace))
         }
-        .buttonStyle(GlassIconButtonStyle(caption: isSaved ? "Saved" : "Watch Later", isBare: isBare))
+        .buttonStyle(GlassIconButtonStyle(isBare: isBare))
+        .help(title)
     }
+
+    private var title: String { isSaved ? "Remove from Watch Later" : "Add to Watch Later" }
 }
 
 /// viewer left off: the unfinished episode, else the one after the last finished, else the first.

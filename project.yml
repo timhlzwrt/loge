@@ -37,6 +37,9 @@ targets:
         SUPublicEDKey: soQg67Hcc4FdzFXtjN/k8OKntRJSs7SACKnoK/xh7Oc=
         SUVerifyUpdateBeforeExtraction: true
         SURequireSignedFeed: true
+    configFiles:
+      Debug: Config/Signing.xcconfig
+      Release: Config/Signing.xcconfig
     dependencies:
       - package: LogeCore
       - package: MPVKit
@@ -61,8 +64,9 @@ targets:
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         # tvOS icons are layered for the parallax effect and live in a brand-assets set.
         ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletv*]: App Icon & Top Shelf Image
-        # Ad-hoc signing lets the Mac build run locally without a developer account
-        CODE_SIGN_IDENTITY[sdk=macosx*]: "-"
+        # Ad-hoc signing lets the Mac build run without a developer account; Config/Signing.xcconfig
+        # explains how to sign with a certificate instead.
+        CODE_SIGN_IDENTITY[sdk=macosx*]: "$(LOGE_MAC_SIGNING_IDENTITY:default=-)"
         LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]: "$(inherited) @executable_path/../Frameworks"
         # The commit stamp below reads the repository, outside what a sandboxed script may.
         ENABLE_USER_SCRIPT_SANDBOXING: NO
