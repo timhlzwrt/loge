@@ -13,22 +13,36 @@ packages:
   # MPVKit with a patched Libmpv; see Vendor/MPVKit/README.md.
   MPVKit:
     path: Vendor/MPVKit
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: 2.10.1
 
 targets:
   loge:
     type: application
     supportedDestinations: [iOS, tvOS, macOS]
-    sources: [App]
+    sources:
+      - path: App
+      - path: Vendor/Sparkle-LICENSE.txt
+        buildPhase: resources
+        destinationFilters: [macOS]
     # Merged with the generated Info.plist; holds keys that have no build setting.
     info:
       path: App/Info.plist
       properties:
         # Picture in Picture keeps playing once the app is in the background.
         UIBackgroundModes: [audio]
+        # Read by Sparkle on macOS; the other platforms do not link the updater.
+        SUFeedURL: https://tjh.li/loge/appcast.xml
+        SUPublicEDKey: soQg67Hcc4FdzFXtjN/k8OKntRJSs7SACKnoK/xh7Oc=
+        SUVerifyUpdateBeforeExtraction: true
+        SURequireSignedFeed: true
     dependencies:
       - package: LogeCore
       - package: MPVKit
         product: MPVKit
+      - package: Sparkle
+        destinationFilters: [macOS]
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
@@ -49,6 +63,7 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletv*]: App Icon & Top Shelf Image
         # Ad-hoc signing lets the Mac build run locally without a developer account
         CODE_SIGN_IDENTITY[sdk=macosx*]: "-"
+        LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]: "$(inherited) @executable_path/../Frameworks"
         # The commit stamp below reads the repository, outside what a sandboxed script may.
         ENABLE_USER_SCRIPT_SANDBOXING: NO
     # Settings > About shows which commit a build is, to compare with GitHub; the build
