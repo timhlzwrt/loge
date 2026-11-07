@@ -67,7 +67,7 @@ The distributed build is for **Apple silicon**.
    loge, then confirm the launch. Only do this for the official download you
    intended to install; do not disable Gatekeeper globally.
 
-The app is **ad-hoc signed, not Apple-notarized**. Sparkle's Ed25519 update
+The app is **self-signed, not Apple-notarized**. Sparkle's Ed25519 update
 verification is separate from Apple's code signing/notarization and does not
 remove the first-install Gatekeeper check.
 

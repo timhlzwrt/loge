@@ -1,6 +1,6 @@
 name: Release
 
-# Every push to main becomes a release with unsigned .ipa files and an ad-hoc signed Mac .dmg,
+# Every push to main becomes a release with unsigned .ipa files and a self-signed Mac .dmg,
 # and the SideStore source on GitHub Pages lists it, so SideStore offers it as an update.
 # SideStore signs the app on the phone with the user's own free Apple ID; the tvOS .ipa is for
 # Sideloadly and the like.
@@ -35,6 +35,26 @@ jobs:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
           test -n "$SPARKLE_PRIVATE_KEY" || { echo 'Set the SPARKLE_PRIVATE_KEY repository secret before releasing.' >&2; exit 1; }
+      # The Mac app is signed with loge's own self-signed certificate, so the Keychain knows each
+      # update as the same app; see docs/MAC_UPDATES.md.
+      - name: Load the Mac signing certificate
+        env:
+          MAC_SIGNING_CERTIFICATE: ${{ secrets.MAC_SIGNING_CERTIFICATE }}
+          MAC_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.MAC_SIGNING_CERTIFICATE_PASSWORD }}
+        run: |
+          test -n "$MAC_SIGNING_CERTIFICATE" -a -n "$MAC_SIGNING_CERTIFICATE_PASSWORD" || {
+            echo 'Set the MAC_SIGNING_CERTIFICATE and MAC_SIGNING_CERTIFICATE_PASSWORD repository secrets before releasing.' >&2; exit 1; }
+          keychain="$RUNNER_TEMP/loge-signing.keychain-db"
+          password=$(openssl rand -base64 24)
+          printf '%s' "$MAC_SIGNING_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/loge-signing.p12"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/loge-signing.p12" -k "$keychain" \
+            -P "$MAC_SIGNING_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/loge-signing.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" > /dev/null
+          echo "MAC_SIGNING_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
       - run: brew install xcodegen
       - uses: actions/cache@v4
         with:
@@ -79,3 +99,6 @@ jobs:
           path: site
       - id: pages
         uses: actions/deploy-pages@v4
+      - name: Remove the signing keychain
+        if: always() && env.MAC_SIGNING_KEYCHAIN != ''
+        run: security delete-keychain "$MAC_SIGNING_KEYCHAIN"

@@ -1,0 +1,11 @@
+// The Keychain knows an ad-hoc signed Mac app only by its exact build, so after every
+// rebuild it asks for your password once for each saved sign-in. Signing with a
+// certificate keeps the app the same to the Keychain across builds. For local builds, put
+// your own in Config/Local.xcconfig (git-ignored), for example:
+//
+//     LOGE_MAC_SIGNING_IDENTITY = Apple Development
+//     DEVELOPMENT_TEAM[sdk=macosx*] = <your team ID>
+//     CODE_SIGN_STYLE[sdk=macosx*] = Manual
+//
+// Releases are re-signed with loge's own certificate by Tools/build-dmg.sh.
+#include? "Local.xcconfig"

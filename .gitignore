@@ -13,3 +13,6 @@ xcuserdata/
 __pycache__/
 # Finder clippings can hold copied addon URLs with keys.
 *.textClipping
+
+# Personal signing settings; see Config/Signing.xcconfig.
+Config/Local.xcconfig

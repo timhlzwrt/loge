@@ -83,7 +83,7 @@ For Mac release-signing changes, read [Mac updates](docs/MAC_UPDATES.md).
 ## Packaging
 
 - `Tools/build-ipa.sh`: unsigned iOS/tvOS IPAs in `.build/ipa`.
-- `Tools/build-dmg.sh`: ad-hoc signed Mac DMG in `.build/dmg`.
+- `Tools/build-dmg.sh`: Mac DMG in `.build/dmg`, self-signed when `MAC_SIGNING_KEYCHAIN` is set.
 - Signed Mac update publishing requires the maintainer's Actions secret; it is
   not required for ordinary development and must never enter a pull request.
 
