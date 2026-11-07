@@ -57,13 +57,5 @@ final class DiscoveryFlowTests: XCTestCase {
         }
 
     }
-
-    @MainActor
-    private func screenshot(_ name: String) {
-        guard let directory = ProcessInfo.processInfo.environment["SCREENSHOT_DIR"] else { return }
-        let url = URL(fileURLWithPath: directory).appending(path: "\(name).png")
-        try? FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
-        try? XCUIScreen.main.screenshot().pngRepresentation.write(to: url)
-    }
 }
 #endif

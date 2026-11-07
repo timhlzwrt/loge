@@ -58,7 +58,10 @@ private struct TMDBSetupView: View {
                         .disabled(connecting != nil)
                         .onChange(of: token) { errorMessage = nil }
                 } footer: {
-                    Text("The token is checked with TMDB before it is saved. Replacing a token keeps the existing one until the new token is verified and saved.")
+                    Text("""
+                        The token is checked with TMDB before it is saved. Replacing a token keeps the \
+                        existing one until the new token is verified and saved.
+                        """)
                 }
                 if let errorMessage {
                     Section { Text(errorMessage).foregroundStyle(.red) }

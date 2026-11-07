@@ -23,6 +23,7 @@ final class PlaybackSession {
     @ObservationIgnored private let library: LibraryStore
     @ObservationIgnored private let addons: AddonStore
     @ObservationIgnored private let trakt: TraktAccount
+    @ObservationIgnored private let accountSync: AccountSync?
     @ObservationIgnored private var episodes: [Video] = []
     @ObservationIgnored private var isLookingUpNext = false
     @ObservationIgnored private var lastRecordedPosition: Double = 0
@@ -44,10 +45,11 @@ final class PlaybackSession {
     @ObservationIgnored private var isInBackground = false
     @ObservationIgnored private var tasks: [Task<Void, Never>] = []
 
-    init(library: LibraryStore, addons: AddonStore, trakt: TraktAccount) {
+    init(library: LibraryStore, addons: AddonStore, trakt: TraktAccount, accountSync: AccountSync? = nil) {
         self.library = library
         self.addons = addons
         self.trakt = trakt
+        self.accountSync = accountSync
     }
 
     func start(_ request: PlaybackRequest, fallbacks: [PlaybackRequest] = []) {
@@ -266,7 +268,7 @@ final class PlaybackSession {
         }
         // Often enough that a crash or force-quit loses little, rarely enough not to churn storage.
         if abs(position - lastRecordedPosition) >= 10 {
-            recordProgress()
+            recordProgress(flushSync: false)
         }
         lookUpNextIfDue()
     }
@@ -293,7 +295,7 @@ final class PlaybackSession {
         let wasOpeningFile = isOpeningFile
         if isOpeningFile && status != .loading && status != .idle {
             isOpeningFile = false
-            if case .failed = status {} else {
+            if !status.isFailed {
                 isTryingAnotherSource = false
                 addExternalSubtitles()
                 needsEstimatedSeek = true
@@ -349,12 +351,15 @@ final class PlaybackSession {
         ConnectionSpeed.record(speed)
     }
 
-    private func recordProgress() {
+    private func recordProgress(flushSync: Bool = true) {
         // Live streams have no duration, and nothing is known before the file has loaded.
         guard !isOpeningFile, estimatedResumeFraction == nil, let item = current?.item, let player,
               let duration = player.duration, player.position > 0 else { return }
         library.record(item, position: player.position, duration: duration)
         lastRecordedPosition = player.position
+        if flushSync, let accountSync {
+            Task { await accountSync.sync() }
+        }
     }
 
     private func rememberSource() {
@@ -405,25 +410,25 @@ final class PlaybackSession {
         var found = request.subtitles.map { external($0, title: "Stream") }
         guard let item = request.item else { return found }
         let providers = addons.addons.subtitleProviders(type: item.type, id: item.id)
-        let results = await withTaskGroup(of: (Int, SubtitleProvider, [Subtitle]).self) { group in
+        let results = await withTaskGroup(of: (index: Int, subtitles: [Subtitle]).self) { group in
             for (index, provider) in providers.enumerated() {
                 group.addTask {
                     // Awaited on its own line, as in SourcesView: Release builds have mishandled
                     // child results awaited inside a larger expression.
                     let subtitles = try? await provider.subtitles(type: item.type, id: item.id, filename: request.filename)
-                    return (index, provider, subtitles ?? [])
+                    return (index, subtitles ?? [])
                 }
             }
-            var results: [(Int, SubtitleProvider, [Subtitle])] = []
+            var results: [(index: Int, subtitles: [Subtitle])] = []
             for await result in group {
                 results.append(result)
             }
             // Back in the user's addon order.
-            return results.sorted { $0.0 < $1.0 }
+            return results.sorted { $0.index < $1.index }
         }
         // Numbered per language so the track menu tells them apart; addon names aren't shown.
         var counts: [String: Int] = [:]
-        for (_, _, subtitles) in results {
+        for (_, subtitles) in results {
             // Addons list their best matches first.
             let byLanguage = Dictionary(grouping: subtitles) { LanguageCodes.alpha2(for: $0.lang) ?? "" }
             for language in wanted {
@@ -455,7 +460,7 @@ final class PlaybackSession {
     // MARK: Next episode
 
     private func loadEpisodes() async {
-        guard let item = current?.item, item.type == "series",
+        guard let item = current?.item, item.type == MediaType.series,
               let client = addons.addons.metaClient(type: item.type, id: item.metaID)
         else { return }
         let videos = (try? await client.meta(type: item.type, id: item.metaID).videos) ?? []

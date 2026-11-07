@@ -1,0 +1,32 @@
+{
+  "redeem": {
+    "request": {"code": "enrollment-code", "deviceName": "iPhone", "hasRecoveryKey": false},
+    "response": {"token": "0123.secret", "accountID": "0123456789abcdef0123456789abcdef", "displayName": "Alice", "deviceID": "0123"}
+  },
+  "me": {
+    "response": {"accountID": "0123456789abcdef0123456789abcdef", "displayName": "Alice", "deviceID": "0123",
+                 "groups": [{"id": "fedcba9876543210fedcba9876543210", "name": "Shared setup", "categories": ["addons"], "ownerID": "0123456789abcdef0123456789abcdef"}]}
+  },
+  "inviteDevice": {
+    "request": {"kind": "device", "name": "Shared setup", "categories": []},
+    "response": {"id": "abcd", "code": "device-code", "expiresAt": "2099-01-01T00:00:00Z"}
+  },
+  "inviteShare": {
+    "request": {"kind": "share", "name": "Shared setup", "categories": ["addons"]},
+    "response": {"id": "abcd", "code": "share-code", "expiresAt": "2099-01-01T00:00:00Z", "groupID": "fedcba9876543210fedcba9876543210"}
+  },
+  "join": {
+    "request": {"code": "share-code"},
+    "response": {"id": "fedcba9876543210fedcba9876543210", "name": "Shared setup", "categories": ["addons"], "ownerID": "0123456789abcdef0123456789abcdef"}
+  },
+  "putDocument": {
+    "request": {"version": 2, "ciphertext": "eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eA=="},
+    "response": {"ok": true, "rev": "1"}
+  },
+  "getDocument": {
+    "response": {"version": 2, "ciphertext": "eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eA==", "_rev": "1"}
+  },
+  "devices": {
+    "response": [{"id": "0123", "name": "iPhone", "createdAt": "2026-11-07T00:00:00Z"}]
+  }
+}

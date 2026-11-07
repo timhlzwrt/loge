@@ -1,0 +1,31 @@
+excluded:
+  - .build
+  - .claude
+  - Core/.build
+  - Vendor
+  - loge.xcodeproj
+
+# Conventions this codebase follows on purpose, rather than SwiftLint's defaults:
+disabled_rules:
+  # Multi-line literals end with a comma, so adding an element touches one line.
+  - trailing_comma
+  # Short guards and fallbacks put `else`/`catch` on the next line to stay one line each.
+  - statement_position
+
+identifier_name:
+  # Coordinates, sizes and closure arguments (x, w, id) read best short.
+  min_length: 1
+  # Wire types name their properties after the API's JSON keys (client_id, expires_in).
+  allowed_symbols: ["_"]
+
+line_length:
+  warning: 140
+  ignores_urls: true
+
+nesting:
+  # Decodable types mirror the nesting of the JSON they decode, scoped to where it's read.
+  type_level: 3
+
+large_tuple:
+  # Three labelled members read fine; past that, a struct.
+  warning: 3

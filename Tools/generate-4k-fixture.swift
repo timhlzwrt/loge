@@ -40,7 +40,8 @@ import Foundation
             let formats = try await track.load(.formatDescriptions)
             print("video=\(dimensions.width)x\(dimensions.height) fps=\(try await track.load(.nominalFrameRate))")
             for format in formats {
-                print("encodedDimensions=\(CMVideoFormatDescriptionGetDimensions(format)) codecFourCC=\(CMFormatDescriptionGetMediaSubType(format))")
+                let dimensions = CMVideoFormatDescriptionGetDimensions(format)
+print("encodedDimensions=\(dimensions) codecFourCC=\(CMFormatDescriptionGetMediaSubType(format))")
             }
         }
         let attributes = try FileManager.default.attributesOfItem(atPath: output.path)

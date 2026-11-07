@@ -25,7 +25,10 @@ final class RemoteDriverTests: XCTestCase {
         try "".write(to: doneURL, atomically: true, encoding: .utf8)
 
         let app = XCUIApplication()
-        if let screen = ProcessInfo.processInfo.environment["DISCOVERY_SCREEN"] {
+        if let path = ProcessInfo.processInfo.environment["SYNC_TEST_CODE_FILE"] {
+            app.launchArguments += ["--sync-ui-test"]
+            app.launchEnvironment["SYNC_TEST_CODE_FILE"] = path
+        } else if let screen = ProcessInfo.processInfo.environment["DISCOVERY_SCREEN"] {
             app.launchArguments += ["--discovery-ui-test"]
             app.launchEnvironment["DISCOVERY_SCREEN"] = screen
         } else if let credentialPath = ProcessInfo.processInfo.environment["TMDB_TEST_TOKEN_FILE"] {

@@ -140,14 +140,16 @@ are not carried by Trakt. Trakt's full watched history is not imported. There is
 upload queue, so failed updates are not stored for later delivery. A Trakt connection is
 not a complete backup of your library or configuration.
 
-### Addon and settings sync
+### Private sync and shared setup
 
-**Settings → Sync** optionally connects to your own HTTPS CouchDB sync endpoint.
-There is no default server. Share ordered addons, audio/subtitle preferences,
-subtitle size, automatic source size limit and accent across your devices.
-Configurations are encrypted on-device; credentials and the recovery key stay in
-Keychain. A setup code connects additional devices, including Apple TV. See the
-[setup and self-hosting guide](docs/CONFIGURATION_SYNC.md) for deployment, conflict
+**Settings → Sync** optionally connects to your own HTTPS sync service. There is
+no default server. Your account carries playback progress, watched state, ordered
+addons and preferences across your devices. Separate accounts can share selected
+setup categories while keeping viewing progress private. Expiring connection
+codes connect devices or invite someone to a shared setup; addon invitations do
+not include account access. Payloads are encrypted on-device and keys stay in
+Keychain. A local management page creates accounts and revokes access. See the
+[setup and self-hosting guide](docs/SYNC.md) for deployment, conflict
 handling and recovery-key precautions.
 
 ### TMDB metadata

@@ -160,7 +160,7 @@ extension PictureInPicture: AVPictureInPictureSampleBufferPlaybackDelegate {
     nonisolated func pictureInPictureController(_ controller: AVPictureInPictureController, setPlaying playing: Bool) {
         Task { @MainActor [weak self] in
             guard let self, !isStopping else { return }
-            playing ? player.play() : player.pause()
+            if playing { player.play() } else { player.pause() }
         }
     }
 

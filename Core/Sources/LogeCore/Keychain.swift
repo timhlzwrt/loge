@@ -1,34 +1,53 @@
 import Foundation
 import Security
-import os
 
-private let log = Logger(subsystem: "li.tjh.MediaApp", category: "keychain")
+public struct KeychainError: Error, Equatable, Sendable {
+    public enum Operation: Sendable { case read, save, remove }
+    public let operation: Operation
+    public let status: OSStatus
+}
 
 /// Small values that shouldn't sit in `UserDefaults`, such as sign-in tokens. The keychain
-/// also survives tvOS purging the app's files.
+/// also survives tvOS purging the app's files. Items stay on this device: other devices
+/// sign in themselves or receive what they need through a connection code.
 enum Keychain {
-    static func data(for account: String, service: String) -> Data? {
-        var query = baseQuery(account: account, service: service)
+    static func read(service: String, account: String) throws(KeychainError) -> Data? {
+        var query = baseQuery(service: service, account: account)
         query[kSecReturnData as String] = true
-        var result: AnyObject?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess else { return nil }
-        return result as? Data
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var value: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &value)
+        if status == errSecItemNotFound { return nil }
+        guard status == errSecSuccess, let data = value as? Data else {
+            throw KeychainError(operation: .read, status: status)
+        }
+        return data
     }
 
-    static func set(_ data: Data?, for account: String, service: String) {
-        let query = baseQuery(account: account, service: service)
-        SecItemDelete(query as CFDictionary)
-        guard let data else { return }
-        var item = query
-        item[kSecValueData as String] = data
-        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-        let status = SecItemAdd(item as CFDictionary, nil)
-        if status != errSecSuccess {
-            log.error("Couldn't save \(account, privacy: .public) to the keychain: \(status)")
+    static func save(_ data: Data, service: String, account: String) throws(KeychainError) {
+        let query = baseQuery(service: service, account: account)
+        let values: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+        ]
+        // Updating in place keeps a working credential intact if replacing it fails.
+        let status = SecItemUpdate(query as CFDictionary, values as CFDictionary)
+        if status == errSecItemNotFound {
+            let added = SecItemAdd(query.merging(values) { _, new in new } as CFDictionary, nil)
+            guard added == errSecSuccess else { throw KeychainError(operation: .save, status: added) }
+        } else if status != errSecSuccess {
+            throw KeychainError(operation: .save, status: status)
         }
     }
 
-    private static func baseQuery(account: String, service: String) -> [String: Any] {
+    static func remove(service: String, account: String) throws(KeychainError) {
+        let status = SecItemDelete(baseQuery(service: service, account: account) as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw KeychainError(operation: .remove, status: status)
+        }
+    }
+
+    private static func baseQuery(service: String, account: String) -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

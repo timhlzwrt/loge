@@ -29,7 +29,9 @@ final class PlayerMenuTests: XCTestCase {
         // Long enough for playback to start and the 4-second auto-hide to pass.
         sleep(12)
         XCTAssertTrue(app.buttons["Normal"].exists, "Menu closed while playing")
-        app.buttons["1,5×"].firstMatch.exists ? app.buttons["1,5×"].tap() : app.buttons["1.5×"].tap()
+        // The label follows the simulator's number format.
+        let faster = app.buttons["1,5×"].firstMatch.exists ? app.buttons["1,5×"] : app.buttons["1.5×"]
+        faster.tap()
         sleep(1)
         XCTAssertFalse(app.buttons["Normal"].exists, "Menu stayed open after choosing")
     }

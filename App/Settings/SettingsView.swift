@@ -7,51 +7,63 @@ struct SettingsView: View {
     @Environment(AddonStore.self) private var store
     @Environment(TraktAccount.self) private var trakt
     @Environment(TMDBAccount.self) private var tmdb
-    @Environment(ConfigurationSyncAccount.self) private var sync
+    @Environment(AccountSync.self) private var sync
     @AppStorage(Accent.storageKey) private var accent = Accent.white
 
     var body: some View {
-        List {
-            Section {
-                NavigationLink {
-                    AddonsSettingsView()
-                } label: {
-                    LabeledContent("Addons", value: addonSummary)
-                }
-                NavigationLink {
-                    SettingsPage("Trakt") { TraktSection() }
-                } label: {
-                    LabeledContent("Trakt", value: traktSummary)
-                }
-                NavigationLink {
-                    SettingsPage("TMDB") { TMDBSection() }
-                } label: {
-                    LabeledContent("TMDB", value: tmdb.isConfigured ? "Connected" : "Off")
-                }
-                NavigationLink {
-                    ConfigurationSyncView()
-                } label: {
-                    LabeledContent("Sync", value: sync.isConnected ? sync.status : "Off")
-                }
-            }
+        settingsContent
+            #if !os(tvOS)
+            .scrollContentBackground(.hidden)
+            #endif
+            .background(Color.canvas)
+            .navigationTitle("Settings")
+    }
 
-            PlaybackSettingsSection()
-
-            Section {
-                NavigationLink {
-                    SettingsPage("Accent Color") { AccentSettingsSection() }
-                } label: {
-                    LabeledContent("Accent Color", value: accent.name)
-                }
-            }
-
-            AboutSection()
-        }
-        #if !os(tvOS)
-        .scrollContentBackground(.hidden)
+    @ViewBuilder private var settingsContent: some View {
+        #if os(macOS)
+        Form { sections }.formStyle(.grouped)
+        #else
+        List { sections }
         #endif
-        .background(Color.canvas)
-        .navigationTitle("Settings")
+    }
+
+    @ViewBuilder private var sections: some View {
+        Section {
+            NavigationLink {
+                SyncSettingsView()
+            } label: {
+                LabeledContent("Sync", value: sync.isConnected ? (sync.displayName ?? "Connected") : "Off")
+            }
+        }
+        Section {
+            NavigationLink {
+                AddonsSettingsView()
+            } label: {
+                LabeledContent("Addons", value: addonSummary)
+            }
+            NavigationLink {
+                SettingsPage("Trakt") { TraktSection() }
+            } label: {
+                LabeledContent("Trakt", value: traktSummary)
+            }
+            NavigationLink {
+                SettingsPage("TMDB") { TMDBSection() }
+            } label: {
+                LabeledContent("TMDB", value: tmdb.isConfigured ? "Connected" : "Off")
+            }
+        }
+
+        PlaybackSettingsSection()
+
+        Section {
+            NavigationLink {
+                SettingsPage("Accent Color") { AccentSettingsSection() }
+            } label: {
+                LabeledContent("Accent Color", value: accent.name)
+            }
+        }
+
+        AboutSection()
     }
 
     private var addonSummary: String {
@@ -82,7 +94,13 @@ struct SettingsPage<Content: View>: View {
     }
 
     var body: some View {
-        List { content }
+        Group {
+            #if os(macOS)
+            Form { content }.formStyle(.grouped)
+            #else
+            List { content }
+            #endif
+        }
             #if !os(tvOS)
             .scrollContentBackground(.hidden)
             #endif

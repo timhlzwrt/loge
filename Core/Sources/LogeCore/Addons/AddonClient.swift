@@ -1,0 +1,118 @@
+import Foundation
+
+public enum AddonError: Error, Equatable {
+    case invalidManifestURL(String)
+    case httpStatus(Int, URL)
+    /// The addon couldn't be reached; the code says why, such as no connection.
+    case unavailable(URLError.Code)
+    /// The addon answered with something other than the expected JSON.
+    case invalidResponse
+}
+
+/// Talks to one Stremio addon over its HTTP protocol:
+/// `{base}/{resource}/{type}/{id}[/{extra}].json`.
+public struct AddonClient: Sendable {
+    /// The manifest URL without the trailing `/manifest.json`.
+    public let baseURL: URL
+    private let session: URLSession
+
+    /// Accepts the URL users copy from addon pages, including `stremio://` install links.
+    public init(manifestURL string: String, session: URLSession = .shared) throws {
+        var string = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        if string.hasPrefix("stremio://") {
+            string = "https://" + string.dropFirst("stremio://".count)
+        }
+        guard var components = URLComponents(string: string),
+              components.scheme == "https" || components.scheme == "http",
+              components.host?.isEmpty == false,
+              components.percentEncodedPath.hasSuffix("/manifest.json")
+        else {
+            throw AddonError.invalidManifestURL(string)
+        }
+        components.percentEncodedPath.removeLast("/manifest.json".count)
+        guard let baseURL = components.url else {
+            throw AddonError.invalidManifestURL(string)
+        }
+        self.baseURL = baseURL
+        self.session = session
+    }
+
+    /// Normalised form of the URL passed to `init`; equal for equivalent inputs.
+    public var manifestURL: String {
+        baseURL.appending(path: "manifest.json").absoluteString
+    }
+
+    public func manifest() async throws -> AddonManifest {
+        try await fetch(baseURL.appending(path: "manifest.json"))
+    }
+
+    public func catalog(type: String, id: String, extra: [(name: String, value: String)] = []) async throws -> [MetaPreview] {
+        try Self.decodeCatalog(try await data(from: resourceURL("catalog", type: type, id: id, extra: extra)))
+    }
+
+    static func decodeCatalog(_ data: Data) throws -> [MetaPreview] {
+        try decode(CatalogResponse.self, from: data).metas
+    }
+
+    public func meta(type: String, id: String) async throws -> Meta {
+        let response: MetaResponse = try await fetch(resourceURL("meta", type: type, id: id))
+        return response.meta
+    }
+
+    public func streams(type: String, id: String) async throws -> [StreamSource] {
+        let response: StreamsResponse = try await fetch(resourceURL("stream", type: type, id: id))
+        return response.streams.filter { $0.playbackURL != nil }
+    }
+
+    /// - Parameter filename: The video's file name, which addons use to rank matches.
+    public func subtitles(type: String, id: String, filename: String? = nil) async throws -> [Subtitle] {
+        let extra = filename.map { [(name: "filename", value: $0)] } ?? []
+        let response: SubtitlesResponse = try await fetch(resourceURL("subtitles", type: type, id: id, extra: extra))
+        return response.subtitles
+    }
+
+    func resourceURL(_ resource: String, type: String, id: String, extra: [(name: String, value: String)] = []) -> URL {
+        var path = [resource, Self.encode(type), Self.encode(id)].joined(separator: "/")
+        if !extra.isEmpty {
+            path += "/" + extra.map { "\(Self.encode($0.name))=\(Self.encode($0.value))" }.joined(separator: "&")
+        }
+        // Preserve encoded configuration paths and keep query parameters after
+        // the resource path; `appending(path:)` would encode `%` a second time.
+        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
+        components.percentEncodedPath += "/" + path + ".json"
+        return components.url!
+    }
+
+    private func fetch<T: Decodable>(_ url: URL) async throws -> T {
+        try Self.decode(T.self, from: try await data(from: url))
+    }
+
+    private static func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
+        do { return try JSONDecoder().decode(type, from: data) } catch { throw AddonError.invalidResponse }
+    }
+
+    /// Cancellation is passed on as is, so callers can tell it from a failure.
+    func data(from url: URL) async throws -> Data {
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(from: url)
+        } catch let error as URLError where error.code != .cancelled {
+            throw AddonError.unavailable(error.code)
+        }
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw AddonError.httpStatus(http.statusCode, url)
+        }
+        return data
+    }
+
+    /// Matches JavaScript's `encodeURIComponent`, which the reference
+    /// implementation uses, so `tt0903747:1:1` becomes `tt0903747%3A1%3A1`.
+    private static let componentAllowed = CharacterSet(
+        charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.!~*'()"
+    )
+
+    private static func encode(_ component: String) -> String {
+        component.addingPercentEncoding(withAllowedCharacters: componentAllowed) ?? component
+    }
+}

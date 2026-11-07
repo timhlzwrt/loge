@@ -11,7 +11,7 @@ struct LogeApp: App {
     @State private var trakt: TraktAccount
     @State private var tmdb: TMDBAccount
     @State private var playback: PlaybackSession
-    @State private var configurationSync: ConfigurationSyncAccount
+    @State private var accountSync: AccountSync
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(Accent.storageKey) private var accent = Accent.white
 
@@ -30,14 +30,28 @@ struct LogeApp: App {
         #else
         _tmdb = State(initialValue: TMDBAccount())
         #endif
-        let addonStore = AddonStore()
-        let library = LibraryStore()
+        let defaults: UserDefaults
+        #if DEBUG
+        let syncUITest = ProcessInfo.processInfo.arguments.contains("--sync-ui-test")
+        defaults = syncUITest ? UserDefaults(suiteName: "sync-ui-\(UUID())")! : .standard
+        #else
+        defaults = .standard
+        #endif
+        let addonStore = AddonStore(defaults: defaults)
+        let library = LibraryStore(defaults: defaults)
         _addonStore = State(initialValue: addonStore)
-        _configurationSync = State(initialValue: ConfigurationSyncAccount(addons: addonStore))
+        #if DEBUG
+        let accountSync = AccountSync(addons: addonStore, library: library, defaults: defaults, temporaryConnection: syncUITest)
+        #else
+        let accountSync = AccountSync(addons: addonStore, library: library, defaults: defaults)
+        #endif
+        _accountSync = State(initialValue: accountSync)
         _library = State(initialValue: library)
         let trakt = TraktAccount(library: library, addons: addonStore)
         _trakt = State(initialValue: trakt)
-        _playback = State(initialValue: PlaybackSession(library: library, addons: addonStore, trakt: trakt))
+        let playback = PlaybackSession(library: library, addons: addonStore, trakt: trakt, accountSync: accountSync)
+        accountSync.beforeProfileChange = { [weak playback] in playback?.end() }
+        _playback = State(initialValue: playback)
 
         // Artwork is fetched through the shared session; the default cache is too
         // small to keep a screen of posters, so scrolling back re-downloads them.
@@ -56,16 +70,25 @@ struct LogeApp: App {
                 .environment(playback)
                 .environment(trakt)
                 .environment(tmdb)
-                .environment(configurationSync)
+                .environment(accountSync)
                 .preferredColorScheme(.dark)
                 // White unless the user picks another accent: artwork carries the colour.
                 .tint(accent.color)
                 .task {
                     #if DEBUG
+                    if ProcessInfo.processInfo.arguments.contains("--sync-ui-test") {
+                        if let path = ProcessInfo.processInfo.environment["SYNC_TEST_CODE_FILE"],
+                           let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+                           let fixture = try? JSONDecoder().decode(SyncUITestCode.self, from: data) {
+                            await accountSync.connect(code: fixture.code, deviceName: "UI check")
+                            if accountSync.needsChoice { await accountSync.resolve(useLocal: false) }
+                        }
+                        return
+                    }
                     if ProcessInfo.processInfo.arguments.contains("--discovery-ui-test")
                         || ProcessInfo.processInfo.arguments.contains("--playback-ui-test") { return }
                     #endif
-                    await configurationSync.sync()
+                    await accountSync.sync()
                     await addonStore.refreshManifests()
                     // Needs the addons to look up titles started on other devices.
                     await trakt.pullProgress()
@@ -76,11 +99,12 @@ struct LogeApp: App {
                     guard newPhase == .active else { return }
                     playback.sceneDidBecomeActive()
                     #if DEBUG
-                    if ProcessInfo.processInfo.arguments.contains("--discovery-ui-test")
+                    if ProcessInfo.processInfo.arguments.contains("--sync-ui-test")
+                        || ProcessInfo.processInfo.arguments.contains("--discovery-ui-test")
                         || ProcessInfo.processInfo.arguments.contains("--playback-ui-test") { return }
                     #endif
                     Task {
-                        await configurationSync.sync()
+                        await accountSync.sync()
                         await trakt.pullProgress()
                     }
                 }
@@ -106,7 +130,9 @@ struct LogeApp: App {
     @ViewBuilder
     private var initialBrowseView: some View {
         #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("--playback-ui-test") {
+        if ProcessInfo.processInfo.arguments.contains("--sync-ui-test") {
+            NavigationStack { SyncSettingsView() }
+        } else if ProcessInfo.processInfo.arguments.contains("--playback-ui-test") {
             PlaybackFixtureView()
         } else if ProcessInfo.processInfo.arguments.contains("--discovery-ui-test") {
             BrowseStack { DiscoveryFixture.screen }
@@ -131,6 +157,10 @@ struct LogeApp: App {
     }
 
 }
+
+#if DEBUG
+private struct SyncUITestCode: Decodable { let code: String }
+#endif
 
 struct RootView: View {
     @Environment(PlaybackSession.self) private var playback
@@ -175,7 +205,7 @@ struct RootView: View {
             #if os(macOS)
             TabSection("Catalogs") {
                 ForEach(DiscoveryCatalogs.home) { source in
-                    Tab(source.title, systemImage: source.catalog.type == "series" ? "tv" : "rectangle.portrait") {
+                    Tab(source.title, systemImage: source.catalog.type == MediaType.series ? "tv" : "rectangle.portrait") {
                         BrowseStack { CatalogGridView(source: source) }
                     }
                 }

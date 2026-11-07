@@ -38,7 +38,7 @@ series, catalog grids and source lists use typed navigation destinations.
 
 ## Screens and platform behavior
 
-- `App/Browse/HomeView.swift`: artwork carousel on iPhone/iPad/Mac; a
+- `App/Browse/Home/HomeView.swift`: artwork carousel on iPhone/iPad/Mac; a
   focus-driven backdrop and fixed title header on Apple TV. Fixed popular,
   IMDb-favourites and genre shelves replace addon-ordered Home catalogs.
 - `CatalogRow.swift` and `CatalogGridView.swift`: poster rows and paginated

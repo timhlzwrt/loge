@@ -11,6 +11,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  sync-gateway:
+    name: Sync gateway tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - run: python -m pip install -r Tools/sync-gateway/requirements-dev.txt
+      - run: python -m unittest discover -s Tools/sync-gateway -p 'test_*.py'
+
   core:
     name: Core tests
     runs-on: xcode-27
