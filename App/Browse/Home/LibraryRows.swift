@@ -319,22 +319,19 @@ struct ListsMenu: View {
     @State private var name = ""
 
     var body: some View {
-        VStack(spacing: 6) {
-            Menu {
-                ListMembershipActions(title: title)
-                Button("New List…", systemImage: "plus") {
-                    name = ""
-                    isNaming = true
-                }
-            } label: {
-                // Not a bulleted list: "Choose a Source" sits beside it with one.
-                Label("Save to", systemImage: "rectangle.stack.badge.plus")
+        Menu {
+            ListMembershipActions(title: title)
+            Button("New List…", systemImage: "plus") {
+                name = ""
+                isNaming = true
             }
-            .menuIndicator(.hidden)
-            .buttonStyle(GlassIconButtonStyle(isBare: isBare))
-            IconCaption("Lists")
-                .accessibilityHidden(true)
+        } label: {
+            // Not a bulleted list: "Choose a Source" sits beside it with one.
+            Label("Save to", systemImage: "rectangle.stack.badge.plus")
         }
+        .menuIndicator(.hidden)
+        .buttonStyle(GlassIconButtonStyle(isBare: isBare))
+        .help("Save to a List")
         .alert("New List", isPresented: $isNaming) {
             TextField("Name", text: $name)
             Button("Create") {
