@@ -46,6 +46,9 @@ binary dependencies and what has—and has not—been tested on OS 26.
 - **People and festivals:** TMDB-backed portraits and filmographies, role
   filters, member reviews, and dated festival editions with award filters.
   TMDB features require your own read access token.
+- **Recommendations:** with a TMDB token, "More Like This" on titles and a Recommended row on
+  Home built from what you watched and saved. TMDB supplies the suggestions and
+  the ranking happens on your device; TMDB sees only the title lookups.
 - **Your library:** Continue Watching, Watch Later, custom lists and history
   grouped by day. Search includes recent queries.
 
@@ -140,9 +143,9 @@ with iPhone title details.
 - **No Apple TV Top Shelf extension.** Continue Watching inside the app works;
   system Home Screen integration is on hold.
 - **English interface only.** Audio and subtitle language preferences are separate.
-- **No personalized recommendation engine.** Home uses managed discovery feeds,
-  not recommendations inferred from your history. Letterboxd links/lists do not
-  mean Letterboxd ratings or account sync are integrated.
+- **Recommendations need a TMDB token.** Without one, Home has only its discovery
+  feeds. Letterboxd links/lists do not mean Letterboxd ratings or account sync
+  are integrated.
 
 ### Testing scope
 

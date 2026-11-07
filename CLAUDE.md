@@ -281,6 +281,11 @@ and tests are grouped by domain (Addons, Sync, TMDB, Trakt, Discovery, Playback)
 by screen (Components, Home, Details, Sources, People, Discovery); `.swiftlint.yml` files record
 the lint conventions. `SourceSelection` (Core) holds source grouping, remembered-source and
 fallback choice; a shared contract file checks the app client and the gateway against each other.
+7 November, recommendations (PR #21): the TMDB details request appends `recommendations,similar`
+for More Like This (tiles open through `TMDBTitleView`); `Recommendations` (Core) ranks TMDB
+suggestions for up to 8 watched and 4 Watch Later titles on the device for Home's Recommended
+row, leaving out anything watched, started, saved or listed. Both hide without a TMDB token.
+`--discovery-ui-test` with `-DISCOVERY_SCREEN recommended|details` shows them offline.
 
 Verification for these tasks: reuse `LibraryStoreTests`, `TraktTests`,
 `UITests/FlowTests.swift`, `UITests/PlaybackRegressionTests.swift`,

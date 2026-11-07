@@ -37,6 +37,8 @@ struct DetailsResponse: Decodable {
     let vote_count: Int?
     let budget: Int?
     let revenue: Int?
+    let recommendations: TitlePageResponse?
+    let similar: TitlePageResponse?
 
     func details(isMovie: Bool) -> TMDBDetails {
         let date = fullDate(isMovie ? release_date : first_air_date)
@@ -71,7 +73,42 @@ struct DetailsResponse: Decodable {
             episodeCount: isMovie ? nil : number_of_episodes.flatMap { $0 >= 0 ? $0 : nil },
             rating: rating, voteCount: vote_count.flatMap { $0 >= 0 ? $0 : nil },
             budget: isMovie ? budget.flatMap { $0 > 0 ? $0 : nil } : nil,
-            revenue: isMovie ? revenue.flatMap { $0 > 0 ? $0 : nil } : nil)
+            revenue: isMovie ? revenue.flatMap { $0 > 0 ? $0 : nil } : nil,
+            tmdbID: id, recommendations: recommended(isMovie: isMovie))
+    }
+
+    private func recommended(isMovie: Bool) -> [TMDBCreditTitle] {
+        let recommended = recommendations?.titles(isMovie: isMovie, excluding: id) ?? []
+        return recommended.isEmpty ? similar?.titles(isMovie: isMovie, excluding: id) ?? [] : recommended
+    }
+}
+
+/// A page of `recommendations` or `similar`: always the same kind as the title they belong to.
+struct TitlePageResponse: Decodable {
+    struct Result: Decodable {
+        let id: Int?
+        let title: String?
+        let name: String?
+        let poster_path: String?
+        let backdrop_path: String?
+        let overview: String?
+        let release_date: String?
+        let first_air_date: String?
+    }
+    let results: [Result]?
+
+    func titles(isMovie: Bool, excluding excludedID: Int) -> [TMDBCreditTitle] {
+        var seen: Set<Int> = [excludedID]
+        return (results ?? []).compactMap { result in
+            guard let id = result.id, id > 0, seen.insert(id).inserted,
+                  let name = nonempty(isMovie ? result.title : result.name) else { return nil }
+            return TMDBCreditTitle(
+                tmdbID: id, type: isMovie ? MediaType.movie : MediaType.series, name: name,
+                posterURL: imageURL(result.poster_path, size: "w500"),
+                backgroundURL: imageURL(result.backdrop_path, size: "w1280"),
+                overview: nonempty(result.overview),
+                releaseDate: fullDate(isMovie ? result.release_date : result.first_air_date))
+        }
     }
 }
 

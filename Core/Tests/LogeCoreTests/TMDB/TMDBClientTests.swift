@@ -34,6 +34,33 @@ struct TMDBClientTests {
         #expect(details.people[2].roles == [.writer])
     }
 
+    @Test func recommendationsKeepTMDBOrderAndTheirOwnKind() async throws {
+        let movie = try await client().details(imdbID: "tt0000042", type: "movie")
+        #expect(movie.tmdbID == 42)
+        // The title itself, repeats and entries without an ID or name are dropped.
+        #expect(movie.recommendations.map(\.id) == ["movie:51", "movie:53"])
+        let first = try #require(movie.recommendations.first)
+        #expect(first.name == "First pick")
+        #expect(first.posterURL == "https://image.tmdb.org/t/p/w500/first.jpg")
+        #expect(first.backgroundURL == "https://image.tmdb.org/t/p/w1280/first-backdrop.jpg")
+        #expect(first.overview == "Its overview")
+        #expect(first.releaseDate == "2019-06-01")
+        #expect(first.roles.isEmpty)
+        #expect(movie.recommendations[1].releaseDate == nil)
+
+        let series = try await client().details(imdbID: "tt0000084", type: "series")
+        #expect(series.recommendations.map(\.id) == ["series:71"])
+        #expect(series.recommendations.first?.name == "Next show")
+        #expect(series.recommendations.first?.releaseDate == "2020-02-02")
+    }
+
+    @Test func similarTitlesStandInOnlyWhenThereAreNoRecommendations() async throws {
+        let details = try await client("onlySimilar").details(imdbID: "tt0000042", type: "movie")
+        #expect(details.recommendations.map(\.name) == ["Similar"])
+        let sparse = try await client("unrated").details(imdbID: "tt0000042", type: "movie")
+        #expect(sparse.recommendations.isEmpty)
+    }
+
     @Test func seriesUsesTVMatchAndHandlesNullSparseMetadata() async throws {
         let details = try await client().details(imdbID: "tt0000084", type: "series")
         #expect(details.overview == nil)
@@ -258,7 +285,7 @@ private final class TMDBProtocol: StubURLProtocol, @unchecked Sendable {
             default: body = #"{"movie_results":[{"id":42}],"tv_results":[{"id":84}]}"#
             }
         case "/3/movie/42", "/3/tv/84":
-            guard components.queryItems?.contains(.init(name: "append_to_response", value: "credits")) == true else {
+            guard components.queryItems?.contains(.init(name: "append_to_response", value: "credits,recommendations,similar")) == true else {
                 client?.urlProtocol(self, didFailWithError: URLError(.badURL))
                 return
             }
@@ -266,6 +293,8 @@ private final class TMDBProtocol: StubURLProtocol, @unchecked Sendable {
                 body = #"{"id":99}"#
             } else if scenario == "missingDetails" {
                 body = "{}"
+            } else if scenario == "onlySimilar" {
+                body = #"{"id":42,"recommendations":{"results":[]},"similar":{"results":[{"id":61,"title":"Similar"}]}}"#
             } else if scenario == "unrated" {
                 body = #"{"id":42,"vote_average":0,"vote_count":0,"budget":0,"revenue":-1}"#
             } else {
@@ -332,14 +361,21 @@ private final class TMDBProtocol: StubURLProtocol, @unchecked Sendable {
         {"id":1,"name":"Alex","job":"Screenplay","department":"Writing"},
         {"id":3,"name":"Sam","job":"Story","department":null},
         {"id":4,"name":"Assistant","job":"First Assistant Director","department":"Directing"},
-        {"id":5,"name":"Editor","job":"Editor","department":"Editing"}]}}
+        {"id":5,"name":"Editor","job":"Editor","department":"Editing"}]},
+     "recommendations":{"results":[
+        {"id":51,"title":"  First pick ","poster_path":"/first.jpg","backdrop_path":"/first-backdrop.jpg",
+         "overview":"Its overview","release_date":"2019-06-01","name":"TV-style name"},
+        {"id":42,"title":"The title itself"},{"id":51,"title":"Duplicate"},
+        {"id":null,"title":"Missing ID"},{"id":52,"title":" "},{"id":53,"title":"Sparse","release_date":""}]},
+     "similar":{"results":[{"id":61,"title":"Only used without recommendations"}]}}
     """#
 
     private static let series = #"""
     {"id":84,"overview":" ","poster_path":null,"backdrop_path":"//untrusted.example/image.jpg",
      "original_name":"Original series name","status":"Ended","original_language":"es","origin_country":["ES"],
      "last_air_date":"2023-12-31","number_of_seasons":3,"number_of_episodes":24,"budget":10,"revenue":20,
-     "first_air_date":"2021-01-08","runtime":999,"episode_run_time":[0,45],"genres":[],"credits":null}
+     "first_air_date":"2021-01-08","runtime":999,"episode_run_time":[0,45],"genres":[],"credits":null,
+     "recommendations":{"results":[{"id":71,"name":"Next show","title":"Movie-style title","first_air_date":"2020-02-02"}]}}
     """#
 
     private static var person: String {

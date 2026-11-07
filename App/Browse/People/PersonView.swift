@@ -249,7 +249,11 @@ struct PersonView: View {
                         } label: {
                             TMDBCreditTile(title: title)
                         }
-                        .tileButtonStyle()
+                        #if os(tvOS)
+                        .buttonStyle(.borderless)
+                        #else
+                        .buttonStyle(.plain)
+                        #endif
                     }
                 }
                 .accessibilityIdentifier("person-filmography")

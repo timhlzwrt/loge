@@ -196,6 +196,21 @@ struct TMDBAccountTests {
     }
     #endif
 
+    @Test func recommendationsSkipUnknownSeedsLibraryTitlesAndTitlesWithoutIMDb() async throws {
+        let account = account(AccountTokenStorage(token: "fixture-recommendations"))
+        let seeds = [Recommendations.Seed(imdbID: "tt0000099", type: "movie", weight: 1),
+                     Recommendations.Seed(imdbID: "tt0000042", type: "movie", weight: 0.85)]
+        let previews = try await account.recommendations(for: seeds, excluding: ["tt0000051"])
+        #expect(previews.map(\.id) == ["tt0000053"])
+        #expect(previews.first?.name == "New")
+        #expect(previews.first?.releaseInfo == "2020")
+        #expect(previews.first?.poster == "https://image.tmdb.org/t/p/w500/new.jpg")
+        #expect(previews.first?.logo == "https://images.metahub.space/logo/medium/tt0000053/img")
+
+        let unknown = [Recommendations.Seed(imdbID: "tt0000099", type: "movie", weight: 1)]
+        await #expect(throws: TMDBError.notFound) { try await account.recommendations(for: unknown, excluding: []) }
+    }
+
     private func waitForRequest(_ token: String) async throws {
         let deadline = ContinuousClock.now + .seconds(2)
         while AccountTMDBProtocol.count(token) == 0, ContinuousClock.now < deadline {
@@ -270,7 +285,11 @@ private final class AccountTMDBProtocol: StubURLProtocol, @unchecked Sendable {
         let body: String
         switch url.path {
         case "/3/find/tt0000042": body = #"{"movie_results":[{"id":42}]}"#
-        case "/3/movie/42": body = #"{"id":42,"title":"Fixture","overview":"Fixture overview","imdb_id":"tt0000042","credits":{"cast":[],"crew":[]}}"#
+        case "/3/movie/42": body = #"""
+            {"id":42,"title":"Fixture","overview":"Fixture overview","imdb_id":"tt0000042","credits":{"cast":[],"crew":[]},
+             "recommendations":{"results":[{"id":51,"title":"Library"},{"id":52,"title":"No IMDb"},
+              {"id":53,"title":"New","poster_path":"/new.jpg","release_date":"2020-01-01"},{"id":54,"title":"Same IMDb"}]}}
+            """#
         case "/3/person/7": body = #"""
             {
               "id": 7,
@@ -291,6 +310,10 @@ private final class AccountTMDBProtocol: StubURLProtocol, @unchecked Sendable {
             }
             """#
         case "/3/movie/42/external_ids": body = #"{"id":42,"imdb_id":"tt0000042"}"#
+        case "/3/movie/51/external_ids": body = #"{"id":51,"imdb_id":"tt0000051"}"#
+        case "/3/movie/52/external_ids": body = #"{"id":52,"imdb_id":null}"#
+        case "/3/movie/53/external_ids", "/3/movie/54/external_ids":
+            body = #"{"id":\#(url.pathComponents[3]),"imdb_id":"tt0000053"}"#
         default: body = #"{"success":true}"#
         }
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)

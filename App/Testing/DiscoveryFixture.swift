@@ -16,7 +16,8 @@ enum DiscoveryFixture {
 
     @ViewBuilder
     static var screen: some View {
-        switch ProcessInfo.processInfo.environment["DISCOVERY_SCREEN"] {
+        // A `-DISCOVERY_SCREEN name` launch argument works too, for launchers that can't set the environment.
+        switch ProcessInfo.processInfo.environment["DISCOVERY_SCREEN"] ?? UserDefaults.standard.string(forKey: "DISCOVERY_SCREEN") {
         case "settings":
             SettingsView()
         case "library":
@@ -32,6 +33,11 @@ enum DiscoveryFixture {
                 .background(Color.canvas)
                 .navigationTitle("Library")
             }
+        case "recommended":
+            HomeView()
+                .environment(recommendationLibrary)
+        case "details":
+            MetaDetailView(preview: title)
         case "person":
             PersonView(route: PersonRoute(person: Person(name: "Christopher Nolan", roles: [.director], tmdbID: 525)))
         case "festival":
@@ -58,6 +64,34 @@ enum DiscoveryFixture {
             .navigationTitle("Discovery")
         }
     }
+
+    /// Interstellar watched, Arrival started and Inception saved: all three are recommended,
+    /// but only titles the viewer doesn't know yet may appear.
+    private static let recommendationLibrary: LibraryStore = {
+        let suite = "loge.discovery-recommendation-fixture"
+        let defaults = UserDefaults(suiteName: suite) ?? .standard
+        defaults.removePersistentDomain(forName: suite)
+        let library = LibraryStore(defaults: defaults)
+        library.markWatched([WatchItem(id: title.id, type: title.type, metaID: title.id, title: title.name)])
+        library.toggleSaved(MetaPreview(id: "tt1375666", type: "movie", name: "Inception",
+                                        poster: "https://image.tmdb.org/t/p/w500/xlaY2zyzMfkhk0HSC5VUwzoZPU1.jpg"))
+        library.record(WatchItem(id: "tt2543164", type: "movie", metaID: "tt2543164", title: "Arrival",
+                                 background: "https://image.tmdb.org/t/p/w1280/8MUZz7oPXQftFTslZpRP3CVMOoq.jpg"),
+                       position: 2_900, duration: 6_960)
+        return library
+    }()
+
+    /// Interstellar's recommendations as TMDB lists them, with their real artwork paths.
+    nonisolated static let recommended: [(tmdbID: Int, imdbID: String, title: String, date: String,
+                                          poster: String, backdrop: String)] = [
+        (27205, "tt1375666", "Inception", "2010-07-15", "/xlaY2zyzMfkhk0HSC5VUwzoZPU1.jpg", "/8ZTVqvKDQ8emSGUEMjsS4yHAwrp.jpg"),
+        (1124, "tt0482571", "The Prestige", "2006-10-17", "/Ag2B2KHKQPukjH7WutmgnnSNurZ.jpg", "/yaExZh6qE2cfyK3o4kAMEq0mkgy.jpg"),
+        (329865, "tt2543164", "Arrival", "2016-11-10", "/4gUgPIhPBoamMdbvqHyjMmb2K60.jpg", "/8MUZz7oPXQftFTslZpRP3CVMOoq.jpg"),
+        (286217, "tt3659388", "The Martian", "2015-09-30", "/5BHuvQ6p9kfc091Z8RiFNhCwL4b.jpg", "/lzMS0CI3FLQYC5EgJoWeIaEt0lm.jpg"),
+        (62, "tt0062622", "2001: A Space Odyssey", "1968-04-02", "/ve72VxNqjGM69Uky4WTo2bK6rfq.jpg", "/w5IDXtifKntw0ajv2co7jFlTQDM.jpg"),
+        (335984, "tt1856101", "Blade Runner 2049", "2017-10-04", "/gajva2L0rPYkEWjzgFlBXCAVBE5.jpg", "/gNdLJU9TxrpGx4dkZidjys3fyy0.jpg"),
+        (155, "tt0468569", "The Dark Knight", "2008-07-16", "/qJ2tW6WMUDux911r6m7haRef0WH.jpg", "/cfT29Im5VDvjE0RpyKOSdCKZal7.jpg"),
+    ]
 
     private static let library: LibraryStore? = {
         let suite = "loge.discovery-library-fixture"
@@ -126,6 +160,20 @@ private final class DiscoveryFixtureProtocol: URLProtocol, @unchecked Sendable {
                 }
                 """#
         case "/3/find/tt0816692": body = #"{"movie_results":[{"id":157336}],"tv_results":[]}"#
+        case "/3/movie/157336":
+            let results = DiscoveryFixture.recommended.map {
+                #"{"id":\#($0.tmdbID),"title":"\#($0.title)","release_date":"\#($0.date)","#
+                    + #""poster_path":"\#($0.poster)","backdrop_path":"\#($0.backdrop)"}"#
+            }
+            body = #"""
+                {"id":157336,"title":"Interstellar","release_date":"2014-11-05","runtime":169,
+                 "poster_path":"/yQvGrMoipbRoddT0ZR8tPoR7NfX.jpg","backdrop_path":"/8sNiAPPYU14PUepFNeSNGUTiHW.jpg",
+                 "recommendations":{"results":[\#(results.joined(separator: ","))]}}
+                """#
+        case let path where path.hasPrefix("/3/movie/") && path.hasSuffix("/external_ids"):
+            let id = url.pathComponents[3]
+            let imdbID = DiscoveryFixture.recommended.first { String($0.tmdbID) == id }?.imdbID
+            body = #"{"id":\#(id),"imdb_id":\#(imdbID.map { "\"\($0)\"" } ?? "null")}"#
         case "/3/movie/157336/reviews":
             body = #"""
                 {
