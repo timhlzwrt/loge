@@ -153,13 +153,15 @@ old subtitle work cannot attach to a replacement file.
 
 ## Follow-up work
 
-- Verify Trakt handoff against the live API on two devices. Concurrent token
-  refreshes share a request, and sign-out invalidates pending authentication and
-  sync responses; offline transport tests cover those races. Lists, settings,
-  addon configuration and an offline upload queue remain outside the sync scope.
-- Verify tvOS swipe scrubbing, actual subtitle sizing, Picture in Picture and
-  audio/session behavior on real devices. Simulator checks cannot establish
-  hardware decoder, HDR or Siri Remote touch behavior.
+The [roadmap](../ROADMAP.md) tracks simulator/automated-test priorities and proposed
+features. Real-device testing isn't planned because of maintainer time constraints.
+
+- Extend controlled Trakt transport tests for handoff-related progress changes,
+  shared token refresh and sign-out invalidation. The self-hosted account syncs
+  playback and setup separately; keep its ownership boundaries explicit in tests.
+- Exercise subtitle sizing, supported Picture in Picture flows and
+  background/foreground playback in simulators. Simulator checks cannot establish
+  hardware decoder, HDR or physical Siri Remote touch behavior.
 - Profile image decoding and long catalog scrolling before introducing a new
   image loader or cache. The app already configures a shared URL cache.
 
@@ -180,7 +182,8 @@ request. Keep fixture requests separate from private stream-addon credentials.
 `PlaybackRegressionTests.swift` uses the existing local multi-audio fixture
 (`TEST_RUNNER_PLAYBACK_FIXTURE_URL=http://127.0.0.1:8766/tracks.mov`). It covers
 episode progress across pause/relaunch, remote percentage-to-duration correction,
-source replacement, and video recovery after backgrounding. Screen-lock recovery
-still needs hardware verification. `DiscoveryTVTests.testLibraryFocusMovesBetweenRows`
+source replacement, and video recovery after backgrounding. Actual screen-lock recovery
+is outside simulator verification and isn't a planned hardware-testing task.
+`DiscoveryTVTests.testLibraryFocusMovesBetweenRows`
 and the remote driver's `TEST_RUNNER_DISCOVERY_SCREEN=library` use an isolated
 library fixture for navigation checks without changing the user's saved titles.

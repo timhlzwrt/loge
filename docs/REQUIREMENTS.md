@@ -83,8 +83,9 @@ has not been established and should not be inferred from the CI runner label.
 
 **Scope:** compilation/API-availability checks establish the deployment floor;
 they are not a runtime certification on OS 26. The installed simulators and
-host run **27.2**. OS 26 device launches, full playback and hardware output
-remain explicit [verification work](../ROADMAP.md#next-verification-first).
+host run **27.2**. Minimum-version simulator smoke tests remain
+[verification work](../ROADMAP.md#next-verification-first) when runtimes are available.
+Hardware output is outside the [planned testing scope](../ROADMAP.md#a-note-from-the-maintainer).
 Xcode emits destination-selection diagnostics; no Swift compiler warnings
 were observed in these builds.
 

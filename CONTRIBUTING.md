@@ -54,10 +54,12 @@ flows and [app overview](docs/APP_OVERVIEW.md#verification-workflow), not a seco
 test harness. The local [test addon](Tools/test-addon.py) provides synthetic
 streams without personal provider credentials.
 
-Report simulator, physical-device and live-service results separately. HDR,
-display matching, remote gestures and real cross-device handoff need the
-appropriate hardware. Include screenshots for visual changes and state which
-platforms could not be tested.
+Planned verification focuses on simulators, automated tests and Mac builds;
+real-device testing isn't a release requirement. Simulator checks don't establish
+HDR output, display matching, physical remote gestures or real cross-device handoff.
+If contributors supply hardware or live-service results, report those separately.
+Include screenshots for visual changes and state which platforms could not be tested.
+See the maintainer's [testing scope](ROADMAP.md#a-note-from-the-maintainer).
 
 ## Keep changes focused
 
