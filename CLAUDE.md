@@ -315,7 +315,6 @@ bar via `hidingPhoneTabBar()`. Details icons are captioned on iPhone and iPad (`
 add `minimumScaleFactor` there, since the row then lays them out at half size. A menu's glass circle
 centres on a caption inside its label, so on iPad "Lists" sits below the menu. Checks use the device
 (`Metrics.isPhone`), not the size class, so a narrow iPad window keeps its tabs.
-`FlowTests.testTraktSettings` and `TMDBSetupTests` still look on the Settings index and need updating.
 8 November, Mac full screen: the player window is a principal window, since an associated one can't
 go full screen, and neither launches nor restores by itself. In full screen the main window's
 toolbar appears on hover (back button included), so artwork reaches the top; the strip left on
@@ -326,6 +325,15 @@ the page, so the sidebar and window size count) puts details in two columns thro
 and the TMDB prompt full width below. It swaps with a `VStackLayout` under `AnyLayout`, so rotating
 keeps the chosen season and loaded reviews. `Font.synopsis` is body size on iPad (the device, not the
 window); `readingWidth()` caps reviews, biographies and overviews at 640 pt on iOS.
+8 November, follow-ups: the Mac cursor hides with the player's controls through
+`NSCursor.setHiddenUntilMouseMoves`, so it can't stay hidden, and moving the mouse brings back both.
+The details backdrop flattens before it fades (`compositingGroup`), which removes the hard edge.
+Reviews keep their state on returning from a pushed page, so tvOS focus stays on the link opened.
+Search's keyboard returning after going back is the system restoring a focused field: it isn't
+from the iPhone tab bar change, happens only if the keyboard was up when the result was opened,
+and clearing `searchFocused` on leaving doesn't stop it. Retry on Sources passed on iPhone.
+Play and Resume no longer open a saved stream URL: they wait for the fresh list and play the same
+file or release from it, or stay on the list. ElfHosted refused an old link with its own error.
 
 Verification for these tasks: reuse `LibraryStoreTests`, `TraktTests`,
 `UITests/FlowTests.swift`, `UITests/PlaybackRegressionTests.swift`,

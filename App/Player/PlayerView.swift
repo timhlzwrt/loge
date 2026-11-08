@@ -43,6 +43,11 @@ struct PlayerView: View {
     /// Info, Subtitles and Audio, shown by swiping down.
     @State private var isPanelShown = false
     #endif
+    #if os(macOS)
+    @Environment(\.appearsActive) private var windowIsActive
+    /// Where the pointer is over the player; nil while it's elsewhere.
+    @State private var pointerLocation: CGPoint?
+    #endif
     @Environment(\.dismiss) private var dismiss
 
     private var player: MPVPlayer? { session.player }
@@ -129,6 +134,9 @@ struct PlayerView: View {
             #if os(iOS)
             AppDelegate.setAllowsLandscape(false)
             #endif
+            #if os(macOS)
+            NSCursor.setHiddenUntilMouseMoves(false)
+            #endif
             scrubPreview = nil
             session.screenDidDisappear()
         }
@@ -211,6 +219,28 @@ struct PlayerView: View {
         .onKeyPress(.space) { player?.togglePause(); showControls(); return .handled }
         .onKeyPress(.leftArrow) { player?.seek(by: -10); showControls(); return .handled }
         .onKeyPress(.rightArrow) { player?.seek(by: 10); showControls(); return .handled }
+        .onContinuousHover { phase in
+            switch phase {
+            case .active(let location):
+                // Layout changes report a pointer that hasn't moved; counting those would
+                // keep the controls from ever hiding.
+                guard location != pointerLocation else { return }
+                pointerLocation = location
+                showControls()
+            case .ended:
+                pointerLocation = nil
+            }
+        }
+        // Not hide() and unhide(): those must balance, and this can't leave the cursor hidden,
+        // since the system brings it back on the next movement.
+        .onChange(of: controlsVisible) { _, visible in
+            if !visible && pointerLocation != nil && windowIsActive {
+                NSCursor.setHiddenUntilMouseMoves(true)
+            }
+        }
+        .onChange(of: windowIsActive) { _, active in
+            if !active { NSCursor.setHiddenUntilMouseMoves(false) }
+        }
         #else
         .statusBarHidden(!controlsVisible)
         .persistentSystemOverlays(.hidden)

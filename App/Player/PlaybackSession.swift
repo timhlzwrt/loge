@@ -130,14 +130,6 @@ final class PlaybackSession {
         episodes = []
     }
 
-    /// Alternatives found after playback started, for a source played before the list loaded.
-    func offerFallbacks(_ requests: [PlaybackRequest], for request: PlaybackRequest) {
-        guard current == request else { return }
-        fallbacks = requests
-        // It may already have failed while the list was loading.
-        if case .failed = player?.status { tryAnotherSource() }
-    }
-
     func playNext() {
         guard let next else { return }
         if let item = current?.item {

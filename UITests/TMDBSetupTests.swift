@@ -11,14 +11,16 @@ final class TMDBSetupTests: XCTestCase {
         XCUIDevice.shared.orientation = .portrait
         let app = XCUIApplication()
         app.launch()
-        let settings = app.tabBars.buttons["Settings"].firstMatch
-        (settings.exists ? settings : app.buttons["Settings"].firstMatch).tap()
+        // iPad has a Settings tab, iPhone a gear on Home; both are buttons with this name.
+        let settings = app.buttons["Settings"].firstMatch
+        XCTAssertTrue(settings.waitForExistence(timeout: 10))
+        settings.tap()
+        let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'TMDB'")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "No TMDB row in Settings")
+        guard row.label.contains("Off") else { throw XCTSkip("A token is already configured on this device.") }
+        row.tap()
         let connect = app.buttons["Connect TMDB"].firstMatch
-        for _ in 0..<8 {
-            if connect.exists && connect.isHittable { break }
-            app.swipeUp()
-        }
-        guard connect.exists else { throw XCTSkip("A token is already configured on this device.") }
+        XCTAssertTrue(connect.waitForExistence(timeout: 5), "TMDB page has no Connect button")
         connect.tap()
         let token = app.secureTextFields["API Read Access Token"]
         XCTAssertTrue(token.waitForExistence(timeout: 5))
@@ -31,6 +33,13 @@ final class TMDBSetupTests: XCTestCase {
         screenshot("tmdb-invalid-token")
         app.buttons["Cancel"].firstMatch.tap()
         XCTAssertTrue(connect.waitForExistence(timeout: 5))
+        app.navigationBars.buttons.firstMatch.tap()
+        let dataSources = app.buttons["Data Sources"]
+        for _ in 0..<8 {
+            if dataSources.exists && dataSources.isHittable { break }
+            app.swipeUp()
+        }
+        dataSources.tap()
         let credits = app.staticTexts["This product uses the TMDB API but is not endorsed or certified by TMDB."]
         for _ in 0..<8 {
             if credits.exists && credits.isHittable { break }
