@@ -180,7 +180,7 @@ private final class DiscoveryFixtureProtocol: URLProtocol, @unchecked Sendable {
                   "id": 157336,
                   "page": 1,
                   "total_pages": 1,
-                  "total_results": 1,
+                  "total_results": 3,
                   "results": [
                     {
                       "id": "fixture-review",
@@ -191,6 +191,26 @@ private final class DiscoveryFixtureProtocol: URLProtocol, @unchecked Sendable {
                       "content": "A patient, ambitious journey that gives its enormous images a human scale. The quiet scenes between Cooper and Murph are what stayed with me.\n\nThe ending invites discussion, but the film earns its sense of wonder. This text was written for the offline UI test.",
                       "created_at": "2026-01-15T12:00:00Z",
                       "url": "https://www.themoviedb.org/review/fixture-review"
+                    },
+                    {
+                      "id": "fixture-review-2",
+                      "author": "Second viewer",
+                      "author_details": {
+                        "rating": 6
+                      },
+                      "content": "Long, loud and sentimental, though the docking sequence alone is worth it. This text was written for the offline UI test.",
+                      "created_at": "2026-01-16T12:00:00Z",
+                      "url": "https://www.themoviedb.org/review/fixture-review-2"
+                    },
+                    {
+                      "id": "fixture-review-3",
+                      "author": "Third viewer",
+                      "author_details": {
+                        "rating": 9
+                      },
+                      "content": "Only listed behind All reviews. This text was written for the offline UI test.",
+                      "created_at": "2026-01-17T12:00:00Z",
+                      "url": "https://www.themoviedb.org/review/fixture-review-3"
                     }
                   ]
                 }

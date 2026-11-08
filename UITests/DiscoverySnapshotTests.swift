@@ -26,14 +26,16 @@ final class DiscoverySnapshotTests: XCTestCase {
             }
             XCTAssertTrue(ready.waitForExistence(timeout: 20))
             if screen == "overview" {
-                XCTAssertTrue(app.buttons["Read review"].waitForExistence(timeout: 15))
+                XCTAssertTrue(app.buttons["Read review"].firstMatch.waitForExistence(timeout: 15))
+                XCTAssertEqual(app.buttons.matching(identifier: "Read review").count, 2)
+                XCTAssertTrue(app.buttons["All reviews"].exists)
             }
             let image = app.screenshot()
             let url = URL(fileURLWithPath: directory).appending(path: "\(screen).png")
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try image.pngRepresentation.write(to: url)
             if screen == "overview" {
-                app.buttons["Read review"].tap()
+                app.buttons["Read review"].firstMatch.tap()
                 XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'The ending invites discussion'")).firstMatch.waitForExistence(timeout: 10))
             } else if screen == "festival" {
                 app.buttons["festival-section-picker"].tap()

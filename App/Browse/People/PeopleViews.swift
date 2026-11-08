@@ -75,7 +75,6 @@ struct PeopleRow: View {
 struct CreditsList: View {
     let people: [Person]
     let title: MetaPreview
-    @Environment(TMDBAccount.self) private var tmdb
 
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.headerSpacing) {
@@ -87,11 +86,6 @@ struct CreditsList: View {
                 line("Writer", role: .writer)
             }
             .font(.synopsis)
-            if !tmdb.isConfigured {
-                Text("Connect TMDB in Settings for photos and character names.")
-                    .font(.footnote)
-                    .foregroundStyle(.tertiary)
-            }
         }
         .padding(.horizontal, Metrics.gutter)
     }
