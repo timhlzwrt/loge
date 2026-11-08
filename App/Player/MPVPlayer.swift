@@ -92,6 +92,8 @@ final class MPVPlayer {
         var downloadSpeed: Double?
         var videoBitrate: Double?
         var audioBitrate: Double?
+        /// Seconds between the sound and the picture, as mpv last measured them.
+        var avSync: Double?
     }
 
     struct VideoFormat: Equatable, Sendable {
@@ -461,6 +463,7 @@ final class MPVPlayer {
             ("cache-speed", MPV_FORMAT_INT64),
             ("video-bitrate", MPV_FORMAT_DOUBLE),
             ("audio-bitrate", MPV_FORMAT_DOUBLE),
+            ("avsync", MPV_FORMAT_DOUBLE),
         ] {
             check(mpv_get_property_async(handle, 0, name, format), name)
         }
@@ -764,6 +767,9 @@ final class MPVPlayer {
             return
         case .double("audio-bitrate", let value):
             playbackInfo.audioBitrate = value.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
+            return
+        case .double("avsync", let value):
+            playbackInfo.avSync = value
             return
         case .flag, .double, .integer, .string:
             break

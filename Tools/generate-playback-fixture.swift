@@ -13,7 +13,7 @@ import Foundation
         while cursor < duration {
             let span = CMTimeMinimum(sourceDuration, duration - cursor)
             try targetVideo.insertTimeRange(CMTimeRange(start: .zero, duration: span), of: sourceVideo, at: cursor)
-            cursor += span
+            cursor = CMTimeAdd(cursor, span)
         }
         targetVideo.preferredTransform = try await sourceVideo.load(.preferredTransform)
         for (name, language) in [("en", "eng"), ("de", "deu")] {

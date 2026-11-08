@@ -223,6 +223,7 @@ final class PlaybackRegressionTests: XCTestCase {
             return current >= before - 1 && current <= before + 1
         }, evaluatedWith: app)
         wait(for: [restored], timeout: 10)
+        XCTAssertGreaterThan(pictureBrightness(), 20, "No picture after returning")
         let pausedScreenshot = XCTAttachment(screenshot: app.screenshot())
         pausedScreenshot.name = "Paused video after background recovery"
         pausedScreenshot.lifetime = .keepAlways
@@ -241,5 +242,151 @@ final class PlaybackRegressionTests: XCTestCase {
         XCTAssertTrue(app.buttons["Play fixture"].waitForExistence(timeout: 5))
     }
 
+    /// Choices made while paused, so the controls' auto-hide can't close the menus under the test.
+    @MainActor
+    func testAudioAndSubtitleChangesKeepThePositionAndPlaying() throws {
+        guard let url = ProcessInfo.processInfo.environment["PLAYBACK_FIXTURE_URL"] else {
+            throw XCTSkip("Set TEST_RUNNER_PLAYBACK_FIXTURE_URL for the isolated playback fixture.")
+        }
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments += ["--playback-ui-test"]
+        app.launchEnvironment["PLAYBACK_FIXTURE_URL"] = url
+        app.launch()
+        defer { app.terminate() }
+        app.buttons["Play fixture"].tap()
+        let position = app.staticTexts["fixture-position"]
+        XCTAssertTrue(position.waitForExistence(timeout: 30))
+        wait(for: [expectation(for: NSPredicate { _, _ in
+            (Int(position.value as? String ?? "") ?? -1) >= 2
+        }, evaluatedWith: app)], timeout: 15)
+        if !app.buttons["Pause"].isHittable { app.tap() }
+        app.buttons["Pause"].tap()
+        XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 5))
+        let paused = try XCTUnwrap(Int(position.value as? String ?? ""))
+
+        app.buttons["Audio"].tap()
+        let german = app.buttons.matching(NSPredicate(format: "label CONTAINS 'German' OR label CONTAINS 'Deutsch'")).firstMatch
+        XCTAssertTrue(german.waitForExistence(timeout: 5))
+        german.tap()
+        wait(for: [expectation(for: NSPredicate(format: "value == 'de'"),
+                               evaluatedWith: app.staticTexts["fixture-audio"])], timeout: 10)
+
+        app.buttons["Subtitles"].tap()
+        let subtitle = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Stream'")).firstMatch
+        XCTAssertTrue(subtitle.waitForExistence(timeout: 5))
+        subtitle.tap()
+        let subtitleSelected = NSPredicate { _, _ in
+            ["en", "eng"].contains(app.staticTexts["fixture-subtitle"].value as? String ?? "")
+        }
+        wait(for: [expectation(for: subtitleSelected, evaluatedWith: app)], timeout: 10)
+        XCTAssertFalse(app.alerts.firstMatch.exists)
+
+        let afterChanges = Int(position.value as? String ?? "") ?? -1
+        XCTAssertLessThanOrEqual(abs(afterChanges - paused), 1, "Changing tracks moved the position")
+        app.buttons["Play"].tap()
+        wait(for: [expectation(for: NSPredicate { _, _ in
+            (Int(position.value as? String ?? "") ?? -1) >= paused + 3
+        }, evaluatedWith: app)], timeout: 10)
+        XCTAssertEqual(app.staticTexts["fixture-audio"].value as? String, "de")
+        if !app.buttons["Close"].isHittable { app.tap() }
+        app.buttons["Close"].tap()
+        XCTAssertTrue(app.buttons["Play fixture"].waitForExistence(timeout: 5))
+    }
+
+    @MainActor
+    func testBackgroundWhilePlayingRestoresPictureTimelineAndSync() throws {
+        try checkRecovery(named: "background") {
+            XCUIDevice.shared.press(.home)
+        }
+    }
+
+    /// The simulator's lock button. It proves the app's path through a lock, not what a
+    /// real screen turning off does to AVFoundation's renderer.
+    @MainActor
+    func testSimulatorLockWhilePlayingRestoresPictureTimelineAndSync() throws {
+        let lock = NSSelectorFromString("pressLockButton")
+        guard XCUIDevice.shared.responds(to: lock) else { throw XCTSkip("This simulator has no lock button.") }
+        try checkRecovery(named: "lock") {
+            XCUIDevice.shared.perform(lock)
+        }
+    }
+
+    @MainActor
+    private func checkRecovery(named name: String, leave: () -> Void) throws {
+        guard let url = ProcessInfo.processInfo.environment["PLAYBACK_FIXTURE_URL"] else {
+            throw XCTSkip("Set TEST_RUNNER_PLAYBACK_FIXTURE_URL for the isolated playback fixture.")
+        }
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments += ["--playback-ui-test"]
+        app.launchEnvironment["PLAYBACK_FIXTURE_URL"] = url
+        app.launch()
+        defer { app.terminate() }
+        app.buttons["Play fixture"].tap()
+        let position = app.staticTexts["fixture-position"]
+        XCTAssertTrue(position.waitForExistence(timeout: 30))
+        wait(for: [expectation(for: NSPredicate { _, _ in
+            (Int(position.value as? String ?? "") ?? -1) >= 3
+        }, evaluatedWith: app)], timeout: 15)
+        XCTAssertGreaterThan(pictureBrightness(), 20, "No picture before leaving")
+        screenshot("\(name)-before")
+
+        leave()
+        // A floating window keeps the app reported as in the foreground, so this can only wait.
+        _ = app.wait(for: .runningBackground, timeout: 5)
+        sleep(3)
+        screenshot("\(name)-away")
+        app.activate()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
+        // Going Home with Picture in Picture leaves the video floating over the page it came
+        // from; the player screen comes back through the window's restore button.
+        if !position.waitForExistence(timeout: 4) {
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.77, dy: 0.1)).tap()
+            let restore = XCUIApplication(bundleIdentifier: "com.apple.springboard").buttons
+                .matching(NSPredicate(format: "label IN %@", ["Restore Full Screen", "Vollbildmodus wiederherstellen"])).firstMatch
+            XCTAssertTrue(restore.waitForExistence(timeout: 5))
+            restore.tap()
+            XCTAssertTrue(position.waitForExistence(timeout: 10))
+        }
+        if !app.buttons["Close"].isHittable { app.tap() }
+
+        // Without Picture in Picture, as on iPhone simulators, leaving pauses playback.
+        if app.buttons["Play"].waitForExistence(timeout: 3) {
+            let restored = expectation(for: NSPredicate { [self] _, _ in pictureBrightness() > 20 }, evaluatedWith: app)
+            wait(for: [restored], timeout: 5)
+            screenshot("\(name)-paused")
+            app.buttons["Play"].tap()
+        }
+        let resumedFrom = Int(position.value as? String ?? "") ?? -1
+        wait(for: [expectation(for: NSPredicate { _, _ in
+            (Int(position.value as? String ?? "") ?? -1) >= resumedFrom + 3
+        }, evaluatedWith: app)], timeout: 10)
+        XCTAssertGreaterThan(pictureBrightness(), 20, "No picture after returning")
+        screenshot("\(name)-playing")
+        let offset = try XCTUnwrap(Double(app.staticTexts["fixture-av-sync"].value as? String ?? ""), "mpv reported no A/V offset")
+        XCTAssertLessThan(offset, 0.1, "Sound and picture drifted apart")
+
+        if !app.buttons["Pause"].isHittable { app.tap() }
+        app.buttons["Pause"].tap()
+        XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 5), "Controls stopped responding")
+        app.buttons["Close"].tap()
+        XCTAssertTrue(app.buttons["Play fixture"].waitForExistence(timeout: 5))
+    }
+
+    /// Average brightness (0–255) left of centre, clear of the controls: near black when
+    /// the video layer has stopped drawing.
+    @MainActor
+    private func pictureBrightness() -> Double {
+        guard let image = XCUIScreen.main.screenshot().image.cgImage else { return 0 }
+        let area = CGRect(x: Double(image.width) * 0.1, y: Double(image.height) * 0.45,
+                          width: Double(image.width) * 0.2, height: Double(image.height) * 0.1)
+        guard let crop = image.cropping(to: area),
+              let context = CGContext(data: nil, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 1,
+                                      space: CGColorSpaceCreateDeviceGray(),
+                                      bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return 0 }
+        context.draw(crop, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        return context.data.map { Double($0.load(as: UInt8.self)) } ?? 0
+    }
 }
 #endif
