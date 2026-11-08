@@ -83,6 +83,7 @@ struct ReviewsSection: View {
                 }
                 #endif
             }
+            .readingWidth()
             .padding(.horizontal, Metrics.gutter)
             #if os(tvOS)
             // The links sit at the left; without this, Down from the end of a row above skips them.
@@ -168,7 +169,11 @@ private struct ReviewDetailView: View {
                 if let url = review.url { Link("View on TMDB", destination: url) }
                 #endif
             }
+            #if os(iOS)
+            .readingWidth()
+            #else
             .frame(maxWidth: 900, alignment: .leading)
+            #endif
             .padding(Metrics.gutter)
         }
         .background(Color.canvas)

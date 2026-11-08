@@ -91,7 +91,7 @@ struct TMDBTitleView: View {
                     }
                 }
                 if let overview = title.overview {
-                    Text(overview).font(.synopsis).foregroundStyle(.secondary)
+                    Text(overview).font(.synopsis).foregroundStyle(.secondary).readingWidth()
                 }
                 switch state {
                 case .loading:

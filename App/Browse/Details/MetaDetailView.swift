@@ -15,6 +15,8 @@ struct MetaDetailView: View {
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    /// The page's own shape rather than the screen's: the sidebar and window resizing narrow it.
+    @State private var hasRoomForColumns = false
     #endif
     /// Set by "Choose a Source" and by picking an episode, which bypass the remembered source.
     @State private var choosingSource: SourcesRoute?
@@ -37,7 +39,7 @@ struct MetaDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
+            pageLayout {
                 hero
                 if let meta = loaded {
                     if preview.type == MediaType.series, case .loading = state {
@@ -49,7 +51,8 @@ struct MetaDetailView: View {
                             videos: videos,
                             upNextID: library.upNext(metaID: preview.id, videos: videos)?.video.id,
                             route: route(for:),
-                            choose: { choosingSource = route(for: $0) }
+                            choose: { choosingSource = route(for: $0) },
+                            staysInColumn: usesColumns
                         )
                     }
                     if case .failed = state {
@@ -64,11 +67,14 @@ struct MetaDetailView: View {
                     }
                     let people = creditedPeople(fallback: meta.people)
                     if !people.isEmpty {
-                        PeopleRow(people: people, title: preview)
+                        PeopleRow(people: people, title: preview, staysInColumn: usesColumns)
+                            .detailColumn(.side)
                     }
                     MoreLikeThisRow(titles: tmdbDetails?.recommendations ?? [])
+                        .detailColumn(.full)
                     ReviewsSection(preview: preview)
                     InformationSection(meta: meta, details: tmdbDetails)
+                        .detailColumn(.side)
                 } else if case .failed(let message) = state {
                     HStack {
                         Text(message)
@@ -80,10 +86,16 @@ struct MetaDetailView: View {
                     detailsPlaceholder
                 }
                 tmdbStatus
+                    .detailColumn(.full)
             }
             .padding(.bottom, 40)
         }
         .scrollClipDisabled()
+        #if os(iOS)
+        .onGeometryChange(for: Bool.self) { proxy in
+            proxy.size.width >= 880 && proxy.size.width > proxy.size.height
+        } action: { hasRoomForColumns = $0 && !Metrics.isPhone }
+        #endif
         #if os(tvOS)
         .background(alignment: .top) {
             backdrop
@@ -172,6 +184,21 @@ struct MetaDetailView: View {
                 provider.prefetchStreams(type: route.type, id: route.id)
             }
         }
+    }
+
+    private var usesColumns: Bool {
+        #if os(iOS)
+        hasRoomForColumns
+        #else
+        false
+        #endif
+    }
+
+    private var pageLayout: AnyLayout {
+        let spacing: CGFloat = 28
+        return usesColumns
+            ? AnyLayout(DetailColumnsLayout(sideTop: heroHeight - 160, spacing: spacing))
+            : AnyLayout(VStackLayout(alignment: .leading, spacing: spacing))
     }
 
     private func retry() {
@@ -300,7 +327,7 @@ struct MetaDetailView: View {
                 Text(description)
                     .font(.synopsis)
                     .foregroundStyle(.white.opacity(0.88))
-                    .lineLimit(3)
+                    .lineLimit(synopsisLines)
                     .frame(maxWidth: synopsisWidth, alignment: .leading)
             }
             buttons
@@ -394,6 +421,7 @@ struct MetaDetailView: View {
     private let logoHeight: CGFloat = 160
     private let logoWidth: CGFloat = 560
     private let synopsisWidth: CGFloat = 900
+    private let synopsisLines = 3
     private let synopsisUnderButtons = false
     #elseif os(macOS)
     private let heroAlignment = HorizontalAlignment.leading
@@ -401,6 +429,7 @@ struct MetaDetailView: View {
     private let logoHeight: CGFloat = 110
     private let logoWidth: CGFloat = 360
     private let synopsisWidth: CGFloat = 540
+    private let synopsisLines = 3
     private let synopsisUnderButtons = false
     #else
     // A centred stack suits a portrait phone; wider screens read better left-aligned,
@@ -413,6 +442,8 @@ struct MetaDetailView: View {
     private var logoHeight: CGFloat { isWide ? 100 : 80 }
     private var logoWidth: CGFloat { isWide ? 360 : 260 }
     private let synopsisWidth: CGFloat = 620
+    /// iPad's larger text would otherwise show less of the synopsis, with no way to read the rest.
+    private let synopsisLines = 4
     /// On a phone the buttons come first, so the synopsis doesn't push them down.
     private var synopsisUnderButtons: Bool { !isWide }
     #endif

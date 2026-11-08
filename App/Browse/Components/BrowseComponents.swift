@@ -69,6 +69,17 @@ extension View {
         self
         #endif
     }
+
+    /// Keeps long text at a comfortable line length on iPad, where the page runs far wider.
+    func readingWidth() -> some View {
+        #if os(iOS)
+        frame(maxWidth: 640, alignment: .leading)
+            // Still takes the full width: a scroll view around it would otherwise shrink to fit.
+            .frame(maxWidth: .infinity, alignment: .leading)
+        #else
+        self
+        #endif
+    }
 }
 
 extension Font {
@@ -89,7 +100,8 @@ extension Font {
     #else
     static let sectionTitle = Font.title2.bold()
     static let metaLine = Font.footnote.weight(.medium)
-    static let synopsis = Font.subheadline
+    /// Further from the screen than a phone, an iPad reads long text at the system's body size.
+    @MainActor static let synopsis = Metrics.isPhone ? Font.subheadline : Font.body
     static let cardTitle = Font.subheadline.bold()
     /// Episode and History cards share these, so both read as one kind of card.
     static let episodeCaption = Font.caption.weight(.semibold)

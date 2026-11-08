@@ -27,6 +27,8 @@ struct TMDBCreditTile: View {
 struct PeopleRow: View {
     let people: [Person]
     let title: MetaPreview
+    /// Beside another column, where the shelf can't draw past its own edges.
+    var staysInColumn = false
 
     var body: some View {
         #if os(tvOS)
@@ -64,7 +66,7 @@ struct PeopleRow: View {
                 #endif
                 .padding(.horizontal, Metrics.gutter)
             }
-            .scrollClipDisabled()
+            .scrollClipDisabled(!staysInColumn)
         }
     }
 }
