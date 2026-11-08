@@ -95,6 +95,37 @@ final class FlowTests: XCTestCase {
         XCTAssertTrue(episodeCard().exists)
     }
 
+    /// Details and sources hide the iPhone's tab bar, and every way back brings it back.
+    @MainActor
+    func testPhoneTabBarFollowsTitlePages() throws {
+        guard UIDevice.current.userInterfaceIdiom == .phone else {
+            throw XCTSkip("The iPad keeps its tabs on every page.")
+        }
+        let tabBar = app.tabBars.firstMatch
+        XCTAssertTrue(tabBar.waitForExistence(timeout: 5))
+        XCTAssertFalse(tabBar.buttons["Settings"].exists, "Settings is a gear on Home")
+        openTab("Settings")
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+        XCTAssertTrue(tabBar.exists, "Settings keeps the tab bar")
+        openTab("Home")
+
+        startPlayback()
+        XCUIDevice.shared.orientation = .landscapeLeft
+        XCTAssertTrue(waitForWindow(landscape: true), "The player didn't turn")
+        if !app.buttons["Close"].exists { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap() }
+        app.buttons["Close"].tap()
+        XCTAssertTrue(waitForWindow(landscape: false), "Browsing didn't turn back upright")
+        XCUIDevice.shared.orientation = .portrait
+        XCTAssertFalse(tabBar.waitForExistence(timeout: 2), "Closing the player over a title's page keeps the bar hidden")
+
+        // Sources, if playback came through its list, then details, then Home.
+        for _ in 0..<2 where !tabBar.exists {
+            app.navigationBars.buttons.firstMatch.tap()
+            _ = tabBar.waitForExistence(timeout: 3)
+        }
+        XCTAssertTrue(tabBar.exists, "Going back brings the tab bar back")
+    }
+
     @MainActor
     func testBuiltInDiscoveryWithoutAddons() {
         openTab("Settings")
@@ -777,7 +808,8 @@ final class FlowTests: XCTestCase {
 
     @MainActor
     private func openTab(_ name: String) {
-        // iPhone shows a tab bar; iPad shows the tabs as plain buttons at the top.
+        // iPhone shows a tab bar, and Settings as a gear on Home; iPad shows the tabs as plain
+        // buttons at the top.
         let tab = app.tabBars.buttons[name].firstMatch
         (tab.exists ? tab : app.buttons[name].firstMatch).tap()
     }

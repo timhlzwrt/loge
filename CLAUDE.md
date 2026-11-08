@@ -309,6 +309,13 @@ order. Search uses the image tiles on every platform, tvOS included, and they st
 show, the rest behind "All reviews". One TMDB prompt, at the foot of the page, only where connecting
 would change it. Apple TV hides Reviews without TMDB, since it can't open the links, and types the
 addresses out only beside reviews. Open: returning from "All reviews" on tvOS moves focus to Play.
+8 November, iPhone navigation: tabs are Home, My Lists and Search; a gear over Home's hero pushes
+Settings and scrolls away with it. Title pages (details, sources, people, reviews) hide the tab
+bar via `hidingPhoneTabBar()`. Details icons are captioned on iPhone and iPad (`IconCaption`); don't
+add `minimumScaleFactor` there, since the row then lays them out at half size. A menu's glass circle
+centres on a caption inside its label, so on iPad "Lists" sits below the menu. Checks use the device
+(`Metrics.isPhone`), not the size class, so a narrow iPad window keeps its tabs.
+`FlowTests.testTraktSettings` and `TMDBSetupTests` still look on the Settings index and need updating.
 8 November, Mac full screen: the player window is a principal window, since an associated one can't
 go full screen, and neither launches nor restores by itself. In full screen the main window's
 toolbar appears on hover (back button included), so artwork reaches the top; the strip left on
