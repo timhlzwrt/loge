@@ -320,6 +320,12 @@ centres on a caption inside its label, so on iPad "Lists" sits below the menu. C
 go full screen, and neither launches nor restores by itself. In full screen the main window's
 toolbar appears on hover (back button included), so artwork reaches the top; the strip left on
 notched screens is the system's.
+8 November, iPad layout: a wide landscape page (at least 880 pt and wider than tall, measured on
+the page, so the sidebar and window size count) puts details in two columns through
+`DetailColumnsLayout`: hero, Episodes and Reviews left, Cast and Information right, More Like This
+and the TMDB prompt full width below. It swaps with a `VStackLayout` under `AnyLayout`, so rotating
+keeps the chosen season and loaded reviews. `Font.synopsis` is body size on iPad (the device, not the
+window); `readingWidth()` caps reviews, biographies and overviews at 640 pt on iOS.
 
 Verification for these tasks: reuse `LibraryStoreTests`, `TraktTests`,
 `UITests/FlowTests.swift`, `UITests/PlaybackRegressionTests.swift`,

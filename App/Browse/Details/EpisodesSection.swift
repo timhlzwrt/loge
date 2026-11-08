@@ -8,14 +8,18 @@ struct EpisodesSection: View {
     let route: (Video) -> SourcesRoute
     /// Opens the sources for an episode.
     let choose: (Video) -> Void
+    /// Beside another column, where a shelf can't draw past its own edges.
+    let staysInColumn: Bool
     @State private var season: Int
     @Environment(LibraryStore.self) private var library
 
-    init(videos: [Video], upNextID: String?, route: @escaping (Video) -> SourcesRoute, choose: @escaping (Video) -> Void) {
+    init(videos: [Video], upNextID: String?, route: @escaping (Video) -> SourcesRoute, choose: @escaping (Video) -> Void,
+         staysInColumn: Bool = false) {
         self.videos = videos
         self.upNextID = upNextID
         self.route = route
         self.choose = choose
+        self.staysInColumn = staysInColumn
         // Open on the season being watched, otherwise the first real one rather than specials (season 0).
         let upNextSeason = videos.first { $0.id == upNextID }?.season
         _season = State(initialValue: upNextSeason ?? Self.seasons(in: videos).first ?? 0)
@@ -45,7 +49,7 @@ struct EpisodesSection: View {
                 // Margins rather than padding, so scrolling to Up Next keeps the inset.
                 .contentMargins(.horizontal, Metrics.gutter, for: .scrollContent)
                 .scrollIndicators(.hidden)
-                .scrollClipDisabled()
+                .scrollClipDisabled(!staysInColumn)
                 .onAppear {
                     if let upNextID { proxy.scrollTo(upNextID, anchor: .leading) }
                 }

@@ -176,6 +176,7 @@ struct PersonView: View {
                         .font(.synopsis)
                         .foregroundStyle(.secondary)
                         .lineLimit(biographyExpanded ? nil : 5)
+                        .readingWidth()
                     Button(biographyExpanded ? "Show Less" : "Read Biography") {
                         biographyExpanded.toggle()
                     }

@@ -122,7 +122,7 @@ private final class DiscoveryFixtureProtocol: URLProtocol, @unchecked Sendable {
                   "id": 525,
                   "name": "Christopher Nolan",
                   "known_for_department": "Directing",
-                  "biography": "Director and screenwriter.",
+                  "biography": "Director and screenwriter. This biography is long on purpose, for the offline UI test: it has to run across several lines to show how wide the text gets and how many lines stay visible before Read Biography. A real TMDB biography usually covers early life, the first short films, the breakthrough feature and the later studio work, which makes it one of the longest pieces of text in the app. It keeps going here for the same reason, so that the fifth line is still cut short and the limit can be seen on every screen size this fixture runs on.",
                   "combined_credits": {
                     "cast": [
                       {
@@ -165,9 +165,14 @@ private final class DiscoveryFixtureProtocol: URLProtocol, @unchecked Sendable {
                 #"{"id":\#($0.tmdbID),"title":"\#($0.title)","release_date":"\#($0.date)","#
                     + #""poster_path":"\#($0.poster)","backdrop_path":"\#($0.backdrop)"}"#
             }
+            // The paths don't exist, so the tiles show initials: having a path is what makes them tiles.
+            let cast = ["Matthew McConaughey", "Anne Hathaway", "Jessica Chastain", "Michael Caine", "Matt Damon", "Mackenzie Foy", "Casey Affleck", "Ellen Burstyn"]
+                .enumerated().map { #"{"id":\#($0.offset + 9000),"name":"\#($0.element)","character":"Crew member","profile_path":"/fixture.jpg"}"# }
             body = #"""
                 {"id":157336,"title":"Interstellar","release_date":"2014-11-05","runtime":169,
                  "poster_path":"/yQvGrMoipbRoddT0ZR8tPoR7NfX.jpg","backdrop_path":"/8sNiAPPYU14PUepFNeSNGUTiHW.jpg",
+                 "credits":{"cast":[\#(cast.joined(separator: ","))],
+                            "crew":[{"id":525,"name":"Christopher Nolan","job":"Director","profile_path":"/fixture.jpg"}]},
                  "recommendations":{"results":[\#(results.joined(separator: ","))]}}
                 """#
         case let path where path.hasPrefix("/3/movie/") && path.hasSuffix("/external_ids"):
