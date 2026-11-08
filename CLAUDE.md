@@ -305,6 +305,14 @@ near the top reads twice with the logo; it can't be detected); wide heroes have 
 under the text. Home rows move titles leading an earlier row from the same addon behind their
 first eight (`DiscoveryCatalogs.varyingLeads`), so Letterboxd isn't compared; See All keeps rank
 order. Search uses the image tiles on every platform, tvOS included, and they still filter in place.
+8 November, details: the page runs Episodes, Cast, More Like This, Reviews, Information. Two reviews
+show, the rest behind "All reviews". One TMDB prompt, at the foot of the page, only where connecting
+would change it. Apple TV hides Reviews without TMDB, since it can't open the links, and types the
+addresses out only beside reviews. Open: returning from "All reviews" on tvOS moves focus to Play.
+8 November, Mac full screen: the player window is a principal window, since an associated one can't
+go full screen, and neither launches nor restores by itself. In full screen the main window's
+toolbar appears on hover (back button included), so artwork reaches the top; the strip left on
+notched screens is the system's.
 
 Verification for these tasks: reuse `LibraryStoreTests`, `TraktTests`,
 `UITests/FlowTests.swift`, `UITests/PlaybackRegressionTests.swift`,

@@ -53,8 +53,10 @@ final class DiscoveryTVTests: XCTestCase {
         app.launchEnvironment["DISCOVERY_SCREEN"] = "overview"
         app.launch()
         defer { app.terminate() }
-        let read = app.buttons["Read review"]
+        let read = app.buttons["Read review"].firstMatch
         XCTAssertTrue(read.waitForExistence(timeout: 15))
+        XCTAssertEqual(app.buttons.matching(identifier: "Read review").count, 2)
+        XCTAssertTrue(app.buttons["All reviews"].exists)
         let focused = expectation(for: NSPredicate { _, _ in read.hasFocus }, evaluatedWith: app)
         wait(for: [focused], timeout: 8)
         XCUIRemote.shared.press(.select)

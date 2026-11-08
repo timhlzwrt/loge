@@ -66,9 +66,9 @@ struct MetaDetailView: View {
                     if !people.isEmpty {
                         PeopleRow(people: people, title: preview)
                     }
+                    MoreLikeThisRow(titles: tmdbDetails?.recommendations ?? [])
                     ReviewsSection(preview: preview)
                     InformationSection(meta: meta, details: tmdbDetails)
-                    MoreLikeThisRow(titles: tmdbDetails?.recommendations ?? [])
                 } else if case .failed(let message) = state {
                     HStack {
                         Text(message)
@@ -133,8 +133,7 @@ struct MetaDetailView: View {
             }
         }
         .task(id: TMDBLoadKey(revision: tmdb.revision, attempt: tmdbAttempt)) {
-            guard tmdb.isConfigured, preview.id.wholeMatch(of: /tt\d+/) != nil,
-                  preview.type == MediaType.movie || preview.type == MediaType.series else {
+            guard tmdb.isConfigured, isOnTMDB else {
                 tmdbState = .disconnected
                 return
             }
@@ -193,6 +192,12 @@ struct MetaDetailView: View {
         if case .loaded(let details) = tmdbState { details } else { nil }
     }
 
+    /// TMDB is asked by IMDb ID, for films and series only.
+    private var isOnTMDB: Bool {
+        preview.id.wholeMatch(of: /tt\d+/) != nil
+            && (preview.type == MediaType.movie || preview.type == MediaType.series)
+    }
+
     private var detailsPlaceholder: some View {
         VStack(alignment: .leading, spacing: 20) {
             ProgressView("Loading details…")
@@ -230,7 +235,11 @@ struct MetaDetailView: View {
                 }
             case .loading:
                 Text("Loading TMDB details…")
-            case .loaded, .disconnected:
+            case .disconnected:
+                if !tmdb.isConfigured, isOnTMDB, loaded != nil {
+                    Text("Connect TMDB in Settings for cast photos, reviews and recommendations.")
+                }
+            case .loaded:
                 EmptyView()
             }
         }

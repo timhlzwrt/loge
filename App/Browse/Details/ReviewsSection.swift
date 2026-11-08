@@ -13,15 +13,26 @@ struct ReviewsSection: View {
     @State private var failure: String?
     @State private var activeRequestKey = ""
 
+    private let previewCount = 2
+
     private var requestKey: String { "\(tmdb.revision):\(preview.type):\(preview.id)" }
 
+    /// The Apple TV can't open the external links, so without TMDB it has nothing to show here.
+    private var hasContent: Bool {
+        #if os(tvOS)
+        tmdb.isConfigured
+        #else
+        true
+        #endif
+    }
+
     var body: some View {
-        if let critics = ReviewLinks.critics(imdbID: preview.id) {
+        if let critics = ReviewLinks.critics(imdbID: preview.id), hasContent {
             VStack(alignment: .leading, spacing: Metrics.headerSpacing) {
                 Text("Reviews").font(.sectionTitle)
                 if tmdb.isConfigured {
                     Text("TMDB member reviews").font(.metaLine).foregroundStyle(.secondary)
-                    ForEach(Array(reviews.prefix(showsAll ? reviews.count : 3))) { review in
+                    ForEach(Array(reviews.prefix(showsAll ? reviews.count : previewCount))) { review in
                         VStack(alignment: .leading, spacing: 10) {
                             HStack {
                                 Text(review.author).font(.cardTitle)
@@ -41,26 +52,26 @@ struct ReviewsSection: View {
                     } else if let failure {
                         Text(failure).font(.metaLine).foregroundStyle(.secondary)
                         Button("Retry reviews") { Task { await loadPage() } }
-                    } else if !showsAll && (reviews.count > 3 || nextPage <= totalPages) {
-                        NavigationLink("All member reviews") { ReviewListView(preview: preview) }
+                    } else if !showsAll && (reviews.count > previewCount || nextPage <= totalPages) {
+                        NavigationLink("All reviews") { ReviewListView(preview: preview) }
                     } else if showsAll && nextPage <= totalPages {
                         Button("More reviews") { Task { await loadPage() } }
                     } else if reviews.isEmpty {
                         Text("No English member reviews on TMDB yet.")
                             .font(.metaLine).foregroundStyle(.secondary)
                     }
-                } else {
-                    Text("Connect TMDB in Settings to read member reviews here.")
-                        .font(.metaLine).foregroundStyle(.secondary)
                 }
                 #if os(tvOS)
-                Text("External review sources for your phone or computer:")
-                    .foregroundStyle(.secondary)
-                Text("Critics · imdb.com/title/\(preview.id)/externalreviews")
-                    .font(.subheadline)
-                if ReviewLinks.letterboxd(imdbID: preview.id, type: preview.type) != nil {
-                    Text("Letterboxd · letterboxd.com/imdb/\(preview.id)")
+                // Typed-out addresses are only an extra beside reviews, never a section of their own.
+                if !reviews.isEmpty {
+                    Text("External review sources for your phone or computer:")
+                        .foregroundStyle(.secondary)
+                    Text("Critics · imdb.com/title/\(preview.id)/externalreviews")
                         .font(.subheadline)
+                    if ReviewLinks.letterboxd(imdbID: preview.id, type: preview.type) != nil {
+                        Text("Letterboxd · letterboxd.com/imdb/\(preview.id)")
+                            .font(.subheadline)
+                    }
                 }
                 #else
                 VStack(spacing: 0) {
@@ -73,6 +84,10 @@ struct ReviewsSection: View {
                 #endif
             }
             .padding(.horizontal, Metrics.gutter)
+            #if os(tvOS)
+            // The links sit at the left; without this, Down from the end of a row above skips them.
+            .focusSection()
+            #endif
             .task(id: requestKey) {
                 activeRequestKey = requestKey
                 reviews = []

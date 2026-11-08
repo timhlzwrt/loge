@@ -70,6 +70,8 @@ struct LogeApp: App {
                 #if os(macOS)
                 // Also corrects a too-small frame the system restored from an earlier launch.
                 .frame(minWidth: 900, minHeight: 600)
+                // A visible toolbar keeps its own strip in full screen, which cuts the artwork off under it.
+                .windowToolbarFullScreenVisibility(.onHover)
                 .environmentObject(appUpdater)
                 #endif
                 .environment(addonStore)
@@ -137,6 +139,11 @@ struct LogeApp: App {
                 .preferredColorScheme(.dark)
                 .navigationTitle(playback.current?.title ?? "")
         }
+        // Beside a WindowGroup, a Window is an associated window, which can't go full screen.
+        .windowManagerRole(.principal)
+        // As a principal window it would otherwise reopen empty at launch.
+        .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
         #endif
     }
 
