@@ -123,7 +123,7 @@ private struct TrackList: View {
                 .foregroundStyle(.secondary)
                 .padding(.leading, 20)
             ScrollView {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 16) {
                     // Sound can't be turned off, only subtitles.
                     if kind == .sub {
                         row("Off", isSelected: selection.wrappedValue == nil) { selection.wrappedValue = nil }
@@ -153,7 +153,8 @@ private struct TrackList: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .buttonStyle(.borderless)
+        // Borderless puts its focus effect on the image alone, and that is hidden on unselected rows.
+        .buttonStyle(.plain)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
