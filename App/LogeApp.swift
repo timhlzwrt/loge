@@ -231,8 +231,11 @@ struct RootView: View {
                 }
             }
             #endif
-            tab("Settings", systemImage: "gearshape") {
-                NavigationStack { SettingsView() }
+            // iPhone opens Settings from a gear on Home.
+            if !Metrics.isPhone {
+                tab("Settings", systemImage: "gearshape") {
+                    NavigationStack { SettingsView() }
+                }
             }
             #if !os(macOS)
             tab("Search", systemImage: "magnifyingglass", role: .search) {
@@ -243,7 +246,7 @@ struct RootView: View {
         .tabViewStyle(.sidebarAdaptable)
     }
 
-    /// A tab that shows only its icon in the phone's tab bar, where the four symbols are
+    /// A tab that shows only its icon in the phone's tab bar, where the symbols are
     /// familiar enough, and its name in a sidebar.
     private func tab(
         _ title: String, systemImage: String, role: TabRole? = nil, @ViewBuilder content: () -> some View
@@ -277,6 +280,7 @@ private struct BrowseStack<Content: View>: View {
                 .navigationDestination(for: PersonRoute.self) { PersonView(route: $0) }
                 .navigationDestination(for: TMDBCreditTitle.self) { TMDBTitleView(title: $0) }
                 .navigationDestination(for: HistoryRoute.self) { _ in HistoryView() }
+                .navigationDestination(for: SettingsRoute.self) { _ in SettingsView() }
                 .navigationDestination(for: FilmCollection.self) { FilmCollectionView(collection: $0) }
                 .navigationDestination(for: DiscoveryCatalogs.Genre.self) { GenreView(genre: $0) }
                 .navigationDestination(for: FestivalRoute.self) { $0.destination }

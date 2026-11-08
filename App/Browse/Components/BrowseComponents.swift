@@ -9,6 +9,7 @@ extension Color {
 @MainActor
 enum Metrics {
     #if os(tvOS)
+    static let isPhone = false
     static let posterWidth: CGFloat = 210
     /// Continue Watching stills.
     static let cardWidth: CGFloat = 354
@@ -27,6 +28,7 @@ enum Metrics {
     /// The narrowest column of the details' Information grid.
     static let infoColumnWidth: CGFloat = 300
     #elseif os(macOS)
+    static let isPhone = false
     static let posterWidth: CGFloat = 132
     static let cardWidth: CGFloat = 232
     static let episodeWidth: CGFloat = 232
@@ -41,6 +43,8 @@ enum Metrics {
     #else
     // The idiom never changes while running, so these can stay constants.
     private static let isPad = UIDevice.current.userInterfaceIdiom == .pad
+    /// The device rather than the size class: a narrow iPad window is compact too, and keeps its tabs.
+    static let isPhone = UIDevice.current.userInterfaceIdiom == .phone
     static let posterWidth: CGFloat = isPad ? 160 : 112
     static let cardWidth: CGFloat = isPad ? 320 : 270
     static let episodeWidth: CGFloat = isPad ? 320 : 240
@@ -53,6 +57,18 @@ enum Metrics {
     static let personSize: CGFloat = isPad ? 96 : 76
     static let infoColumnWidth: CGFloat = isPad ? 200 : 150
     #endif
+}
+
+extension View {
+    /// For a title's pages on iPhone: details, sources, and the people and reviews reached from
+    /// them, so the bar doesn't come and go on the way through. It would cover their last actions.
+    func hidingPhoneTabBar() -> some View {
+        #if os(iOS)
+        toolbar(Metrics.isPhone ? .hidden : .automatic, for: .tabBar)
+        #else
+        self
+        #endif
+    }
 }
 
 extension Font {

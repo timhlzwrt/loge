@@ -72,6 +72,7 @@ struct SourcesView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.canvas)
+        .hidingPhoneTabBar()
         #if !os(tvOS)
         .navigationTitle(route.title)
         #endif

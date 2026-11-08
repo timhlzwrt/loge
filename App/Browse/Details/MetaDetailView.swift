@@ -101,6 +101,7 @@ struct MetaDetailView: View {
         }
         #endif
         .background(Color.canvas)
+        .hidingPhoneTabBar()
         #if os(iOS)
         .toolbarBackground(.hidden, for: .navigationBar)
         #elseif os(macOS)
@@ -315,13 +316,14 @@ struct MetaDetailView: View {
     }
 
     /// On a phone Play takes the full width and the other actions sit in a row beneath it;
-    /// wider screens keep them on one line. The icons go unnamed: a pointer shows their names.
+    /// wider screens keep them on one line.
     @ViewBuilder
     private var buttons: some View {
         if synopsisUnderButtons {
             VStack(spacing: 20) {
                 playButton
-                HStack(spacing: 0) {
+                // Icons differ in height, which large text makes visible; the captions stay level.
+                HStack(alignment: .lastTextBaseline, spacing: 0) {
                     secondaryButtons(isBare: true)
                         .frame(maxWidth: .infinity)
                 }
@@ -362,7 +364,7 @@ struct MetaDetailView: View {
                 route.autoplay = false
                 choosingSource = route
             }
-            .buttonStyle(GlassIconButtonStyle(isBare: isBare))
+            .buttonStyle(GlassIconButtonStyle(caption: "Sources", isBare: isBare))
             .help("Choose a Source")
         }
     }
@@ -426,7 +428,7 @@ private struct MyListButton: View {
             Label(title, systemImage: isSaved ? "checkmark" : "plus")
                 .contentTransition(.symbolEffect(.replace))
         }
-        .buttonStyle(GlassIconButtonStyle(isBare: isBare))
+        .buttonStyle(GlassIconButtonStyle(caption: isSaved ? "Saved" : "Watch Later", isBare: isBare))
         .help(title)
     }
 

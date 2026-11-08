@@ -302,6 +302,39 @@ struct ListsMenu: View {
     @State private var name = ""
 
     var body: some View {
+        styledMenu
+            .help("Save to a List")
+            .alert("New List", isPresented: $isNaming) {
+                TextField("Name", text: $name)
+                Button("Create") {
+                    library.toggle(title, inList: library.createList(named: name))
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("\(title.name) goes on it.")
+            }
+    }
+
+    /// A menu's glass circle centres itself on all of its label, which would put it over a
+    /// caption inside, so that caption goes below. A bare icon has no circle and keeps its
+    /// caption inside, where tapping the word opens the menu too.
+    @ViewBuilder
+    private var styledMenu: some View {
+        #if os(iOS)
+        if isBare {
+            menu.buttonStyle(GlassIconButtonStyle(caption: "Lists", isBare: true))
+        } else {
+            VStack(spacing: 6) {
+                menu.buttonStyle(GlassIconButtonStyle())
+                IconCaption(text: "Lists")
+            }
+        }
+        #else
+        menu.buttonStyle(GlassIconButtonStyle(isBare: isBare))
+        #endif
+    }
+
+    private var menu: some View {
         Menu {
             ListMembershipActions(title: title)
             Button("New List…", systemImage: "plus") {
@@ -313,17 +346,6 @@ struct ListsMenu: View {
             Label("Save to", systemImage: "rectangle.stack.badge.plus")
         }
         .menuIndicator(.hidden)
-        .buttonStyle(GlassIconButtonStyle(isBare: isBare))
-        .help("Save to a List")
-        .alert("New List", isPresented: $isNaming) {
-            TextField("Name", text: $name)
-            Button("Create") {
-                library.toggle(title, inList: library.createList(named: name))
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("\(title.name) goes on it.")
-        }
     }
 }
 

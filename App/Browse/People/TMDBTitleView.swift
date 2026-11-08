@@ -49,6 +49,7 @@ struct TMDBTitleView: View {
             }
         }
         .background(Color.canvas)
+        .hidingPhoneTabBar()
         // The resolved page names the title in its own hero, like any other details page.
         .navigationTitle(isResolved ? "" : title.name)
         .task(id: LoadKey(revision: tmdb.revision, attempt: attempt)) {

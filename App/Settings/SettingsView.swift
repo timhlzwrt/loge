@@ -1,6 +1,9 @@
 import LogeCore
 import SwiftUI
 
+/// Opens Settings from Home on iPhone, the one platform without a tab for it.
+struct SettingsRoute: Hashable {}
+
 /// A short index of settings pages, each row showing where that setting stands, so the
 /// addon form and account keys don't make one long scroll.
 struct SettingsView: View {

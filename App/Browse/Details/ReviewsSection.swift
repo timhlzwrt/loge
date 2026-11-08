@@ -172,6 +172,7 @@ private struct ReviewDetailView: View {
             .padding(Metrics.gutter)
         }
         .background(Color.canvas)
+        .hidingPhoneTabBar()
         .navigationTitle(review.author)
     }
 }
@@ -182,6 +183,7 @@ private struct ReviewListView: View {
     var body: some View {
         ScrollView { ReviewsSection(preview: preview, showsAll: true).padding(.vertical, 24) }
             .background(Color.canvas)
+            .hidingPhoneTabBar()
             .navigationTitle("Reviews")
     }
 }
