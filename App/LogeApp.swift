@@ -218,7 +218,7 @@ struct RootView: View {
             #if os(macOS)
             TabSection("Catalogs") {
                 ForEach(DiscoveryCatalogs.home) { source in
-                    Tab(source.title, systemImage: source.catalog.type == MediaType.series ? "tv" : "rectangle.portrait") {
+                    Tab(source.shortTitle, systemImage: source.catalog.type == MediaType.series ? "tv" : "rectangle.portrait") {
                         BrowseStack { CatalogGridView(source: source) }
                     }
                 }

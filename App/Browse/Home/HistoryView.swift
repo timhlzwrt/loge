@@ -89,7 +89,7 @@ struct HistoryCardLink: View {
         NavigationLink(value: MetaPreview(
             id: item.metaID, type: item.type, name: item.title, poster: item.poster, background: item.background
         )) {
-            HistoryCard(entry: entry, when: when)
+            WatchCard(entry: entry, detail: when)
         }
         #if os(tvOS)
         // Lifts just the still on focus, with the text below it, like the episode cards.
@@ -106,10 +106,12 @@ struct HistoryCardLink: View {
     }
 }
 
-/// Laid out like the episode cards on a title's page, with the show's name added.
-private struct HistoryCard: View {
+/// Something started or watched, in History and Continue Watching. Laid out like the
+/// episode cards on a title's page, with the show's name added.
+struct WatchCard: View {
     let entry: WatchProgress
-    let when: String
+    /// After the episode in the caption: when it was watched, or how much is left.
+    let detail: String
 
     var body: some View {
         let item = entry.item
@@ -121,9 +123,12 @@ private struct HistoryCard: View {
                 .clipShape(.rect(cornerRadius: Metrics.cardRadius))
                 #if os(tvOS)
                 .hoverEffect(.highlight)
-                #endif
+                // Clear of the focus lift.
+                .padding(.bottom, 18)
+                #else
                 .padding(.bottom, 9)
-            Text([item.episodeCode, when].compactMap { $0 }.joined(separator: " · "))
+                #endif
+            Text([item.episodeCode, detail].compactMap { $0 }.joined(separator: " · "))
                 .font(.episodeCaption)
                 .textCase(.uppercase)
                 .tracking(0.6)
@@ -139,6 +144,8 @@ private struct HistoryCard: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        // Otherwise cards in a row share its height, and those with less text get a larger still.
+        .fixedSize(horizontal: false, vertical: true)
         .contentShape(.rect)
         .accessibilityElement(children: .combine)
     }

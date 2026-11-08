@@ -108,6 +108,9 @@ struct TVHomeBackdrop: View {
 struct TVHomeHeader: View {
     let focus: HomeFocus
     @Environment(TMDBAccount.self) private var tmdb
+    @Environment(AddonStore.self) private var store
+    /// Library entries keep little beyond artwork; the rest is looked up when they get focus.
+    @State private var filled: [MetaPreview.ID: MetaPreview] = [:]
 
     var body: some View {
         // The clear base keeps the header's height while nothing is focused yet.
@@ -137,15 +140,25 @@ struct TVHomeHeader: View {
                     }
                 }
             } else if let title = focus.title {
-                details(title)
+                details(filled[title.id] ?? title)
             }
         }
+        .task(id: focus.title?.id) { await fillFocusedTitle() }
         .task(id: "\(tmdb.revision):\(focus.title?.id ?? "")") {
             guard tmdb.isConfigured, let title = focus.title else { return }
             do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
             // Opening the focused title reuses this response; its page owns retry/error UI.
             _ = try? await tmdb.details(imdbID: title.id, type: title.type)
         }
+    }
+
+    private func fillFocusedTitle() async {
+        guard let title = focus.title, title.logo == nil || title.description == nil, filled[title.id] == nil,
+              let client = store.addons.metaClient(type: title.type, id: title.id) else { return }
+        do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
+        // The header is a preview: without the details it shows what the entry has, and its page reports errors.
+        guard let meta = try? await client.meta(type: title.type, id: title.id), !Task.isCancelled else { return }
+        filled[title.id] = title.fillingDetails(from: meta)
     }
 
     private func details(_ focused: MetaPreview) -> some View {

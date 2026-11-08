@@ -32,6 +32,10 @@ struct InformationSection: View {
                 }
             }
             .padding(.horizontal, Metrics.gutter)
+            #if os(tvOS)
+            // Without a focus stop down here, the remote can't scroll to this section.
+            .focusable()
+            #endif
         }
     }
 

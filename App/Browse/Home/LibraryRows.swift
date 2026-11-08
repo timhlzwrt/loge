@@ -31,6 +31,10 @@ struct ContinueWatchingRow: View {
                         }
                     }
                     .padding(.horizontal, Metrics.gutter)
+                    #if os(tvOS)
+                    // Room for the focus lift, clear of the row's title.
+                    .padding(.vertical, 20)
+                    #endif
                 }
                 .scrollClipDisabled()
                 #if os(tvOS)
@@ -72,56 +76,22 @@ struct ContinueWatchingRow: View {
     }
 }
 
-/// The still with its title over it; the progress bar says how far along it is.
+/// A watch card that says how much is left.
 private struct ContinueWatchingCard: View {
     let entry: WatchProgress
-    #if os(tvOS)
-    @Environment(\.isFocused) private var isFocused
-    #endif
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Episode stills are often missing (Cinemeta links one for every episode, aired
-            // or not), so a still that fails falls back to the backdrop, then the poster.
-            Artwork(url: entry.item.thumbnail ?? entry.item.background,
-                    fallbacks: [entry.item.background, entry.item.poster].compactMap { $0 })
-                .overlay {
-                    // Keeps the title legible over bright stills.
-                    LinearGradient(colors: [.clear, .black.opacity(0.45)], startPoint: .center, endPoint: .bottom)
-                }
-                .overlay(alignment: .bottomLeading) {
-                    Text(entry.item.title)
-                        .font(.cardTitle)
-                        .lineLimit(1)
-                        .shadow(color: .black.opacity(0.6), radius: 8, y: 1)
-                        .padding(.horizontal, WatchProgressBar.inset)
-                        .padding(.bottom, WatchProgressBar.inset * 0.75 + WatchProgressBar.height + 6)
-                }
-                .overlay { WatchProgressBar(progress: entry) }
-                .frame(width: Metrics.cardWidth, height: Metrics.cardWidth * 9 / 16)
-                .clipShape(.rect(cornerRadius: Metrics.cardRadius))
-                #if os(tvOS)
-                .hoverEffect(.highlight)
-                #endif
-            #if os(tvOS)
-            // Only the focused card says how long is left; the space is kept so the row doesn't jump.
-            Text("\(minutesLeft) min left")
-                .font(.metaLine)
-                .foregroundStyle(.secondary)
-                .opacity(isFocused ? 1 : 0)
-                .padding(.top, 8)
-            #endif
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityTitle)
-        .accessibilityValue("\(minutesLeft) minutes left")
+        WatchCard(entry: entry, detail: "\(minutesLeft) min left")
+            .frame(width: Metrics.cardWidth)
+            .accessibilityLabel(accessibilityTitle)
+            .accessibilityValue("\(minutesLeft) minutes left")
     }
 
     private var minutesLeft: Int {
         max(Int((entry.duration - entry.position) / 60), 1)
     }
 
-    /// "Lanterns, S1 E2, Trust Fall": the card shows only the title, but which episode matters.
+    /// "Lanterns, S1 E2, Trust Fall".
     private var accessibilityTitle: String {
         [entry.item.title, entry.item.episodeCode, entry.item.episodeTitle].compactMap { $0 }.joined(separator: ", ")
     }
@@ -180,6 +150,13 @@ struct MyListView: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 36) {
+                        #if os(tvOS)
+                        // Lined up with the rows; the system's title is centred. The padding clears the tab menu.
+                        Text("My Lists")
+                            .font(.system(size: 57, weight: .bold))
+                            .accessibilityAddTraits(.isHeader)
+                            .padding(.top, 60)
+                        #endif
                         if !library.saved.isEmpty {
                             section(library.saved) { Text("Watch Later") }
                         }
@@ -198,7 +175,9 @@ struct MyListView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.canvas)
+        #if !os(tvOS)
         .navigationTitle("My Lists")
+        #endif
         .alert("Rename List", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("Name", text: $name)
             Button("Rename") {
@@ -234,6 +213,10 @@ struct MyListView: View {
                     }
                 }
                 .padding(.horizontal, Metrics.gutter)
+                #if os(tvOS)
+                // Room for the focus lift, clear of the section's title.
+                .padding(.top, 20)
+                #endif
             }
         }
     }

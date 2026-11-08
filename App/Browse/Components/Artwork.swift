@@ -8,10 +8,12 @@ struct Artwork: View {
     let url: String?
     /// Tried in order when `url` is missing or fails to load.
     var fallbacks: [String] = []
+    /// Which part of the image stays in frame when it's cropped.
+    var alignment: Alignment = .center
 
     var body: some View {
         Color.white.opacity(0.06)
-            .overlay {
+            .overlay(alignment: alignment) {
                 // RemoteImage reports a missing URL as a failure, so both move on to the next fallback.
                 RemoteImage(url: url) { phase in
                     switch phase {
@@ -28,7 +30,7 @@ struct Artwork: View {
     private var next: some View {
         let remaining = fallbacks.drop { $0 == url }
         if let first = remaining.first {
-            Artwork(url: first, fallbacks: Array(remaining.dropFirst()))
+            Artwork(url: first, fallbacks: Array(remaining.dropFirst()), alignment: alignment)
         }
     }
 }
