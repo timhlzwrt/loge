@@ -200,6 +200,8 @@ struct PlayerView: View {
             case .left where surfaceFocused: player?.seek(by: -10)
             case .right where surfaceFocused: player?.seek(by: 10)
             case .down where surfaceFocused && !isPanelShown: isPanelShown = true
+            // The offer sits on top of the surface, so the focus engine can't move to it by itself.
+            case .up where surfaceFocused && !isPanelShown && player?.availableSkip != nil: skipFocused = true
             default: break
             }
             showControls()

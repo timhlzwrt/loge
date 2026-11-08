@@ -80,6 +80,16 @@ struct PlaybackSyncTests {
         #expect(result.snapshot.removals["movie"] == nil)
     }
 
+    @Test func artworkFilledInOnOneDeviceSurvivesSync() {
+        let bare = entry()
+        var filled = bare
+        filled.item.poster = "https://artwork.example/poster.jpg"
+        let base = PlaybackSyncSnapshot(entries: ["movie": bare])
+        let result = PlaybackSyncSnapshot.merged(base: base, local: .init(entries: ["movie": filled]), remote: base)
+        #expect(result.conflictingIDs.isEmpty)
+        #expect(result.snapshot.entries["movie"]?.item.poster == filled.item.poster)
+    }
+
     @Test func retentionArchivesSyncedEntriesWithoutCreatingRemovalIntent() {
         let defaults = defaults()
         let store = LibraryStore(defaults: defaults)

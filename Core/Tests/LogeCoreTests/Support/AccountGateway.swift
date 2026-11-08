@@ -26,6 +26,7 @@ final class AccountGatewayProtocol: StubURLProtocol, @unchecked Sendable {
         var documents: [String: [String: Any]] = [:]
         var revision = 0
         var hooks: [String: @MainActor @Sendable () -> Void] = [:]
+        var isOffline = false
         mutating func respond(method: String, path: String, token: String?, body: [String: Any]) -> (Int, [String: Any]) {
             if path == "redeem", method == "POST", let code = body["code"] as? String,
                let invite = invites[code], invite.group == nil {
@@ -86,6 +87,10 @@ final class AccountGatewayProtocol: StubURLProtocol, @unchecked Sendable {
     static let state = Mutex(State())
     override func startLoading() {
         guard let url = request.url else { return }
+        if Self.state.withLock({ $0.isOffline }) {
+            client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
+            return
+        }
         let body = requestBody.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
         let path = String(url.path.dropFirst("/v2/".count))
         let token = request.value(forHTTPHeaderField: "Authorization").map { String($0.dropFirst("Bearer ".count)) }

@@ -98,9 +98,14 @@ public final class LibraryStore {
 
     // MARK: Progress
 
+    /// A moment of playback only counts for something already being followed.
+    public func recordsProgress(for id: String, at position: Double) -> Bool {
+        position >= Self.minimumResumePosition || progress[id] != nil || playbackArchive[id] != nil
+    }
+
     public func record(_ item: WatchItem, position: Double, duration: Double, at date: Date = .now) {
         guard duration.isFinite, duration > 0, position.isFinite, position >= 0,
-              position >= Self.minimumResumePosition || progress[item.id] != nil || playbackArchive[item.id] != nil else { return }
+              recordsProgress(for: item.id, at: position) else { return }
         setProgress(WatchProgress(item: item, position: position, duration: duration, updatedAt: date), for: item.id)
         saveProgress()
     }
@@ -110,6 +115,9 @@ public final class LibraryStore {
     public func mergeRemote(_ item: WatchItem, fraction: Double, estimatedDuration: Double, at date: Date) {
         let local = progress[item.id]
         guard local.map({ $0.updatedAt < date }) ?? true else { return }
+        // Trakt goes on listing paused progress after it's removed here; only newer playback counts.
+        let removal = [playbackRemovals[item.id], playbackTitleRemovals[item.metaID]].compactMap { $0 }.max()
+        guard removal.map({ $0 < date }) ?? true else { return }
         let knownDuration = local.flatMap { $0.isEstimated == true ? nil : $0.duration }
         let duration = knownDuration ?? estimatedDuration
         guard duration.isFinite, duration > 0, fraction.isFinite else { return }

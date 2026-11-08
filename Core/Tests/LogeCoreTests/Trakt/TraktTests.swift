@@ -119,6 +119,33 @@ struct RemoteProgressTests {
         #expect(store.progress[movie.id]?.fraction == 0)
     }
 
+    @Test func removalsKeepOlderRemoteProgressOutUntilSomethingNewer() {
+        let store = LibraryStore(defaults: defaults)
+        let episode = WatchItem(id: "tt2:1:1", type: "series", metaID: "tt2", title: "Show", season: 1, episode: 1)
+        let otherEpisode = WatchItem(id: "tt2:1:2", type: "series", metaID: "tt2", title: "Show", season: 1, episode: 2)
+        store.record(movie, position: 600, duration: 5000, at: t0)
+        store.markUnwatched([movie.id], at: t0 + 100)
+        store.record(episode, position: 600, duration: 2700, at: t0)
+        store.removeFromContinueWatching(metaID: "tt2", at: t0 + 100)
+
+        store.mergeRemote(movie, fraction: 0.5, estimatedDuration: 6000, at: t0 + 50)
+        store.mergeRemote(episode, fraction: 0.5, estimatedDuration: 2700, at: t0 + 50)
+        store.mergeRemote(otherEpisode, fraction: 0.5, estimatedDuration: 2700, at: t0 + 50)
+        #expect(store.progress.isEmpty)
+
+        store.mergeRemote(movie, fraction: 0.5, estimatedDuration: 6000, at: t0 + 200)
+        store.mergeRemote(otherEpisode, fraction: 0.5, estimatedDuration: 2700, at: t0 + 200)
+        #expect(store.progress[movie.id] != nil && store.progress[otherEpisode.id] != nil)
+    }
+
+    @Test func aMomentOfPlaybackIsWorthKeepingOnlyForWhatsAlreadyTracked() {
+        let store = LibraryStore(defaults: defaults)
+        #expect(!store.recordsProgress(for: movie.id, at: 10))
+        #expect(store.recordsProgress(for: movie.id, at: LibraryStore.minimumResumePosition))
+        store.record(movie, position: 600, duration: 5000, at: t0)
+        #expect(store.recordsProgress(for: movie.id, at: 10))
+    }
+
     @Test func keepsNewerLocalProgress() {
         let store = LibraryStore(defaults: defaults)
         store.record(movie, position: 600, duration: 5000, at: t0 + 60)
@@ -166,6 +193,38 @@ struct TraktAccountTests {
         #expect(library.progress["tt2"]?.item.title == "Remote movie")
         #expect(library.progress["tt2"]?.fraction == 0.5)
         #expect(AccountTraktProtocol.count(id, path: "/meta/movie/tt2.json") == 1)
+    }
+
+    @Test func removedTitleStaysRemovedWhileTraktKeepsItsOlderProgress() async {
+        let (account, library) = account()
+        let saved = WatchItem(id: "tt2", type: "movie", metaID: "tt2", title: "Remote movie")
+        library.record(saved, position: 600, duration: 6000, at: Date(timeIntervalSince1970: 1))
+        library.removeFromContinueWatching(metaID: "tt2", at: Date(timeIntervalSince1970: 1_793_865_600))
+        AccountTraktProtocol.configure(id, playback:
+            #"[{"progress":50,"paused_at":"2026-11-04T08:00:00.000Z","type":"movie","movie":{"ids":{"imdb":"tt2"}}}]"#)
+        await account.pullProgress()
+        #expect(library.progress["tt2"] == nil)
+    }
+
+    @Test func remoteProgressOnATitleMarkedWatchedHereStillShowsInContinueWatching() async {
+        let (account, library) = account()
+        let marked = WatchItem(id: "tt2", type: "movie", metaID: "tt2", title: "Remote movie")
+        library.markWatched([marked], at: Date(timeIntervalSince1970: 1))
+        AccountTraktProtocol.configure(id, playback:
+            #"[{"progress":50,"paused_at":"2026-11-04T08:00:00.000Z","type":"movie","movie":{"ids":{"imdb":"tt2"}}}]"#)
+        await account.pullProgress()
+        #expect(library.continueWatching.contains { $0.item.id == "tt2" })
+        #expect(library.estimatedFraction(for: "tt2") == 0.5)
+    }
+
+    @Test func aTokenTraktRejectsSignsTheDeviceOutAndKeepsTheLibrary() async {
+        var saves: [TraktToken?] = []
+        let (account, library) = account(save: { saves.append($0) })
+        AccountTraktProtocol.reject(id)
+        await account.pullProgress()
+        #expect(account.state == .signedOut)
+        #expect(saves.count == 1 && saves[0] == nil)
+        #expect(library.progress[movie.id]?.position == 600)
     }
 
     @Test func completedRemotePlayClearsContinueWatchingWithItsOriginalTimestamp() async {
@@ -312,6 +371,7 @@ private final class AccountTraktProtocol: StubURLProtocol, @unchecked Sendable {
         var history: [String: [String]] = [:]
         var holds: Set<String> = []
         var responses: [String: @Sendable () -> Void] = [:]
+        var rejected: Set<String> = []
     }
     private static let requests = Mutex(Requests())
 
@@ -324,6 +384,10 @@ private final class AccountTraktProtocol: StubURLProtocol, @unchecked Sendable {
 
     static func historyPages(_ id: String, pages: [String]) {
         requests.withLock { $0.history[id] = pages }
+    }
+
+    static func reject(_ id: String) {
+        _ = requests.withLock { $0.rejected.insert(id) }
     }
 
     static func hold(_ id: String, path: String) {
@@ -356,7 +420,8 @@ private final class AccountTraktProtocol: StubURLProtocol, @unchecked Sendable {
         let id = request.value(forHTTPHeaderField: "trakt-api-key") ?? request.value(forHTTPHeaderField: "fixture-account") ?? ""
         let histories = Self.requests.withLock { $0.history[id] ?? ["[]"] }
         let headers = url.path == "/sync/history" ? ["X-Pagination-Page-Count": String(histories.count)] : [:]
-        guard let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: headers) else { return }
+        let status = Self.requests.withLock { $0.rejected.contains(id) } ? 401 : 200
+        guard let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: headers) else { return }
         let body: String
         switch url.path {
         case "/oauth/token":

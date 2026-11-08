@@ -55,7 +55,11 @@ public struct PlaybackSyncSnapshot: Codable, Equatable, Sendable {
             let lhs = local.state(for: id, metaID: metaID, baseline: base) ?? original
             let rhs = remote.state(for: id, metaID: metaID, baseline: base) ?? original
             let selected: PlaybackSyncState?
-            if PlaybackSyncState.equivalent(lhs, original) {
+            if case .progress(let left) = lhs, case .progress(var right) = rhs, PlaybackSyncState.equivalent(lhs, rhs) {
+                // Artwork looked up on one device stays, rather than the next sync dropping it.
+                right.item = right.item.fillingArtwork(from: left.item)
+                selected = .progress(right)
+            } else if PlaybackSyncState.equivalent(lhs, original) {
                 selected = rhs
             } else if PlaybackSyncState.equivalent(rhs, original) || PlaybackSyncState.equivalent(lhs, rhs) {
                 selected = lhs

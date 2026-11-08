@@ -286,6 +286,93 @@ struct AccountSyncTests {
         try alice.disconnect(); try second.disconnect()
     }
 
+    @Test func progressSavedDuringUploadIsNotAConflict() async throws {
+        reset()
+        let (alice, _, library, _, _) = fixture()
+        await alice.connect(code: try enrollment("alice")); await alice.resolve(useLocal: true)
+        library.record(movie(), position: 100, duration: 1000)
+        await alice.sync()
+        library.record(movie(), position: 200, duration: 1000)
+        // Playback goes on saving while the previous position uploads.
+        let item = movie()
+        AccountGatewayProtocol.state.withLock { $0.hooks["PUT documents/progress"] = {
+            library.record(item, position: 300, duration: 1000)
+        } }
+        await alice.sync()
+        #expect(!alice.needsChoice && alice.conflictingProgressIDs.isEmpty)
+        #expect(library.progress["movie"]?.position == 300)
+        try alice.disconnect()
+    }
+
+    @Test func playbackHandsOffInBothDirections() async throws {
+        reset()
+        let (alice, _, libraryA, _, _) = fixture()
+        await alice.connect(code: try enrollment("alice")); await alice.resolve(useLocal: true)
+        libraryA.record(movie(), position: 100, duration: 1000)
+        await alice.sync()
+        let (second, _, libraryB, _, _) = fixture()
+        await second.connect(code: try await alice.makeDeviceCode()); await second.resolve(useLocal: false)
+        #expect(libraryB.resumePosition(for: "movie") == 95)
+        libraryB.record(movie(), position: 200, duration: 1000)
+        await second.sync(); await alice.sync()
+        #expect(libraryA.resumePosition(for: "movie") == 195)
+        libraryA.record(movie(), position: 300, duration: 1000)
+        await alice.sync(); await second.sync()
+        #expect(libraryB.resumePosition(for: "movie") == 295)
+        #expect(!alice.needsChoice && !second.needsChoice)
+        try alice.disconnect(); try second.disconnect()
+    }
+
+    @Test func offlineChangesMergeOnReconnectAndRemovalsStayRemoved() async throws {
+        reset()
+        let (alice, _, libraryA, _, _) = fixture()
+        await alice.connect(code: try enrollment("alice")); await alice.resolve(useLocal: true)
+        libraryA.record(movie("played"), position: 100, duration: 1000)
+        libraryA.record(movie("removed"), position: 100, duration: 1000)
+        libraryA.record(movie("unwatched"), position: 1000, duration: 1000)
+        await alice.sync()
+        let (second, _, libraryB, _, _) = fixture()
+        await second.connect(code: try await alice.makeDeviceCode()); await second.resolve(useLocal: false)
+
+        AccountGatewayProtocol.state.withLock { $0.isOffline = true }
+        libraryA.record(movie("played"), position: 500, duration: 1000)
+        libraryA.removeFromContinueWatching(metaID: "removed")
+        libraryA.markUnwatched(["unwatched"])
+        await alice.sync()
+        #expect(alice.status == .failed && libraryA.progress["played"]?.position == 500)
+
+        AccountGatewayProtocol.state.withLock { $0.isOffline = false }
+        libraryB.record(movie("elsewhere"), position: 700, duration: 1000)
+        await second.sync(); await alice.sync(); await second.sync()
+        #expect(alice.errorMessage == nil && !alice.needsChoice && !second.needsChoice)
+        #expect(libraryB.progress["played"]?.position == 500)
+        #expect(libraryB.progress["removed"] == nil && libraryB.progress["unwatched"] == nil)
+        #expect(libraryA.progress["elsewhere"]?.position == 700)
+        await alice.sync()
+        #expect(libraryA.progress["removed"] == nil && libraryA.progress["unwatched"] == nil)
+        try alice.disconnect(); try second.disconnect()
+    }
+
+    @Test func reconnectingAfterSignOutTakesTheAccountsRemovals() async throws {
+        reset()
+        let (alice, _, libraryA, _, _) = fixture()
+        await alice.connect(code: try enrollment("alice")); await alice.resolve(useLocal: true)
+        libraryA.record(movie("kept"), position: 100, duration: 1000)
+        libraryA.record(movie("removed"), position: 100, duration: 1000)
+        await alice.sync()
+        let (second, _, libraryB, _, _) = fixture()
+        await second.connect(code: try await alice.makeDeviceCode()); await second.resolve(useLocal: false)
+        try second.disconnect()
+        #expect(libraryB.activeProfileID == nil && libraryB.progress.isEmpty)
+
+        libraryA.removeFromContinueWatching(metaID: "removed")
+        await alice.sync()
+        await second.connect(code: try await alice.makeDeviceCode()); await second.resolve(useLocal: false)
+        #expect(!second.needsChoice && libraryB.progress["kept"]?.position == 100)
+        #expect(libraryB.progress["removed"] == nil)
+        try alice.disconnect(); try second.disconnect()
+    }
+
     @Test func writeAfterAnotherDeviceSavedIsRetriedAgainstTheNewRevision() async throws {
         reset()
         let (alice, _, library, _, _) = fixture()

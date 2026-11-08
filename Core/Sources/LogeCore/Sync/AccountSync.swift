@@ -361,14 +361,18 @@ public final class AccountSync {
                 base = base.replacing(baselines.pendingProgressIDs, from: original, references: [local, remote])
             }
             // Independent titles keep syncing while ambiguous episodes wait for a choice.
-            let result = PlaybackSyncSnapshot.merged(base: base, local: local, remote: remote).resolving(useLocal: false)
+            let merge = PlaybackSyncSnapshot.merged(base: base, local: local, remote: remote)
+            let result = merge.resolving(useLocal: false)
             var revision = document?.revision
             if result != remote || document == nil {
                 revision = try await client.put(cipher.seal(result), resource: Self.progressPath, revision: document?.revision)
                 try ensureCurrent(id)
             }
             let current = library.playbackSyncSnapshot
-            let localResult = PlaybackSyncSnapshot.merged(base: base, local: current, remote: result)
+            // Against what was just uploaded, so progress saved meanwhile isn't taken for another
+            // device's. Conflicts stay against the older base, or choosing here would settle them.
+            let uploaded = local.replacing(merge.conflictingIDs, from: base, references: [remote])
+            let localResult = PlaybackSyncSnapshot.merged(base: uploaded, local: current, remote: result)
             try library.applyPlaybackSyncSnapshot(localResult.snapshot)
             baselines.progress = result
             if localResult.conflictingIDs.isEmpty {

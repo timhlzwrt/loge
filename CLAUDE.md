@@ -185,7 +185,9 @@ Todo added 4 November 2026 (implementation status updated below):
   identify what currently syncs, and propose any expansion of scope before building.
   Cover newer local versus remote progress, offline changes, reconnect and sign-out;
   confirm handoff in both directions between devices with the same Trakt account.
-- [ ] Fix black video after turning the screen off and back on during playback.
+  (8 November: reviewed and bugs fixed, see below; proposed expansions await a decision.)
+- [x] Fix black video after turning the screen off and back on during playback.
+  (8 November: no failure reproduces in simulators; real screen-off stays a named limit.)
   Reproduce lock/unlock and background/foreground transitions with the existing
   playback fixture; verify visible video returns, the timeline advances, controls
   work and audio stays in sync. Confirm actual screen-off recovery on hardware.
@@ -334,6 +336,17 @@ from the iPhone tab bar change, happens only if the keyboard was up when the res
 and clearing `searchFocused` on leaving doesn't stop it. Retry on Sources passed on iPhone.
 Play and Resume no longer open a saved stream URL: they wait for the fresh list and play the same
 file or release from it, or stay on the list. ElfHosted refused an old link with its own error.
+
+8 November, player, sync and tests: on tvOS, up moves focus to a skip offer (it sits on the
+surface, so the focus engine can't reach it) and focus shows on unselected tracks. Up Next on
+tvOS is likely unreachable the same way; not fixed, part of the player proposal. Sync fixes:
+removed titles stay removed while Trakt lists older paused progress (`mergeRemote` checks
+removal dates); progress saved during an upload isn't a conflict; artwork filled on one device
+survives merging; a marked-watched placeholder duration of 1 isn't used for Trakt progress; a
+token Trakt rejects (401) signs out; pause and stop aren't scrobbled below `recordsProgress`.
+Background recovery now checks the picture's pixels; a negative control showed the older test
+couldn't see a black picture. iPhone simulators lack Picture in Picture, so iPad exercises the
+path that keeps playing.
 
 Verification for these tasks: reuse `LibraryStoreTests`, `TraktTests`,
 `UITests/FlowTests.swift`, `UITests/PlaybackRegressionTests.swift`,

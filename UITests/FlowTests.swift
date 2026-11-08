@@ -265,7 +265,10 @@ final class FlowTests: XCTestCase {
 
     @MainActor
     func testClosingAutoplayReturnsToDetails() {
-        openSeries("Lanterns")
+        // Play starts by itself only with a source remembered from an earlier play.
+        startPlayback()
+        if !app.buttons["Close"].exists { app.tap() }
+        app.buttons["Close"].tap()
         let play = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Play' OR label BEGINSWITH 'Resume'")).firstMatch
         XCTAssertTrue(play.waitForExistence(timeout: 15))
         play.tap()
@@ -364,8 +367,8 @@ final class FlowTests: XCTestCase {
     /// Waits for the window to take the shape the device turned to.
     @MainActor
     private func waitForWindow(landscape: Bool, timeout: TimeInterval = 5) -> Bool {
-        let window = app.windows.firstMatch
-        let turned = NSPredicate { _, _ in (window.frame.width > window.frame.height) == landscape }
+        // The application's frame: on iPad, windows.firstMatch reports an empty one.
+        let turned = NSPredicate { [app] _, _ in (app!.frame.width > app!.frame.height) == landscape }
         return XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: turned, object: nil)], timeout: timeout) == .completed
     }
 
@@ -416,8 +419,7 @@ final class FlowTests: XCTestCase {
         screenshot("rotated-while-paused")
         if !app.buttons["Close"].exists { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap() }
         app.buttons["Close"].tap()
-        let browsing = app.windows.firstMatch.frame
-        XCTAssertGreaterThan(browsing.height, browsing.width, "Browsing didn't turn back upright")
+        XCTAssertGreaterThan(app.frame.height, app.frame.width, "Browsing didn't turn back upright")
     }
 
     /// The player's button hands the video to the floating window and closes the player

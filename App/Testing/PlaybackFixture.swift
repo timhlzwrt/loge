@@ -20,7 +20,8 @@ struct PlaybackFixtureView: View {
             if let url {
                 Button("Play fixture") {
                     session.start(PlaybackRequest(title: "Playback fixture", url: url, item: item,
-                        startAt: item.flatMap { library.resumePosition(for: $0.id) }))
+                        startAt: item.flatMap { library.resumePosition(for: $0.id) },
+                        subtitles: [Subtitle(url: url.deletingLastPathComponent().appending(path: "subs/stream-en.srt").absoluteString, lang: "eng")]))
                 }
                 if let item {
                     Button("Play remote fixture") {
@@ -76,6 +77,12 @@ struct PlaybackFixtureDiagnostics: View {
                 .accessibilityIdentifier("fixture-expected-audio")
                 .accessibilityValue(UserDefaults.standard.string(forKey: PlaybackPreferences.audioKey)
                                     ?? PlaybackPreferences.defaultAudioLanguage)
+            Text("Test subtitle")
+                .accessibilityIdentifier("fixture-subtitle")
+                .accessibilityValue(player.tracks.first { $0.kind == .sub && $0.isSelected }?.language ?? "off")
+            Text("Test A/V offset")
+                .accessibilityIdentifier("fixture-av-sync")
+                .accessibilityValue(player.playbackInfo.avSync.map { String(abs($0)) } ?? "unknown")
             Text("Test source")
                 .accessibilityIdentifier("fixture-source")
                 .accessibilityValue(session.current?.url.query() ?? "original")
@@ -83,17 +90,28 @@ struct PlaybackFixtureDiagnostics: View {
                 Text("Saved fixture position")
                     .accessibilityIdentifier("fixture-saved-position")
                     .accessibilityValue(String(Int(library.progress[item.id]?.position ?? 0)))
+                #if !os(tvOS)
                 Button("Seek fixture to 35 seconds") { player.seek(to: 35) }
+                #endif
             }
+            // On tvOS these would take focus from the player being checked.
+            #if !os(tvOS)
             Button("Replace fixture source") {
                 guard var request = session.current else { return }
                 request.url.append(queryItems: [.init(name: "source", value: "second")])
                 session.start(request)
             }
+            #endif
         }
         .font(.caption)
         .padding(12)
         .background(.black)
+        .task {
+            while !Task.isCancelled {
+                player.refreshPlaybackInfo()
+                do { try await Task.sleep(for: .seconds(1)) } catch { return }
+            }
+        }
     }
 }
 #endif

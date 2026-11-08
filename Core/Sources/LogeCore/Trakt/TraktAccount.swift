@@ -154,6 +154,7 @@ public final class TraktAccount {
             return
         } catch {
             log.error("Couldn't load playback progress: \(error)")
+            signOutIfRejected(error, connectionID: connectionID)
             return
         }
         guard !isPaused, self.connectionID == connectionID, !Task.isCancelled else { return }
@@ -172,8 +173,9 @@ public final class TraktAccount {
             if let saved = library.progress.values.first(where: {
                 $0.item.metaID == entry.imdbID && $0.item.season == entry.season && $0.item.episode == entry.episode
             }) {
+                // Marking something watched without playing it stores a placeholder duration of 1.
                 library.mergeRemote(saved.item, fraction: entry.progress / 100,
-                                    estimatedDuration: saved.duration > 0 ? saved.duration : (type == MediaType.movie ? 6_600 : 2_700),
+                                    estimatedDuration: saved.duration > 1 ? saved.duration : (type == MediaType.movie ? 6_600 : 2_700),
                                     at: entry.pausedAt)
                 continue
             }
@@ -209,8 +211,15 @@ public final class TraktAccount {
                 return
             } catch {
                 log.error("Couldn't send \(what, privacy: .public) to Trakt: \(error)")
+                signOutIfRejected(error, connectionID: connectionID)
             }
         }
+    }
+
+    /// A token revoked on Trakt's site never comes up for refresh, so without this the device
+    /// would go on showing as signed in while nothing syncs.
+    private func signOutIfRejected(_ error: Error, connectionID: UUID) {
+        if error as? TraktError == .httpStatus(401), self.connectionID == connectionID { signOut() }
     }
 
     private func checkConnection(_ id: UUID) throws {

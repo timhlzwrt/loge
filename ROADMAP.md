@@ -4,7 +4,7 @@
 
 **Status: pre-1.0.** This is a small, actively developed client. The priorities
 are reliable playback and clear cross-device behavior—not a list of promised
-release dates. This roadmap reflects the source as of **7 November 2026**.
+release dates. This roadmap reflects the source as of **8 November 2026**.
 
 ## Shipped
 
@@ -46,15 +46,15 @@ alone doesn't verify playback or Picture in Picture at runtime.
 
 ## Next: verification first
 
-- [ ] Extend the existing local playback fixture for pause, relaunch, resume,
+- [x] Extend the existing local playback fixture for pause, relaunch, resume,
   source replacement, subtitle/audio changes and background/foreground recovery.
   Exercise Picture in Picture only where the simulator supports it; record
   unsupported cases as skipped, not passed.
-- [ ] Test independent account stores for offline changes, reconnect, conflicting
+- [x] Test independent account stores for offline changes, reconnect, conflicting
   progress, explicit removals and sign-out. Exercise account connection and sharing
   UI in simulators. Use controlled fixtures for Trakt responses; no physical
   phone-to-TV handoff or live-provider check is a release prerequisite.
-- [ ] Cover fresh installs, browse-to-play and returning from playback on iPhone
+- [x] Cover fresh installs, browse-to-play and returning from playback on iPhone
   and iPad, including landscape. Use the existing tvOS remote driver for button-based
   focus/navigation checks, retaining screenshots. Don't treat those checks as
   physical swipe or frame-pacing measurements.
@@ -63,7 +63,8 @@ alone doesn't verify playback or Picture in Picture at runtime.
   available, and report exactly which runtimes ran. A deployment target or successful
   compilation isn't proof of runtime compatibility.
 - [ ] Check packaged Release builds and update feeds advertise the same minimums
-  as the app and LogeCore.
+  as the app and LogeCore. The source (`project.yml`, `Package.swift`, the SideStore
+  feed) is covered by a Core test; a built release's plists and Sparkle feed aren't.
 
 Reuse `UITests/PlaybackRegressionTests.swift`, `UITests/FlowTests.swift`,
 `UITests/DiscoveryTVTests.swift`, `UITests/RemoteDriverTests.swift` and the Core test

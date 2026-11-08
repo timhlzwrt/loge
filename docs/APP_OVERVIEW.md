@@ -182,8 +182,13 @@ request. Keep fixture requests separate from private stream-addon credentials.
 `PlaybackRegressionTests.swift` uses the existing local multi-audio fixture
 (`TEST_RUNNER_PLAYBACK_FIXTURE_URL=http://127.0.0.1:8766/tracks.mov`). It covers
 episode progress across pause/relaunch, remote percentage-to-duration correction,
-source replacement, and video recovery after backgrounding. Actual screen-lock recovery
-is outside simulator verification and isn't a planned hardware-testing task.
+source replacement, audio and subtitle changes, and recovery after backgrounding and
+the simulator's lock button: picture (checked in the screenshot's pixels), timeline,
+controls and mpv's A/V offset. Run it on an iPad too: iPhone simulators have no Picture
+in Picture, so they take the path that pauses, while real iPhones and iPads keep playing.
+Actual screen-lock recovery is outside simulator verification and isn't a planned
+hardware-testing task. `DiscoveryTVTests.testPlayerRemoteReachesSkipPanelAndClose` uses
+the same fixture for the remote's path through the player on tvOS.
 `DiscoveryTVTests.testLibraryFocusMovesBetweenRows`
 and the remote driver's `TEST_RUNNER_DISCOVERY_SCREEN=library` use an isolated
 library fixture for navigation checks without changing the user's saved titles.
