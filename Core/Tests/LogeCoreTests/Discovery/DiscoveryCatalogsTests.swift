@@ -14,6 +14,27 @@ struct DiscoveryCatalogsTests {
         #expect(shelves.first?.title == "Popular Movies")
     }
 
+    @Test func shortTitlesFitTheMacSidebarAndStayDistinct() {
+        let titles = DiscoveryCatalogs.home.map(\.shortTitle)
+        #expect(Set(titles).count == titles.count)
+        #expect(titles.allSatisfy { $0.count <= 12 })
+        #expect(DiscoveryCatalogs.home.first?.title == "Popular Movies")
+        #expect(titles.first == "Movies")
+    }
+
+    @Test func detailsFillOnlyWhatAPreviewLacks() {
+        let preview = MetaPreview(id: "tt1", type: "movie", name: "Film", logo: "https://img/own", runtime: "90 min")
+        let meta = Meta(id: "tt1", type: "movie", name: "Film", logo: "https://img/meta", description: "Plot",
+                        releaseInfo: "2024", runtime: "95 min", genres: ["Drama"], imdbRating: "7.5")
+        let filled = preview.fillingDetails(from: meta)
+        #expect(filled.logo == "https://img/own")
+        #expect(filled.runtime == "90 min")
+        #expect(filled.description == "Plot")
+        #expect(filled.releaseInfo == "2024")
+        #expect(filled.genres == ["Drama"])
+        #expect(filled.imdbRating == "7.5")
+    }
+
     @Test func featuredAlternatesTypesAndSkipsWeakOrBackdropFreeTitles() {
         func meta(_ id: String, _ type: String, rating: String? = nil, background: Bool = true) -> MetaPreview {
             MetaPreview(id: id, type: type, name: id, background: background ? "https://example.com/\(id)" : nil, imdbRating: rating)

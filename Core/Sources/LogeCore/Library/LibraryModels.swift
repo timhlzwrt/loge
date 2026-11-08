@@ -112,6 +112,17 @@ extension MetaPreview {
         preview.logo = logo ?? meta.logo
         return preview
     }
+
+    /// Everything a title's summary shows, for entries that were saved with little of it.
+    public func fillingDetails(from meta: Meta) -> MetaPreview {
+        var preview = fillingArtwork(from: meta)
+        preview.description = description ?? meta.description
+        preview.releaseInfo = releaseInfo ?? meta.releaseInfo
+        preview.runtime = runtime ?? meta.runtime
+        preview.genres = genres ?? meta.genres
+        preview.imdbRating = imdbRating ?? meta.imdbRating
+        return preview
+    }
 }
 
 extension WatchItem {

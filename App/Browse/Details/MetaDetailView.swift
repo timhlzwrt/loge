@@ -104,6 +104,8 @@ struct MetaDetailView: View {
         #if os(iOS)
         .toolbarBackground(.hidden, for: .navigationBar)
         #elseif os(macOS)
+        // Otherwise the window title falls back to the app's name.
+        .navigationTitle(preview.name)
         // The backdrop runs up under the toolbar, which keeps only the back button.
         .ignoresSafeArea(edges: .top)
         #endif

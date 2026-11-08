@@ -146,7 +146,10 @@ struct TitleLogo: View {
         RemoteImage(url: logo) { phase in
             switch phase {
             case .success(let image):
-                Image(image, scale: 1, label: Text(name)).resizable().scaledToFit()
+                Image(image, scale: 1, label: Text(name))
+                    .renderingMode(LogoTone.isDark(image, url: logo) ? .template : .original)
+                    .resizable().scaledToFit()
+                    .foregroundStyle(.white)
                     .frame(maxHeight: maxHeight)
             case .failure:
                 nameText
@@ -163,6 +166,45 @@ struct TitleLogo: View {
             .font(.largeTitle.bold())
             .lineLimit(2)
             .minimumScaleFactor(0.6)
+    }
+}
+
+/// Tells apart logos with dark lettering, made for light backgrounds, which vanish on the
+/// dark canvas and are drawn in white instead. Opaque images have no shape to recolour.
+@MainActor
+private enum LogoTone {
+    private static var results: [String: Bool] = [:]
+
+    /// Measured once per logo, as a title's logo redraws with every focus move on tvOS.
+    static func isDark(_ image: CGImage, url: String?) -> Bool {
+        if let url, let known = results[url] { return known }
+        let dark = measure(image)
+        if let url { results[url] = dark }
+        return dark
+    }
+
+    private static func measure(_ image: CGImage) -> Bool {
+        let side = 24
+        var pixels = [UInt8](repeating: 0, count: side * side * 4)
+        let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(
+                data: buffer.baseAddress, width: side, height: side, bitsPerComponent: 8, bytesPerRow: side * 4,
+                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ) else { return false }
+            context.draw(image, in: CGRect(x: 0, y: 0, width: side, height: side))
+            return true
+        }
+        guard drawn else { return false }
+        var solid = 0
+        var luminance = 0.0
+        for offset in stride(from: 0, to: pixels.count, by: 4) where pixels[offset + 3] > 128 {
+            let alpha = Double(pixels[offset + 3])
+            solid += 1
+            luminance += (0.2126 * Double(pixels[offset]) + 0.7152 * Double(pixels[offset + 1])
+                + 0.0722 * Double(pixels[offset + 2])) / alpha
+        }
+        guard solid > 0, solid < side * side * 85 / 100 else { return false }
+        return luminance / Double(solid) < 0.25
     }
 }
 

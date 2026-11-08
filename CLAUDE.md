@@ -295,6 +295,11 @@ for More Like This (tiles open through `TMDBTitleView`); `Recommendations` (Core
 suggestions for up to 8 watched and 4 Watch Later titles on the device for Home's Recommended
 row, leaving out anything watched, started, saved or listed. Both hide without a TMDB token.
 `--discovery-ui-test` with `-DISCOVERY_SCREEN recommended|details` shows them offline.
+8 November, UI fixes: Continue Watching and History share `WatchCard` (caption, title, episode
+always visible, including on tvOS). Logos with dark lettering draw white (`LogoTone`); the wide
+Home hero keeps the top of its image; the Mac sidebar uses `CatalogSource.shortTitle` and details
+name themselves in the toolbar; tvOS can reach Information without TMDB, its Home header looks up
+what library entries lack, and My Lists has a left-aligned title; Up Next clears the iOS timeline.
 
 Verification for these tasks: reuse `LibraryStoreTests`, `TraktTests`,
 `UITests/FlowTests.swift`, `UITests/PlaybackRegressionTests.swift`,

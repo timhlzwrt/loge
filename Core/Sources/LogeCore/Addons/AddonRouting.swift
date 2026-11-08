@@ -9,6 +9,8 @@ public struct CatalogSource: Sendable, Hashable, Identifiable {
     /// For addons that draw ratings onto their posters, which don't fit the app's
     /// plain artwork: their IMDb titles show Cinemeta's artwork instead.
     var usesCinemetaArtwork = false
+    /// For a narrow column, where `title` would be cut off.
+    var compactTitle: String?
 
     public init(manifestURL: String, catalog: AddonManifest.Catalog, title: String? = nil, genre: String? = nil) {
         self.manifestURL = manifestURL
@@ -26,6 +28,8 @@ public struct CatalogSource: Sendable, Hashable, Identifiable {
     public var title: String {
         displayTitle ?? [catalog.name ?? catalog.id, Self.typeLabel(catalog.type)].joined(separator: " ")
     }
+
+    public var shortTitle: String { compactTitle ?? title }
 
     /// A search in a genre, or by a source fixed to one, returns only titles in that genre.
     /// - Parameter skip: How many items to skip, for loading further pages.

@@ -82,8 +82,8 @@ struct NextEpisodeOverlay: View {
             .padding(10)
             .glassEffect(in: .rect(cornerRadius: Self.radius))
             .padding(24)
-            // Clears the timeline at the bottom of the controls.
-            .padding(.bottom, 70)
+            // Clears the timeline at the bottom of the controls, with the menu row under it on iOS.
+            .padding(.bottom, Self.controlsClearance)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
             .task(id: hasEnded) {
                 guard hasEnded else { return }
@@ -107,9 +107,15 @@ struct NextEpisodeOverlay: View {
     private static let stillWidth: CGFloat = 240
     private static let textWidth: CGFloat = 420
     private static let radius: CGFloat = 30
+    private static let controlsClearance: CGFloat = 70
     #else
     private static let stillWidth: CGFloat = 128
     private static let textWidth: CGFloat = 200
     private static let radius: CGFloat = 18
+    #if os(iOS)
+    private static let controlsClearance: CGFloat = 96
+    #else
+    private static let controlsClearance: CGFloat = 70
+    #endif
     #endif
 }

@@ -135,7 +135,8 @@ struct FeaturedPage: View {
     var body: some View {
         ZStack(alignment: isCentred ? .bottom : .bottomLeading) {
             NavigationLink(value: meta) {
-                Artwork(url: meta.featuredBackground)
+                // On wide windows the crop takes the top and bottom; faces sit in the upper part.
+                Artwork(url: meta.featuredBackground, alignment: isCentred ? .center : .top)
                     .overlay { scrims }
                     .contentShape(.rect)
             }
