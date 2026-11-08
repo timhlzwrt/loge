@@ -764,13 +764,13 @@ final class FlowTests: XCTestCase {
     @MainActor
     func testTraktSettings() {
         openTab("Settings")
+        let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Trakt'")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "No Trakt row in Settings")
+        row.tap()
         let keys = app.textFields["Client ID"]
         let signedIn = app.staticTexts["Signed in as"]
         let signIn = app.buttons["Sign In"]
-        for _ in 0..<4 where !(keys.exists || signedIn.exists || signIn.exists) {
-            app.swipeUp()
-        }
-        XCTAssertTrue(keys.exists || signedIn.exists || signIn.exists, "No Trakt section")
+        XCTAssertTrue(keys.waitForExistence(timeout: 5) || signedIn.exists || signIn.exists, "No Trakt section")
         screenshot("settings-trakt")
     }
 

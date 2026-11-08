@@ -77,13 +77,9 @@ struct SourcesView: View {
         .navigationTitle(route.title)
         #endif
         .task {
-            playRememberedSourceIfPossible()
             await load(providers)
             // Leaving Sources cancels loading even when a shared prefetched request finishes later.
             guard !Task.isCancelled else { return }
-            if playedAutomatically, let current = playback.current, current.item?.id == route.id {
-                playback.offerFallbacks(fallbacks(for: current), for: current)
-            }
             playContinuingSourceIfPossible()
             // Either way the attempt is over; without a match the list is the way forward.
             hasAutoplayed = true
@@ -426,24 +422,8 @@ struct SourcesView: View {
         }
     }
 
-    /// Resuming the item last played: its stream URL is already known.
-    private func playRememberedSourceIfPossible() {
-        // Limited series need fresh metadata because remembered URLs don't retain file sizes.
-        guard maximumBitrate == 0,
-              route.type != MediaType.series || PlaybackPreferences.maximumAutomaticFileSize == 0,
-              route.autoplay, !hasAutoplayed, let remembered = library.sources[route.item.metaID],
-              remembered.itemID == route.id
-        else { return }
-        hasAutoplayed = true
-        playedAutomatically = true
-        playback.start(PlaybackRequest(
-            title: route.title, url: remembered.url, headers: remembered.headers, item: route.item,
-            startAt: library.resumePosition(for: route.id),
-            providerURL: remembered.providerURL, bingeGroup: remembered.bingeGroup
-        ))
-    }
-
-    /// Another episode of a series: the same addon's stream in the same binge group.
+    /// The remembered source as the addon lists it now: the same file or the same release.
+    /// Never its saved URL, since a stream host can refuse an old link.
     private func playContinuingSourceIfPossible() {
         guard route.autoplay, !hasAutoplayed, let remembered = library.sources[route.item.metaID],
               case .success(let streams) = results[remembered.providerURL],

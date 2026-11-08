@@ -90,13 +90,17 @@ struct ReviewsSection: View {
             .focusSection()
             #endif
             .task(id: requestKey) {
-                activeRequestKey = requestKey
-                reviews = []
-                nextPage = 1
-                totalPages = 1
-                failure = nil
-                loading = false
-                if tmdb.isConfigured { await loadPage() }
+                // This also runs on returning from a pushed page. Starting over then would remove
+                // the link that was opened, and focus would fall back to Play on tvOS.
+                if requestKey != activeRequestKey {
+                    activeRequestKey = requestKey
+                    reviews = []
+                    nextPage = 1
+                    totalPages = 1
+                    failure = nil
+                    loading = false
+                }
+                if tmdb.isConfigured && reviews.isEmpty && nextPage == 1 { await loadPage() }
             }
         }
     }

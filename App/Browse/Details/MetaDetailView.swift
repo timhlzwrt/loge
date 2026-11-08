@@ -533,7 +533,9 @@ private final class HeroScroll {
         @ViewBuilder let content: Content
 
         var body: some View {
-            content.opacity(1 - scroll.progress)
+            // Flattened first: faded layer by layer, the image shows through the opaque foot of
+            // its bottom fade, and the frame's edge appears as a hard line.
+            content.compositingGroup().opacity(1 - scroll.progress)
         }
     }
 }
