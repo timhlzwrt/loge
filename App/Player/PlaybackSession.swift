@@ -320,6 +320,9 @@ final class PlaybackSession {
     private func scrobble(_ action: TraktClient.ScrobbleAction) {
         guard estimatedResumeFraction == nil, let item = current?.item,
               let player, let duration = player.duration, duration > 0 else { return }
+        // Sampling a source isn't saved here; reported, its few seconds would replace another
+        // device's real position.
+        guard action == .start || library.recordsProgress(for: item.id, at: player.position) else { return }
         trakt.scrobble(action, item, progress: player.position / duration * 100)
     }
 

@@ -126,6 +126,14 @@ extension MetaPreview {
 }
 
 extension WatchItem {
+    func fillingArtwork(from other: WatchItem) -> WatchItem {
+        var item = self
+        item.poster = poster ?? other.poster
+        item.background = background ?? other.background
+        item.thumbnail = thumbnail ?? other.thumbnail
+        return item
+    }
+
     func fillingArtwork(from meta: Meta) -> WatchItem {
         var item = self
         item.poster = poster ?? meta.poster
