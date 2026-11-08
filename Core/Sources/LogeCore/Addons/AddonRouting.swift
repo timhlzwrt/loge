@@ -52,6 +52,19 @@ public struct CatalogSource: Sendable, Hashable, Identifiable {
         return try await Self.narrow(results, to: scope) { try await client.meta(type: $0.type, id: $0.id) }
     }
 
+    /// This row's titles as they appear on a page of `rows`, with a lead that differs from the
+    /// rows above it. Only rows from the same addon count: waiting on another service would
+    /// leave this row blank for as long as that one takes to answer or time out.
+    public func items(varyingFrom rows: [CatalogSource]) async throws -> [MetaPreview] {
+        var lists: [[MetaPreview]] = []
+        for above in rows.prefix(while: { $0 != self }) where above.manifestURL == manifestURL {
+            // A row that fails shows its own error, and has no lead to differ from.
+            lists.append((try? await above.items()) ?? [])
+        }
+        lists.append(try await items())
+        return DiscoveryCatalogs.varyingLeads(lists).last ?? []
+    }
+
     static func typeLabel(_ type: String) -> String {
         switch type {
         case MediaType.movie: "Movies"

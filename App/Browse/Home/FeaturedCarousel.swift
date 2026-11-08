@@ -37,9 +37,11 @@ struct FeaturedCarousel: View {
         .frame(height: height)
         // Landscape safe areas must not expose the neighboring page's content.
         .clipped()
-        .overlay(alignment: .bottom) {
+        .overlay(alignment: isCentred ? .bottom : .bottomLeading) {
             if items.count > 1 {
-                pageDots.padding(.bottom, 16)
+                pageDots
+                    .padding(.leading, isCentred ? 0 : Metrics.gutter - dotInset)
+                    .padding(.bottom, 16 - dotInset)
             }
         }
         .task {
@@ -73,7 +75,7 @@ struct FeaturedCarousel: View {
     private func prefetchPages(after id: MetaPreview.ID?) {
         let index = items.firstIndex { $0.id == id } ?? 0
         let upcoming = items.dropFirst(index + 1).prefix(2)
-        prefetch(upcoming.flatMap { [$0.featuredBackground, $0.logo] })
+        prefetch(upcoming.flatMap { [isCentred ? $0.featuredPoster : $0.featuredBackground, $0.logo] })
     }
 
     private var pageDots: some View {
@@ -106,6 +108,13 @@ struct FeaturedCarousel: View {
         #endif
     }
 
+    /// The Mac's dots are buttons with room around them; the dot itself lines up with the text.
+    #if os(macOS)
+    private let dotInset: CGFloat = 6
+    #else
+    private let dotInset: CGFloat = 0
+    #endif
+
     #if os(iOS)
     /// Centred on a portrait phone; left-aligned where there's width to spare.
     private var isCentred: Bool { horizontalSizeClass == .compact && verticalSizeClass != .compact }
@@ -135,8 +144,7 @@ struct FeaturedPage: View {
     var body: some View {
         ZStack(alignment: isCentred ? .bottom : .bottomLeading) {
             NavigationLink(value: meta) {
-                // On wide windows the crop takes the top and bottom; faces sit in the upper part.
-                Artwork(url: meta.featuredBackground, alignment: isCentred ? .center : .top)
+                artwork
                     .overlay { scrims }
                     .contentShape(.rect)
             }
@@ -168,10 +176,21 @@ struct FeaturedPage: View {
                     .padding(.top, 4)
             }
             .padding(.horizontal, Metrics.gutter)
-            .padding(.bottom, bottomInset + (isCentred ? 0 : 60))
+            .padding(.bottom, bottomInset)
         }
         .navigationDestination(item: $playing) { SourcesView(route: $0) }
         .navigationDestination(item: $opening) { MetaDetailView(preview: $0) }
+    }
+
+    /// A backdrop cropped to a phone's portrait hero can lose its subject, so that takes the
+    /// poster. On wide windows the crop takes the top and bottom; faces sit in the upper part.
+    @ViewBuilder
+    private var artwork: some View {
+        if isCentred {
+            Artwork(url: meta.featuredPoster, fallbacks: [meta.poster, meta.featuredBackground].compactMap { $0 }, alignment: .top)
+        } else {
+            Artwork(url: meta.featuredBackground, alignment: .top)
+        }
     }
 
     private var scrims: some View {

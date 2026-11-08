@@ -41,11 +41,11 @@ struct TVHome: View {
                             MyListRow(onFocus: focus.show)
                             RecommendedRow(onFocus: focus.show)
                             ForEach(sources.prefix(3)) { source in
-                                CatalogRow(source: source, isPrimary: source == sources.first, onFocus: focus.show)
+                                CatalogRow(source: source, page: sources, isPrimary: source == sources.first, onFocus: focus.show)
                             }
                             GenreRow()
                             ForEach(sources.dropFirst(3)) { source in
-                                CatalogRow(source: source, onFocus: focus.show)
+                                CatalogRow(source: source, page: sources, onFocus: focus.show)
                             }
                             DiscoveryCollectionRow(title: "Film Festivals", collections: FilmCollection.festivals) {
                                 focus.director = nil

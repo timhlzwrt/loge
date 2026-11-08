@@ -17,9 +17,9 @@ struct HomeView: View {
                 MyListRow()
                 RecommendedRow()
                 // Genres follow the popular shelves, ahead of the narrower ones.
-                ForEach(sources.prefix(3)) { CatalogRow(source: $0) }
+                ForEach(sources.prefix(3)) { CatalogRow(source: $0, page: sources) }
                 GenreRow()
-                ForEach(sources.dropFirst(3)) { CatalogRow(source: $0) }
+                ForEach(sources.dropFirst(3)) { CatalogRow(source: $0, page: sources) }
                 DiscoveryCollectionRow(title: "Film Festivals", collections: FilmCollection.festivals)
                 PopularDirectorsRow()
             }
