@@ -55,6 +55,37 @@ struct DiscoveryCatalogsTests {
         #expect(other.featuredBackground == other.background)
     }
 
+    @Test func featuredPosterUsesTheLargeCinemetaImage() {
+        let cinemeta = MetaPreview(id: "tt1", type: "movie", name: "A", poster: "https://images.metahub.space/poster/small/tt1/img")
+        #expect(cinemeta.featuredPoster == "https://images.metahub.space/poster/large/tt1/img")
+        let other = MetaPreview(id: "tt1", type: "movie", name: "A", poster: "https://image.tmdb.org/t/p/w500/x.jpg")
+        #expect(other.featuredPoster == other.poster)
+    }
+
+    @Test func laterRowsLeadWithTitlesTheRowsAboveDoNotShow() {
+        func row(_ ids: String...) -> [MetaPreview] {
+            ids.map { MetaPreview(id: $0, type: "series", name: $0) }
+        }
+        let rows = DiscoveryCatalogs.varyingLeads([
+            row("a", "b", "c", "d"),
+            row("a", "b", "e", "f", "g"),
+            // Compares with the second row as reordered: e and f lead it, so they move here too.
+            row("e", "f", "b", "h"),
+            // Has nothing new, and keeps its titles rather than coming up short.
+            row("a", "e"),
+        ], leadCount: 2).map { $0.map(\.id) }
+        #expect(rows[0] == ["a", "b", "c", "d"])
+        #expect(rows[1] == ["e", "f", "a", "b", "g"])
+        #expect(rows[2] == ["h", "e", "f", "b"])
+        #expect(rows[3] == ["a", "e"])
+    }
+
+    @Test func everyGenreSearchListsHasATile() {
+        for genre in DiscoveryCatalogs.search.genres {
+            #expect(DiscoveryCatalogs.genre(named: genre) != nil, "\(genre)")
+        }
+    }
+
     @Test func letterboxdTitlesGetPlainCinemetaArtwork() throws {
         let response = try JSONDecoder().decode(CatalogResponse.self, from: Data("""
         {"metas": [

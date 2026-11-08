@@ -28,8 +28,10 @@ struct GenreRow: View {
     }
 }
 
-private struct GenreTile: View {
+struct GenreTile: View {
     let genre: DiscoveryCatalogs.Genre
+    /// Nil fills the width offered, as in a grid, keeping the 16:9 shape.
+    var width: CGFloat? = Metrics.posterWidth * 1.6
 
     var body: some View {
         Artwork(url: genre.still)
@@ -46,13 +48,12 @@ private struct GenreTile: View {
                     .shadow(color: .black.opacity(0.6), radius: 8, y: 1)
                     .padding(WatchProgressBar.inset)
             }
-            .frame(width: width, height: width * 9 / 16)
+            .frame(width: width, height: width.map { $0 * 9 / 16 })
+            .aspectRatio(16 / 9, contentMode: .fit)
             .clipShape(.rect(cornerRadius: Metrics.cardRadius))
             .accessibilityElement()
             .accessibilityLabel(genre.name)
     }
-
-    private var width: CGFloat { Metrics.posterWidth * 1.6 }
 }
 
 /// One genre's movies: what's popular now and the best of all time. Each row's title opens it as a grid.

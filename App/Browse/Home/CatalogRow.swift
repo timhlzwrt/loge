@@ -6,6 +6,8 @@ import SwiftUI
 struct CatalogRow: View {
     let source: CatalogSource
     var search: String?
+    /// The page's rows, on Home, whose leads this row's should differ from.
+    var page: [CatalogSource] = []
     /// Fills the tvOS home header with its first item before anything has focus.
     var isPrimary = false
     /// Called with whichever poster has focus; drives the tvOS home header.
@@ -41,7 +43,12 @@ struct CatalogRow: View {
         .task(id: TaskKey(search: search, isLoading: items == nil)) {
             guard items == nil else { return }
             do {
-                let metas = try await source.items(search: search)
+                let metas: [MetaPreview]
+                if let search {
+                    metas = try await source.items(search: search)
+                } else {
+                    metas = try await source.items(varyingFrom: page)
+                }
                 try Task.checkCancellation()
                 items = .success(metas)
                 onLoaded(metas.count)

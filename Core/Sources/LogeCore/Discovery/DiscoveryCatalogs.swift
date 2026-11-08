@@ -39,6 +39,19 @@ public enum DiscoveryCatalogs {
         return Array(picks.filter { seen.insert($0.id).inserted }.prefix(10))
     }
 
+    /// Moves titles that lead an earlier row behind each later row's own lead, so rows that
+    /// draw on the same feed, like Popular Series and Crime Series, don't open alike. Rows stay
+    /// otherwise in rank order and keep every title. Eight covers a row's first screen on every device.
+    static func varyingLeads(_ rows: [[MetaPreview]], leadCount: Int = 8) -> [[MetaPreview]] {
+        var shown = Set<MetaPreview.ID>()
+        return rows.map { row in
+            let lead = Array(row.filter { !shown.contains($0.id) }.prefix(leadCount))
+            let leadIDs = Set(lead.map(\.id))
+            shown.formUnion(leadIDs)
+            return lead + row.filter { !leadIDs.contains($0.id) }
+        }
+    }
+
     /// Movie genres on Home, each with a still from a film that defines it.
     public static let genres: [Genre] = [
         Genre(name: "Action", stillID: "tt1392190"),  // Mad Max: Fury Road
@@ -55,6 +68,25 @@ public enum DiscoveryCatalogs {
         Genre(name: "War", stillID: "tt0078788"),  // Apocalypse Now
         Genre(name: "Western", stillID: "tt0060196"),  // The Good, the Bad and the Ugly
     ]
+
+    /// Genres only Search lists, where a tile filters the results rather than opening a
+    /// genre's shelves, so they need no Letterboxd list. The last three are series-only.
+    private static let searchOnlyGenres: [Genre] = [
+        Genre(name: "Adventure", stillID: "tt0082971"),  // Raiders of the Lost Ark
+        Genre(name: "Biography", stillID: "tt1285016"),  // The Social Network
+        Genre(name: "Documentary", stillID: "tt7775622"),  // Free Solo
+        Genre(name: "Family", stillID: "tt4468740"),  // Paddington 2
+        Genre(name: "History", stillID: "tt0108052"),  // Schindler's List
+        Genre(name: "Sport", stillID: "tt0075148"),  // Rocky
+        Genre(name: "Reality-TV", stillID: "tt1877368"),  // The Great British Baking Show
+        Genre(name: "Talk-Show", stillID: "tt0115147"),  // The Daily Show
+        Genre(name: "Game-Show", stillID: "tt0159881"),  // Jeopardy!
+    ]
+
+    /// The tile for a genre Search lists.
+    public static func genre(named name: String) -> Genre? {
+        (genres + searchOnlyGenres).first { $0.name == name }
+    }
 
     public struct Genre: Sendable, Hashable, Identifiable {
         /// Cinemeta's name, which is also what's shown.
@@ -140,6 +172,12 @@ extension MetaPreview {
     /// catalogs list, which looks soft across a TV or a Retina iPad.
     public var featuredBackground: String? {
         background?.replacingOccurrences(of: "images.metahub.space/background/medium/", with: "images.metahub.space/background/large/")
+    }
+
+    /// The portrait hero's artwork: Cinemeta's 780-pixel poster rather than the 300-pixel one
+    /// its catalogs list, which is meant for a row.
+    public var featuredPoster: String? {
+        poster?.replacingOccurrences(of: "images.metahub.space/poster/small/", with: "images.metahub.space/poster/large/")
     }
 
     /// Cinemeta's plain poster, and its title logo where the addon gives none, which the

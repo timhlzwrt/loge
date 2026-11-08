@@ -300,6 +300,11 @@ always visible, including on tvOS). Logos with dark lettering draw white (`LogoT
 Home hero keeps the top of its image; the Mac sidebar uses `CatalogSource.shortTitle` and details
 name themselves in the toolbar; tvOS can reach Information without TMDB, its Home header looks up
 what library entries lack, and My Lists has a left-aligned title; Up Next clears the iOS timeline.
+8 November, Home and Search: the phone hero shows the portrait poster (a poster with its title
+near the top reads twice with the logo; it can't be detected); wide heroes have the page dots
+under the text. Home rows move titles leading an earlier row from the same addon behind their
+first eight (`DiscoveryCatalogs.varyingLeads`), so Letterboxd isn't compared; See All keeps rank
+order. Search uses the image tiles on every platform, tvOS included, and they still filter in place.
 
 Verification for these tasks: reuse `LibraryStoreTests`, `TraktTests`,
 `UITests/FlowTests.swift`, `UITests/PlaybackRegressionTests.swift`,

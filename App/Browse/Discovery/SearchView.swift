@@ -48,7 +48,10 @@ struct SearchView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.canvas)
+        #if !os(tvOS)
+        // tvOS keeps a title fixed in place, over the content as it scrolls; the tab already says Search.
         .navigationTitle("Search")
+        #endif
         #if os(iOS)
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Movies and series")
         #else
@@ -130,31 +133,19 @@ struct SearchView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Genres")
                 .font(.headline)
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: Metrics.posterWidth * 1.4), spacing: 24, alignment: .leading)],
-                      alignment: .leading, spacing: 0) {
-                ForEach(genres, id: \.self) { genre in
-                    Button { self.genre = genre } label: {
-                        HStack {
-                            Text(genre)
-                            Spacer(minLength: 8)
-                            #if !os(tvOS)
-                            Image(systemName: "chevron.right")
-                                .font(.footnote.weight(.semibold))
-                                .foregroundStyle(.tertiary)
-                            #endif
-                        }
-                        #if !os(tvOS)
-                        .padding(.vertical, 12)
-                        .overlay(alignment: .bottom) { Rectangle().fill(.quaternary).frame(height: 0.5) }
-                        .contentShape(.rect)
-                        #endif
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: Metrics.posterWidth * 1.4), spacing: Metrics.rowSpacing)],
+                      spacing: Metrics.rowSpacing) {
+                ForEach(genres.compactMap(DiscoveryCatalogs.genre(named:))) { genre in
+                    Button { self.genre = genre.name } label: {
+                        GenreTile(genre: genre, width: nil)
                     }
-                    #if !os(tvOS)
-                    .buttonStyle(.plain)
-                    #endif
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .tileButtonStyle()
                 }
             }
+            #if os(tvOS)
+            // Room for the focus lift, which would otherwise cover the heading.
+            .padding(.vertical, 20)
+            #endif
         }
         .padding(.horizontal, Metrics.gutter)
         .padding(.vertical, 24)
