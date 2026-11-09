@@ -1,9 +1,14 @@
 name: CI
 
+# Pull requests only: the merge result is what lands, and the Release workflow tests and builds
+# main itself. Running this on main too would put eight macOS jobs against the five a free
+# account runs at once, so releases waited in the queue.
 on:
-  push:
-    branches: [main]
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - docs/**
+      - web/**
   workflow_dispatch:
 
 permissions:
@@ -13,13 +18,17 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  HOMEBREW_NO_AUTO_UPDATE: 1
+
 jobs:
   sync-gateway:
     name: Sync gateway tests
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.14'
       - run: python -m pip install -r Tools/sync-gateway/requirements-dev.txt
@@ -28,8 +37,9 @@ jobs:
   core:
     name: Core tests
     runs-on: xcode-27
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Release publishing regressions
         run: python3 -B -m unittest discover -s Tools -p test_publish_release.py
       - run: swift test
@@ -38,6 +48,7 @@ jobs:
   build:
     name: Build ${{ matrix.platform }}
     runs-on: xcode-27
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -49,11 +60,12 @@ jobs:
           - platform: macOS
             destination: platform=macOS
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: brew install xcodegen
       - run: xcodegen generate
-      # MPVKit's binary frameworks are large; keep them between runs.
-      - uses: actions/cache@v4
+      # MPVKit's binary frameworks are large; Release saves them on main, where every
+      # pull request can restore them.
+      - uses: actions/cache@v6
         with:
           path: .build/xcode/SourcePackages
           key: spm-${{ hashFiles('project.yml', 'Vendor/MPVKit/Package.swift') }}
