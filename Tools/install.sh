@@ -1,14 +1,14 @@
 #!/bin/zsh
 # Installs the latest main on a device over Wi-Fi, picked from a menu: an iPhone or iPad paired
 # with Xcode (Tools/run-device.sh, free Personal Team), the Apple TV through atvloadly
-# (Tools/install-tv.sh), or all of them. Builds Release in the nightly job's own checkout, so work
-# in progress here is never touched, and records the install so the nightly job doesn't repeat it.
+# (Tools/install-tv.sh), or all of them. Builds Release in a checkout of its own, so work in
+# progress here is never touched.
 # Run from anywhere: Tools/install.sh [--here]
 #   --here installs this checkout as it is instead of origin/main.
 set -euo pipefail
 
 repo=$(git -C "${0:A:h}" rev-parse --path-format=absolute --git-common-dir)
-checkout=${repo:h}/.build/nightly
+checkout=${repo:h}/.build/install
 
 if [[ ${1:-} == --here ]]; then
     checkout=${0:A:h:h}
@@ -50,31 +50,18 @@ select choice in $choices; do
 done
 [[ -n $choice ]] || exit 1
 
-state=.build/deployed
-mkdir -p "$state"
 failed=()
-# The nightly job keeps one iPhone/iPad up to date; only an install there counts for it.
-nightly_device=$(/usr/libexec/PlistBuddy -c "Print :EnvironmentVariables:DEVICE" \
-    ~/Library/LaunchAgents/li.tjh.loge.nightly.plist 2>/dev/null || true)
 
 install_phone() {
     local udid=${1%%$'\t'*} name=${1#*$'\t'}
     echo "== $name"
     # Not launched: a locked phone refuses, which would read as a failed install.
-    if DEVICE=$udid CONFIGURATION=Release Tools/run-device.sh --no-launch; then
-        [[ -n $head && $udid == "$nightly_device" ]] && echo "$head" >"$state/iOS"
-    else
-        failed+=("$name")
-    fi
+    DEVICE=$udid CONFIGURATION=Release Tools/run-device.sh --no-launch || failed+=("$name")
 }
 
 install_tv() {
     echo "== Apple TV"
-    if Tools/install-tv.sh; then
-        [[ -n $head ]] && echo "$head" >"$state/tvOS"
-    else
-        failed+=("Apple TV")
-    fi
+    Tools/install-tv.sh || failed+=("Apple TV")
 }
 
 case $choice in
