@@ -21,6 +21,11 @@ public struct PlaybackChapter: Sendable, Equatable {
         public var end: Double
     }
 
+    /// A skip lands on the frame showing at its end, which starts a little before it; the
+    /// offer would otherwise stay up after skipping while paused. Within this many seconds
+    /// of the end there's nothing left worth skipping.
+    static let skipEndTolerance = 0.5
+
     /// Only explicitly named segments are skippable. Generic numbered chapters stay untouched.
     public static func skip(at position: Double, chapters: [Self], duration: Double?) -> Skip? {
         guard position.isFinite, position >= 0 else { return nil }
@@ -36,7 +41,7 @@ public struct PlaybackChapter: Sendable, Equatable {
         }
         // A final intro/recap chapter has no reliable end; never skip the entire title.
         let end = index + 1 < ordered.count ? ordered[index + 1].start : (kind == .credits ? duration : nil)
-        guard let end, end.isFinite, end > position,
+        guard let end, end.isFinite, end - position > skipEndTolerance,
               duration.map({ $0.isFinite && end <= $0 }) ?? true else { return nil }
         return Skip(kind: kind, end: end)
     }

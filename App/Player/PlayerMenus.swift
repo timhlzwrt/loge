@@ -134,6 +134,23 @@ struct MoreMenu: View {
         }
     }
 }
+
+// The controls redraw every second for the timeline, and a menu rebuilt while open resets its
+// list to the top. The closures and bindings passed in can't be compared, so these compare
+// only the player; tracks, selection and speed are read from it and still update the menus.
+extension SubtitlesMenu: @MainActor Equatable {
+    static func == (lhs: Self, rhs: Self) -> Bool { lhs.player === rhs.player }
+}
+
+extension AudioMenu: @MainActor Equatable {
+    static func == (lhs: Self, rhs: Self) -> Bool { lhs.player === rhs.player }
+}
+
+extension MoreMenu: @MainActor Equatable {
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.player === rhs.player && (lhs.onChooseSource == nil) == (rhs.onChooseSource == nil)
+    }
+}
 #endif
 
 /// Crops the picture to the screen or fits all of it; on iPhone pinching does the same.

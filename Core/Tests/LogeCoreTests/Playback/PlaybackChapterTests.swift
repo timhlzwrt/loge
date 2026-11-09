@@ -12,6 +12,16 @@ struct PlaybackChapterTests {
         #expect(PlaybackChapter.skip(at: 1_100, chapters: chapters, duration: 1_100) == nil)
     }
 
+    /// After a skip, the frame shown can start just before the segment's end.
+    @Test func offersNothingOnceSkippedToTheEnd() {
+        let chapters = [PlaybackChapter(title: "Intro", start: 0), .init(title: "Story", start: 30)]
+        #expect(PlaybackChapter.skip(at: 29.4, chapters: chapters, duration: 100) == .init(kind: .intro, end: 30))
+        #expect(PlaybackChapter.skip(at: 29.96, chapters: chapters, duration: 100) == nil)
+        let segment = PlaybackSegment(kind: .intro, start: 131.4, end: 148.669)
+        #expect(segment.skip(at: 148, duration: 2_904) == .init(kind: .intro, end: 148.669))
+        #expect(segment.skip(at: 148.64, duration: 2_904) == nil)
+    }
+
     @Test func requiresKnownBoundariesAndIgnoresInvalidMetadata() {
         #expect(PlaybackChapter.skip(at: 5, chapters: [.init(title: "Intro", start: 0), .init(title: "", start: 30)], duration: 100) == .init(kind: .intro, end: 30))
         #expect(PlaybackChapter.skip(at: 5, chapters: [.init(title: "Intro", start: 0)], duration: nil) == nil)

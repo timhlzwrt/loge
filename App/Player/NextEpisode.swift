@@ -55,6 +55,12 @@ struct NextEpisodeOverlay: View {
 
     @State private var secondsLeft = 10
     @State private var cancelled = false
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+
+    private var isPortraitPhone: Bool { horizontalSizeClass == .compact && verticalSizeClass == .regular }
+    #endif
 
     var body: some View {
         if !cancelled {
@@ -100,10 +106,19 @@ struct NextEpisodeOverlay: View {
             }
             .padding(10)
             .glassEffect(in: .rect(cornerRadius: Self.radius))
+            #if os(iOS)
+            // The top corner is the one the controls leave free; at the bottom the card would
+            // cover the play button on a phone in landscape. A portrait phone is too narrow
+            // to share the row with the close button, so it goes below it.
+            .padding(.horizontal, 20)
+            .padding(.top, isPortraitPhone ? 68 : 12)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+            #else
             .padding(24)
-            // Clears the timeline at the bottom of the controls, with the menu row under it on iOS.
+            // Clears the timeline at the bottom of the controls.
             .padding(.bottom, Self.controlsClearance)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+            #endif
             .task(id: hasEnded) {
                 guard hasEnded else { return }
                 secondsLeft = 10
@@ -131,9 +146,7 @@ struct NextEpisodeOverlay: View {
     private static let stillWidth: CGFloat = 128
     private static let textWidth: CGFloat = 200
     private static let radius: CGFloat = 18
-    #if os(iOS)
-    private static let controlsClearance: CGFloat = 96
-    #else
+    #if os(macOS)
     private static let controlsClearance: CGFloat = 70
     #endif
     #endif

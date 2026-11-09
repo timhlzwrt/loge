@@ -12,7 +12,7 @@ public struct PlaybackSegment: Sendable, Equatable {
     }
 
     public func skip(at position: Double, duration: Double?) -> PlaybackChapter.Skip? {
-        guard position.isFinite, position >= start, position < end,
+        guard position.isFinite, position >= start, end - position > PlaybackChapter.skipEndTolerance,
               let duration, duration.isFinite, end <= duration else { return nil }
         return PlaybackChapter.Skip(kind: kind, end: end)
     }

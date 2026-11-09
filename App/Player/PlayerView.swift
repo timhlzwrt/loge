@@ -51,6 +51,7 @@ struct PlayerView: View {
     @State private var window: NSWindow?
     #endif
     #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     #endif
     @Environment(\.dismiss) private var dismiss
@@ -102,6 +103,7 @@ struct PlayerView: View {
                     if controlsVisible {
                         PlayerControls(
                             title: current.title,
+                            item: current.item,
                             player: player,
                             pictureInPicture: session.pictureInPicture,
                             scrubPosition: $scrubPosition,
@@ -435,7 +437,15 @@ struct PlayerView: View {
 
     private func skipOffer(_ skip: PlaybackChapter.Skip, player: MPVPlayer) -> some View {
         Button(skip.kind.rawValue) {
-            player.seek(to: skip.end)
+            if let duration = player.duration, skip.end >= duration {
+                // Credits run to the end of the file. Seeking right to the end while paused leaves
+                // mpv on the last frame without reaching the end, so Up Next never counts down;
+                // stopping just short and playing out the rest always ends it.
+                player.seek(to: max(duration - 0.2, 0))
+                player.play()
+            } else {
+                player.seek(to: skip.end)
+            }
             showControls()
         }
         .font(.subheadline.weight(.semibold))
@@ -450,21 +460,34 @@ struct PlayerView: View {
         .onDisappear { if !isPanelShown { surfaceFocused = true } }
         #endif
         // Keep the offer visible while transport controls hide, clear of their bars and Up Next.
+        #if os(iOS)
+        // Above the menus, in line with their trailing edge; the title holds the leading corner.
+        .padding(.horizontal, 20)
+        .padding(.bottom, skipBottomPadding(player))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+        #else
         .padding(.horizontal, 24)
         .padding(.bottom, skipBottomPadding(player))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+        #endif
     }
 
     private func skipBottomPadding(_ player: MPVPlayer) -> CGFloat {
+        #if !os(iOS)
         let hasNextOffer = session.next != nil && showsNextEpisode(player)
+        #endif
         #if os(tvOS)
         return hasNextOffer ? 320 : (controlsVisible ? 200 : 48)
         #elseif os(macOS)
         return hasNextOffer || adjustingTiming != nil ? 240 : (controlsVisible ? 100 : 32)
         #else
-        // In landscape the controls are one row, and Up Next is in the other corner.
-        if verticalSizeClass == .compact { return controlsVisible ? 96 : 32 }
-        return hasNextOffer ? 240 : (controlsVisible ? 160 : 32)
+        // 12 above the menus: their top is the padding (12), the timeline (44), the gap (10)
+        // and the menus (44) up from the bottom. A portrait phone has the title on a row of
+        // its own above them, up to two lines. The timing panel replaces them and is taller.
+        // Up Next is in the top corner on iOS.
+        if adjustingTiming != nil { return 140 }
+        let isPortraitPhone = horizontalSizeClass == .compact && verticalSizeClass == .regular
+        return controlsVisible ? (isPortraitPhone ? 200 : 122) : 32
         #endif
     }
 

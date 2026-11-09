@@ -66,8 +66,11 @@ final class MPVPlayer {
     private(set) var communitySegments: [PlaybackSegment] = []
 
     var availableSkip: PlaybackChapter.Skip? {
-        PlaybackChapter.skip(at: position, chapters: chapters, duration: duration)
-            ?? communitySegments.compactMap { $0.skip(at: position, duration: duration) }.first
+        // `position` is whole seconds, which kept an offer up after skipping to a segment's end
+        // while paused. Reading it still re-evaluates this as playback moves.
+        let at = max(position, exactPosition)
+        return PlaybackChapter.skip(at: at, chapters: chapters, duration: duration)
+            ?? communitySegments.compactMap { $0.skip(at: at, duration: duration) }.first
     }
 
     func setCommunitySegments(_ segments: [PlaybackSegment]) {

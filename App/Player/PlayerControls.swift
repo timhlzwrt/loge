@@ -7,6 +7,8 @@ import AVKit
 /// The overlay shown over playing video: title, transport, timeline and the track menus.
 struct PlayerControls: View {
     let title: String
+    /// What's playing, to show a series apart from its episode.
+    let item: WatchItem?
     let player: MPVPlayer
     let pictureInPicture: PictureInPicture?
     /// Where the timeline is being dragged or swiped to; nil while it follows playback.
@@ -28,6 +30,8 @@ struct PlayerControls: View {
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    /// Where playback was when the current drag on the timeline began.
+    @State private var dragStart: Double?
     #endif
 
     var body: some View {
@@ -40,32 +44,24 @@ struct PlayerControls: View {
         #endif
     }
 
+    // MARK: tvOS
+
+    #if os(tvOS)
     /// Scrims behind the bars keep white controls readable over bright frames.
     private var scrims: some View {
-        // No spacing: in landscape the two scrims nearly fill the screen height, and
-        // any overflow would centre the stack and lift the bottom scrim off the edge.
+        // No spacing: the two scrims nearly fill the screen height, and any overflow would
+        // centre the stack and lift the bottom scrim off the edge.
         VStack(spacing: 0) {
             LinearGradient(colors: [.black.opacity(0.5), .clear], startPoint: .top, endPoint: .bottom)
                 .frame(height: 140)
             Spacer(minLength: 0)
             LinearGradient(colors: [.clear, .black.opacity(0.7)], startPoint: .top, endPoint: .bottom)
-                .frame(height: bottomScrimHeight)
+                .frame(height: 220)
         }
         .ignoresSafeArea()
         .allowsHitTesting(false)
     }
 
-    private var bottomScrimHeight: CGFloat {
-        #if os(iOS)
-        isPhoneLandscape ? 130 : 220
-        #else
-        220
-        #endif
-    }
-
-    // MARK: tvOS
-
-    #if os(tvOS)
     private var tvBody: some View {
         VStack(alignment: .leading, spacing: 18) {
             Spacer()
@@ -83,22 +79,17 @@ struct PlayerControls: View {
     // MARK: iPhone and iPad
 
     #if os(iOS)
-    private var isPhoneLandscape: Bool { verticalSizeClass == .compact }
-
+    /// Laid out like the TV app's player: close and output at the top, transport in glass
+    /// circles at the centre, and at the bottom what's playing, the menus and an inline timeline.
     private var phoneBody: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
+            HStack(spacing: 12) {
                 // The whole circle is the button: with the glass button style, taps near its
                 // edge fell through to the picture and hid the controls instead of closing.
                 Button("Close", systemImage: "xmark", action: onClose)
                     .modifier(CapsuleIcon())
                     .fontWeight(.semibold)
                     .glassEffect(.regular.interactive(), in: .circle)
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(2)
-                    .padding(.horizontal, 12)
-                Spacer()
                 GlassCapsule {
                     if let pictureInPicture, pictureInPicture.isPossible {
                         Button("Picture in Picture", systemImage: "pip.enter", action: pictureInPicture.start)
@@ -112,19 +103,22 @@ struct PlayerControls: View {
             if let kind = adjustingTiming {
                 TimingPanel(player: player, kind: kind, onInteract: onInteract) { adjustingTiming = nil }
                     .frame(maxWidth: .infinity)
-            } else if isPhoneLandscape {
-                // Height is what's short here, and every row taken from it covers the picture.
-                HStack(spacing: 12) {
-                    timeline
-                    menuButtons
-                }
             } else {
-                timeline
-                HStack {
-                    Spacer()
+                if isPortraitPhone {
+                    // Too narrow for the title beside five buttons; height is what's spare here.
+                    nowPlaying
                     menuButtons
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .padding(.top, 12)
+                } else {
+                    HStack(alignment: .bottom, spacing: 16) {
+                        nowPlaying
+                        Spacer(minLength: 0)
+                        menuButtons
+                    }
                 }
-                .padding(.top, 12)
+                timeline
+                    .padding(.top, 10)
             }
         }
         .padding(.horizontal, 20)
@@ -140,14 +134,40 @@ struct PlayerControls: View {
         }
         .foregroundStyle(.white)
         .buttonStyle(.plain)
-        .background { scrims }
+        .background {
+            // An even dim, as in the TV app: the glass stays grey over bright frames, and
+            // the title and times read anywhere on the picture.
+            Color.black.opacity(0.5)
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+        }
+    }
+
+    private var isPortraitPhone: Bool { horizontalSizeClass == .compact && verticalSizeClass == .regular }
+
+    /// The series over the episode's code and name, or just the title for a film.
+    private var nowPlaying: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if let item, let code = item.episodeCode {
+                Text([code, item.episodeTitle].compactMap { $0 }.joined(separator: " · "))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Text(item?.title ?? title)
+                .font(.title2.bold())
+                .lineLimit(2)
+        }
     }
 
     private var menuButtons: some View {
         GlassCapsule {
             SubtitlesMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen, adjustingTiming: $adjustingTiming)
+                .equatable()
             AudioMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen, adjustingTiming: $adjustingTiming)
+                .equatable()
             MoreMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen)
+                .equatable()
             ZoomButton(player: player, onInteract: onInteract)
                 .modifier(CapsuleIcon())
             if let onChooseSource {
@@ -157,14 +177,16 @@ struct PlayerControls: View {
         }
     }
 
-    /// Plain symbols, no circles: the picture is the background.
+    /// Each button sits on its own glass circle, the play button the largest.
     private var transport: some View {
-        HStack(spacing: 40) {
+        HStack(spacing: 32) {
             Button("Back 10 seconds", systemImage: "gobackward.10") {
                 player.seek(by: -10)
                 onInteract()
             }
-            .frame(width: 56, height: 56)
+            .frame(width: 60, height: 60)
+            .contentShape(.circle)
+            .glassEffect(.regular.interactive(), in: .circle)
             Group {
                 if player.isWaiting {
                     ProgressView().controlSize(.large)
@@ -172,17 +194,20 @@ struct PlayerControls: View {
                     playPauseButton
                 }
             }
-            .font(.system(size: 44))
-            .frame(width: 72, height: 72)
+            .font(.system(size: 36))
+            .frame(width: 80, height: 80)
+            .contentShape(.circle)
+            .glassEffect(.regular.interactive(), in: .circle)
             Button("Forward 10 seconds", systemImage: "goforward.10") {
                 player.seek(by: 10)
                 onInteract()
             }
-            .frame(width: 56, height: 56)
+            .frame(width: 60, height: 60)
+            .contentShape(.circle)
+            .glassEffect(.regular.interactive(), in: .circle)
         }
         .labelStyle(.iconOnly)
-        .font(.system(size: 30, weight: .medium))
-        .shadow(color: .black.opacity(0.4), radius: 8)
+        .font(.system(size: 24, weight: .medium))
     }
     #endif
 
@@ -224,8 +249,11 @@ struct PlayerControls: View {
                 timeline
                     .padding(.horizontal, 6)
                 SubtitlesMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen, adjustingTiming: $adjustingTiming)
+                    .equatable()
                 AudioMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen, adjustingTiming: $adjustingTiming)
+                    .equatable()
                 MoreMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen, onChooseSource: onChooseSource)
+                    .equatable()
                 ZoomButton(player: player, onInteract: onInteract)
                 if let pictureInPicture, pictureInPicture.isPossible {
                     Button("Picture in Picture", systemImage: "pip.enter", action: pictureInPicture.start)
@@ -269,43 +297,45 @@ struct PlayerControls: View {
     #endif
 
     /// The position bar with elapsed time on the left and remaining time on the right; on
-    /// the Mac the times sit either side of the bar inside the capsule.
+    /// tvOS the times sit below the bar.
     @ViewBuilder
     private var timeline: some View {
         if let duration = player.duration, duration > 0 {
             let position = scrubPosition ?? player.position
             let longForm = duration >= 3600
-            #if os(macOS)
-            HStack(spacing: 12) {
-                Text(format(position, longForm: longForm))
-                    .foregroundStyle(.secondary)
-                slider(duration: duration, position: position, longForm: longForm)
-                Text("−" + format(duration - position, longForm: longForm))
-                    .foregroundStyle(.secondary)
-            }
-            .font(.caption.monospacedDigit())
-            #else
+            #if os(tvOS)
             VStack(spacing: 8) {
-                #if os(tvOS)
                 ProgressView(value: min(position, duration), total: duration)
                     .overlay { scrubPreviewView(duration: duration, longForm: longForm) }
-                #else
-                slider(duration: duration, position: position, longForm: longForm)
-                #endif
                 HStack {
-                    #if os(tvOS)
                     // tvOS has no on-screen play button, so this is the only sign playback is paused.
                     if player.status == .paused {
                         Image(systemName: "pause.fill")
                             .accessibilityLabel("Paused")
                     }
-                    #endif
                     Text(format(position, longForm: longForm))
                     Spacer()
                     Text("−" + format(duration - position, longForm: longForm))
                 }
                 .font(timeFont)
             }
+            #else
+            HStack(spacing: 12) {
+                Text(format(position, longForm: longForm))
+                    #if os(macOS)
+                    .foregroundStyle(.secondary)
+                    #endif
+                slider(duration: duration, position: position, longForm: longForm)
+                Text("−" + format(duration - position, longForm: longForm))
+                    #if os(macOS)
+                    .foregroundStyle(.secondary)
+                    #endif
+            }
+            #if os(macOS)
+            .font(.caption.monospacedDigit())
+            #else
+            .font(timeFont)
+            #endif
             #endif
         } else {
             // Live streams and files still loading have no duration to scrub through.
@@ -323,7 +353,53 @@ struct PlayerControls: View {
         #endif
     }
 
-    #if !os(tvOS)
+    #if os(iOS)
+    /// A translucent bar that thickens under the finger, as in the TV app. Drags move the
+    /// position by how far the finger travels rather than jumping to where it landed, so
+    /// grabbing the bar never skips.
+    private func slider(duration: Double, position: Double, longForm: Bool) -> some View {
+        GeometryReader { proxy in
+            Capsule()
+                .fill(.white.opacity(0.3))
+                .overlay(alignment: .leading) {
+                    Rectangle()
+                        .fill(.white)
+                        .frame(width: proxy.size.width * min(max(position / duration, 0), 1))
+                }
+                .clipShape(.capsule)
+                .frame(height: scrubPosition == nil ? 6 : 12)
+                .frame(maxHeight: .infinity)
+                .contentShape(.rect)
+                .gesture(DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        let start = dragStart ?? player.position
+                        dragStart = start
+                        scrubPosition = min(max(start + value.translation.width / proxy.size.width * duration, 0), duration)
+                        onInteract()
+                    }
+                    .onEnded { value in
+                        // A touch that didn't move only shows the bar thicken; seeking would
+                        // jump to the nearest keyframe.
+                        if abs(value.translation.width) > 2, let target = scrubPosition {
+                            player.seek(toKeyframeNear: target)
+                        }
+                        scrubPosition = nil
+                        dragStart = nil
+                        onInteract()
+                    })
+        }
+        .frame(height: 44)
+        .animation(.easeOut(duration: 0.15), value: scrubPosition == nil)
+        .overlay { scrubPreviewView(duration: duration, longForm: longForm) }
+        .accessibilityElement()
+        .accessibilityLabel("Playback position")
+        .accessibilityValue(format(position, longForm: longForm))
+        .accessibilityAdjustableAction { direction in
+            player.seek(by: direction == .increment ? 10 : -10)
+            onInteract()
+        }
+    }
+    #elseif os(macOS)
     private func slider(duration: Double, position: Double, longForm: Bool) -> some View {
         Slider(
             value: Binding(get: { scrubPosition ?? player.position }, set: { scrubPosition = $0 }),
@@ -409,12 +485,14 @@ struct CapsuleIcon: ViewModifier {
     }
 }
 
-/// The system's route picker, for sending sound to AirPlay speakers.
+/// The system's route picker, for AirPlay to a TV or speakers.
 private struct AirPlayButton: UIViewRepresentable {
     @AppStorage(Accent.storageKey) private var accent = Accent.white
 
     func makeUIView(context: Context) -> AVRoutePickerView {
         let picker = AVRoutePickerView()
+        // The screen icon, and TVs listed first: this sends the picture, not just sound.
+        picker.prioritizesVideoDevices = true
         picker.tintColor = .white
         return picker
     }

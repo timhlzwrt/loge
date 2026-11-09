@@ -354,7 +354,7 @@ while the panel or Up Next has focus, because lying under their buttons it beat 
 focused one; the same fix makes Info's column reachable. The panel fits its content and lists Sources. The
 sources sheet, `PlaybackSession.choosingSource`, now serves all platforms: the Mac has it in More and the
 Playback menu. Audio keeps tracks and timing; Speed and Playback Info moved to a new More menu, with
-`.menuOrder(.fixed)` and timing above long track lists. iPhone landscape puts the buttons on the timeline row.
+`.menuOrder(.fixed)` and timing above long track lists.
 Zoom is a button on iPhone and Mac. Failures explain themselves and offer Try Again (`PlaybackSession.retry`).
 Picture in Picture that opened by itself on leaving closes on return to the full-screen player; one opened
 with the button stays. The Mac shows the title in full screen, changes the full-screen icon and toggles on
@@ -367,6 +367,22 @@ position is queued every 10 s in case the app is killed before the pause. Accoun
 takes the newest; removed-versus-played still asks. Packaged build 127 and both feeds advertise 26.0.
 `Test Streams` surviving uninstall on the iPhone 18 Pro simulator is a stale
 `data/Library/Preferences/li.tjh.MediaApp.plist` outside the app container (3 November): a fresh install reads it.
+9 November, iPhone and iPad player like the TV app: close and Picture in Picture/AirPlay (screen icon) at the
+top, transport on glass circles in the middle, series over episode at the bottom left with the menus beside it
+(on its own row on a portrait iPhone), and an inline timeline under them: a bar without a knob that thickens
+under the finger and moves by how far it's dragged, so touching it never skips. The picture dims evenly while
+the controls show. Skip offers sit bottom right above the menus; Up Next is in the top right corner, since at
+the bottom it covered the play button on a landscape phone. tvOS and the Mac are unchanged.
+Checked with real data (Breaking Bad S1 E4's TheIntroDB times, a local file of the matching length): Skip Intro,
+Skip Credits, Up Next with the next episode's still and its countdown. Two fixes: a skip offer stayed up after
+skipping while paused (`availableSkip` used whole-second `position`; it reads the exact time now and ignores
+the last half second), and Skip Credits while paused left mpv on the last frame without reaching the end, so
+Up Next never counted down; a skip to the file's end now stops 0.2 s short and plays out the rest.
+Open player menus no longer reset every second (scrolling a long subtitle list jumped back): the controls
+redraw for the timeline, and the menus' closures made SwiftUI rebuild them each time. `SubtitlesMenu`,
+`AudioMenu` and `MoreMenu` are `Equatable` on the player and used with `.equatable()`; measured with
+`_logChanges`, an open Audio menu went from a rebuild per second to none. Playback UI tests expect the
+simulator in portrait; one left in landscape fails `testEpisodePausePersistsAndResumesAfterRelaunch`.
 
 Verification for these tasks: reuse `LibraryStoreTests`, `TraktTests`,
 `UITests/FlowTests.swift`, `UITests/PlaybackRegressionTests.swift`,
