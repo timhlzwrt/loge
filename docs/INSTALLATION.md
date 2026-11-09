@@ -121,9 +121,13 @@ Watch Later, custom lists and remembered stream URLs remain local.
 
 loge imports paused progress on launch/foreground and sends scrobbles and
 watched/unwatched updates. Recent completed plays clear stale unfinished
-entries without overwriting newer local rewatches. Matching requires IMDb
+entries without overwriting newer local rewatches. Removing a title from Continue
+Watching clears its paused progress on Trakt, and other devices drop it at their next
+sync unless something newer was played. Changes made offline stay on the device and
+go out on reconnect, except that a position older than another device's isn't sent.
+Signing out discards what hasn't been sent. Matching requires IMDb
 identifiers; addon-only identifiers may not sync. It does not import your full
-Trakt watched history, sync lists/settings/addons, or queue failed uploads offline.
+Trakt watched history or sync lists/settings/addons.
 
 **A connected self-hosted account pauses Trakt imports and scrobbling.** Choose
 the same sync mode on the devices you want to hand off between.

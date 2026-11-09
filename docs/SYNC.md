@@ -20,13 +20,15 @@ separate accounts and deliberately shared setup categories.
 Your connected devices share exact movie/episode progress, watched state and
 explicit progress removals. Rewatches and backward seeks are preserved; sync does
 not simply choose the furthest position. Changes to different titles merge. When
-both devices change the same title independently, loge asks which version to keep.
-Offline edits remain saved for the next successful sync.
+two devices play the same title independently, the position left most recently wins
+without asking. When one removes a title or marks it unwatched and another plays it,
+loge asks which to keep. Offline edits remain saved for the next successful sync.
 
 Local progress is saved about every ten seconds and on pause, close, end and
 backgrounding. Network checkpoints are throttled; pause/close/background attempt
-an immediate push. Background delivery depends on the operating system, so a
-suspended device may deliver its pending changes the next time it opens.
+an immediate push. On leaving, the app asks the system for time to finish that push;
+how much it gets depends on the operating system, so a suspended device may deliver
+its pending changes the next time it opens.
 
 While an account is connected, Trakt imports and scrobbling are paused so the
 same device's saved Trakt connection cannot mix another person's watch activity

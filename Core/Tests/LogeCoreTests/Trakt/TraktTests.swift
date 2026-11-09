@@ -43,7 +43,7 @@ struct TraktTests {
 
         #expect(playback.count == 2)
         #expect(playback[0] == TraktPlayback(imdbID: "tt0111161", progress: 42.5,
-                                             pausedAt: Date(timeIntervalSince1970: 1_793_218_503)))
+                                             pausedAt: Date(timeIntervalSince1970: 1_793_218_503), id: 13))
         #expect(playback[1].season == 1 && playback[1].episode == 2)
     }
 
@@ -355,6 +355,191 @@ struct TraktAccountTests {
         #expect(library.progress[movie.id]?.position == 600)
     }
 
+    // MARK: Changes kept for later
+
+    private func accountOffline() -> (TraktAccount, LibraryStore) {
+        let (account, library) = account()
+        account.writeInterval = .zero
+        AccountTraktProtocol.setOffline(id, true)
+        return (account, library)
+    }
+
+    @Test func changesMadeOfflineSurviveARelaunchAndGoOutOnce() async throws {
+        let (first, _) = accountOffline()
+        first.scrobble(.pause, movie, progress: 30)
+        first.scrobble(.pause, movie, progress: 40)
+        await first.sendPending()
+        #expect(AccountTraktProtocol.count(id, path: "/scrobble/pause") >= 1)
+
+        AccountTraktProtocol.setOffline(id, false)
+        AccountTraktProtocol.clear(id)
+        let (reopened, _) = account()
+        await reopened.sendPending()
+        #expect(AccountTraktProtocol.count(id, path: "/scrobble/pause") == 1)
+        let body = try #require(AccountTraktProtocol.bodies(id, path: "/scrobble/pause").last)
+        #expect(body.contains(#""progress":40"#))
+        await reopened.sendPending()
+        #expect(AccountTraktProtocol.count(id, path: "/scrobble/pause") == 1)
+    }
+
+    @Test func anOfflineWatchedMarkKeepsItsOwnTimeAndASeasonIsOneRequest() async throws {
+        let (account, _) = accountOffline()
+        let episodes = (1...3).map { WatchItem(id: "tts:1:\($0)", type: "series", metaID: "tts", title: "S", season: 1, episode: $0) }
+        account.markWatched(episodes)
+        await account.sendPending()
+        AccountTraktProtocol.setOffline(id, false)
+        AccountTraktProtocol.clear(id)
+        await account.sendPending()
+        #expect(AccountTraktProtocol.count(id, path: "/sync/history") == 1)
+        let body = try #require(AccountTraktProtocol.bodies(id, path: "/sync/history").first)
+        #expect(body.contains("watched_at"))
+    }
+
+    @Test func aFinishedPlaySentLateCountsAsWatchedWhenItHappened() async throws {
+        let defaults = UserDefaults(suiteName: "TraktAccountTests-\(id)")!
+        let old = TraktChange(item: movie, action: .finished(100), date: .now.addingTimeInterval(-3600))
+        defaults.set(try JSONEncoder().encode([old]), forKey: "traktPendingChanges")
+        let (account, _) = account()
+        await account.sendPending()
+        #expect(AccountTraktProtocol.count(id, path: "/scrobble/stop") == 0)
+        let body = try #require(AccountTraktProtocol.bodies(id, path: "/sync/history").first)
+        #expect(body.contains(old.date.ISO8601Format()))
+    }
+
+    @Test func anOldPositionDoesntOverwriteNewerProgressFromAnotherDevice() async throws {
+        let defaults = UserDefaults(suiteName: "TraktAccountTests-\(id)")!
+        // The fixture's remote progress is from 4 November 2026.
+        let old = TraktChange(item: movie, action: .progress(10), date: Date(timeIntervalSince1970: 1_700_000_000))
+        defaults.set(try JSONEncoder().encode([old]), forKey: "traktPendingChanges")
+        let (account, _) = account()
+        await account.sendPending()
+        #expect(AccountTraktProtocol.count(id, path: "/scrobble/pause") == 0)
+    }
+
+    @Test func aRefusedChangeDoesntHoldUpTheOthers() async throws {
+        let (account, _) = account()
+        account.writeInterval = .zero
+        AccountTraktProtocol.setStatus(id, path: "/scrobble/pause", 404)
+        account.scrobble(.pause, movie, progress: 30)
+        account.markWatched([WatchItem(id: "tt2", type: "movie", metaID: "tt2", title: "Other")])
+        await account.sendPending()
+        AccountTraktProtocol.setStatus(id, path: "/scrobble/pause", nil)
+        AccountTraktProtocol.clear(id)
+        await account.sendPending()
+        #expect(AccountTraktProtocol.count(id, path: "/scrobble/pause") == 0)
+    }
+
+    @Test func signingOutDropsWhatWasWaiting() async throws {
+        let (first, _) = accountOffline()
+        first.scrobble(.pause, movie, progress: 30)
+        await first.sendPending()
+        first.signOut()
+        AccountTraktProtocol.setOffline(id, false)
+        AccountTraktProtocol.clear(id)
+        let (reopened, _) = account()
+        await reopened.sendPending()
+        #expect(AccountTraktProtocol.count(id, path: "/scrobble/pause") == 0)
+    }
+
+    @Test func removingATitleDeletesItsPausedProgressOnTrakt() async throws {
+        let (account, library) = account()
+        account.writeInterval = .zero
+        let first = WatchItem(id: "ttshow:1:1", type: "series", metaID: "ttshow", title: "Show", season: 1, episode: 1)
+        library.record(first, position: 600, duration: 2700, at: Date(timeIntervalSince1970: 1))
+        AccountTraktProtocol.configure(id, playback: """
+            [{"id":7,"progress":40,"paused_at":"2026-11-04T09:00:00.000Z","type":"episode","show":{"ids":{"imdb":"ttshow"}},"episode":{"season":1,"number":1}},
+             {"id":8,"progress":20,"paused_at":"2026-11-04T09:00:00.000Z","type":"episode","show":{"ids":{"imdb":"ttshow"}},"episode":{"season":1,"number":2}},
+             {"id":9,"progress":20,"paused_at":"2026-11-04T09:00:00.000Z","type":"movie","movie":{"ids":{"imdb":"ttother"}}}]
+            """)
+        library.removeFromContinueWatching(metaID: "ttshow")
+        account.removeFromContinueWatching(first)
+        await account.sendPending()
+        #expect(AccountTraktProtocol.method(id, path: "/sync/playback/7") == "DELETE")
+        #expect(AccountTraktProtocol.method(id, path: "/sync/playback/8") == "DELETE")
+        #expect(AccountTraktProtocol.count(id, path: "/sync/playback/9") == 0)
+    }
+
+    @Test func aRemovalLeavesProgressPlayedElsewhereAfterIt() async throws {
+        let defaults = UserDefaults(suiteName: "TraktAccountTests-\(id)")!
+        let old = TraktChange(item: movie, action: .removedTitle, date: Date(timeIntervalSince1970: 1_700_000_000))
+        defaults.set(try JSONEncoder().encode([old]), forKey: "traktPendingChanges")
+        let (account, _) = account()
+        AccountTraktProtocol.configure(id, playback:
+            #"[{"id":7,"progress":50,"paused_at":"2026-11-04T08:00:00.000Z","type":"movie","movie":{"ids":{"imdb":"tt1"}}}]"#)
+        await account.sendPending()
+        #expect(AccountTraktProtocol.count(id, path: "/sync/playback/7") == 0)
+    }
+
+    @Test func progressGoneFromTraktLeavesContinueWatchingOnOtherDevices() async {
+        let (account, library) = account()
+        await account.pullProgress()
+        #expect(library.continueWatching.count == 1)
+        AccountTraktProtocol.configure(id, playback: "[]")
+        await account.pullProgress()
+        #expect(library.continueWatching.isEmpty)
+        #expect(AccountTraktProtocol.count(id, path: "/users/me/watching") == 1)
+
+        // A pause from anywhere after that brings it back.
+        AccountTraktProtocol.configure(id, playback:
+            #"[{"id":7,"progress":50,"paused_at":"2026-11-05T08:00:00.000Z","type":"movie","movie":{"ids":{"imdb":"tt1"}}}]"#)
+        await account.pullProgress()
+        #expect(library.continueWatching.count == 1)
+    }
+
+    @Test func progressNeverListedOnTraktIsntTakenForARemoval() async {
+        let (account, library) = account()
+        AccountTraktProtocol.configure(id, playback: "[]")
+        await account.pullProgress()
+        await account.pullProgress()
+        #expect(library.progress[movie.id]?.position == 600)
+    }
+
+    @Test func progressPlayingOnAnotherDeviceStaysUntilItEnds() async {
+        let (account, library) = account()
+        await account.pullProgress()
+        AccountTraktProtocol.configure(id, playback: "[]")
+        AccountTraktProtocol.setWatching(id, #"{"action":"scrobble","type":"movie","movie":{"ids":{"imdb":"tt1"}}}"#)
+        await account.pullProgress()
+        #expect(library.continueWatching.count == 1)
+        AccountTraktProtocol.setWatching(id, nil)
+        await account.pullProgress()
+        #expect(library.continueWatching.isEmpty)
+    }
+
+    @Test func startingPlaybackHereIsntTakenForARemovalElsewhere() async throws {
+        let (account, library) = account()
+        await account.pullProgress()
+        account.scrobble(.start, movie, progress: 50)
+        try await waitForRequest("/scrobble/start")
+        AccountTraktProtocol.configure(id, playback: "[]")
+        await account.pullProgress()
+        #expect(library.continueWatching.count == 1)
+    }
+
+    @Test func aFailedLookAtWhatsPlayingRemovesNothing() async {
+        let (account, library) = account()
+        await account.pullProgress()
+        AccountTraktProtocol.configure(id, playback: "[]")
+        AccountTraktProtocol.setStatus(id, path: "/users/me/watching", 503)
+        await account.pullProgress()
+        #expect(library.continueWatching.count == 1)
+        AccountTraktProtocol.setStatus(id, path: "/users/me/watching", nil)
+        await account.pullProgress()
+        #expect(library.continueWatching.isEmpty)
+    }
+
+    @Test func aKeptPositionWaitsForTheNextSendAndAFinishedPlayReplacesIt() async throws {
+        let (account, _) = account()
+        account.writeInterval = .zero
+        account.keepProgress(movie, progress: 50)
+        for _ in 0..<20 { await Task.yield() }
+        #expect(AccountTraktProtocol.count(id, path: "/scrobble/pause") == 0)
+        account.scrobble(.stop, movie, progress: 95)
+        try await waitForRequest("/scrobble/stop")
+        await account.sendPending()
+        #expect(AccountTraktProtocol.count(id, path: "/scrobble/pause") == 0)
+    }
+
     private func waitForRequest(_ path: String) async throws {
         let deadline = Date.now.addingTimeInterval(5)
         while AccountTraktProtocol.count(id, path: path) == 0, Date.now < deadline {
@@ -372,6 +557,11 @@ private final class AccountTraktProtocol: StubURLProtocol, @unchecked Sendable {
         var holds: Set<String> = []
         var responses: [String: @Sendable () -> Void] = [:]
         var rejected: Set<String> = []
+        var offline: Set<String> = []
+        var statuses: [String: Int] = [:]
+        var watching: [String: String] = [:]
+        var bodies: [String: [String]] = [:]
+        var methods: [String: String] = [:]
     }
     private static let requests = Mutex(Requests())
 
@@ -384,6 +574,34 @@ private final class AccountTraktProtocol: StubURLProtocol, @unchecked Sendable {
 
     static func historyPages(_ id: String, pages: [String]) {
         requests.withLock { $0.history[id] = pages }
+    }
+
+    static func setOffline(_ id: String, _ offline: Bool) {
+        requests.withLock { if offline { $0.offline.insert(id) } else { $0.offline.remove(id) } }
+    }
+
+    static func setStatus(_ id: String, path: String, _ status: Int?) {
+        requests.withLock { $0.statuses[id + path] = status }
+    }
+
+    static func setWatching(_ id: String, _ body: String?) {
+        requests.withLock { $0.watching[id] = body }
+    }
+
+    /// Forgets the requests seen so far.
+    static func clear(_ id: String) {
+        requests.withLock { state in
+            state.counts = state.counts.filter { !$0.key.hasPrefix(id) }
+            state.bodies = state.bodies.filter { !$0.key.hasPrefix(id) }
+        }
+    }
+
+    static func bodies(_ id: String, path: String) -> [String] {
+        requests.withLock { $0.bodies[id + path] ?? [] }
+    }
+
+    static func method(_ id: String, path: String) -> String? {
+        requests.withLock { $0.methods[id + path] }
     }
 
     static func reject(_ id: String) {
@@ -410,28 +628,53 @@ private final class AccountTraktProtocol: StubURLProtocol, @unchecked Sendable {
                 requests.responses[key] = { @Sendable [weak self] in self?.respond() }
             }
             requests.counts[key, default: 0] += 1
+            requests.methods[key] = request.httpMethod
+            if let data = request.httpBodyStream.map(Self.read) ?? request.httpBody {
+                requests.bodies[key, default: []].append(String(decoding: data, as: UTF8.self))
+            }
             return requests.holds.contains(key)
         }
         if !held { respond() }
     }
 
+    private static func read(_ stream: InputStream) -> Data {
+        var data = Data()
+        stream.open()
+        defer { stream.close() }
+        var buffer = [UInt8](repeating: 0, count: 4096)
+        while stream.hasBytesAvailable {
+            let count = stream.read(&buffer, maxLength: buffer.count)
+            guard count > 0 else { break }
+            data.append(buffer, count: count)
+        }
+        return data
+    }
+
     private func respond() {
         guard let url = request.url else { return }
         let id = request.value(forHTTPHeaderField: "trakt-api-key") ?? request.value(forHTTPHeaderField: "fixture-account") ?? ""
+        if Self.requests.withLock({ $0.offline.contains(id) }) {
+            client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
+            return
+        }
         let histories = Self.requests.withLock { $0.history[id] ?? ["[]"] }
         let headers = url.path == "/sync/history" ? ["X-Pagination-Page-Count": String(histories.count)] : [:]
-        let status = Self.requests.withLock { $0.rejected.contains(id) } ? 401 : 200
+        let status = Self.requests.withLock { $0.statuses[id + url.path] ?? ($0.rejected.contains(id) ? 401 : 200) }
         guard let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: headers) else { return }
         let body: String
         switch url.path {
         case "/oauth/token":
             body = #"{"access_token":"refreshed","refresh_token":"next","expires_in":9999999999,"created_at":1790000000}"#
+        case "/users/me/watching":
+            body = Self.requests.withLock { $0.watching[id] } ?? ""
         case "/sync/history":
             let page = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
                 .first { $0.name == "page" }?.value.flatMap(Int.init) ?? 1
             body = histories.indices.contains(page - 1) ? histories[page - 1] : "[]"
         case "/meta/series/ttshow.json":
             body = #"{"meta":{"id":"ttshow","type":"series","name":"Remote show","runtime":"45 min","videos":[{"id":"ttshow:1:2","season":1,"episode":2}]}}"#
+        case "/meta/movie/tt1.json":
+            body = #"{"meta":{"id":"tt1","type":"movie","name":"Saved movie","runtime":"100 min"}}"#
         case "/meta/movie/tt2.json":
             body = #"{"meta":{"id":"tt2","type":"movie","name":"Remote movie","runtime":"100 min"}}"#
         default:
