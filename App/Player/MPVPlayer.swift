@@ -230,6 +230,12 @@ final class MPVPlayer {
         ] {
             check(mpv_set_option_string(handle, name, value), name)
         }
+        #if !os(macOS)
+        // mpv's iOS audio output mixes with other apps unless exclusive, and a mixable session
+        // never becomes the Now Playing app, so the Lock Screen and Control Center ignored it.
+        // (On the Mac the same option would take the audio device for itself.)
+        check(mpv_set_option_string(handle, "audio-exclusive", "yes"), "audio-exclusive")
+        #endif
         mpv_request_log_messages(handle, "warn")
 
         let status = mpv_initialize(handle)
