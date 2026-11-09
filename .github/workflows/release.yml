@@ -4,29 +4,83 @@ name: Release
 # and the SideStore source on GitHub Pages lists it, so SideStore offers it as an update.
 # SideStore signs the app on the phone with the user's own free Apple ID; the tvOS .ipa is for
 # Sideloadly and the like.
+# The three platforms build in parallel and nothing is published unless all of them and the
+# Core tests pass. Run it by hand on another branch to check a release build without publishing.
 on:
   push:
     branches: [main]
+    # Changes that don't touch the app would only offer users an identical update.
+    paths-ignore:
+      - '**.md'
+      - docs/**
+      - web/**
+      - UITests/**
+      - Tools/sync-gateway/**
+      - .github/workflows/ci.yml
+      - .github/workflows/web.yml
   workflow_dispatch:
 
 # One release at a time, in push order, so build numbers and the source stay consistent.
 concurrency:
-  group: release
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
-  contents: write
-  pages: write
-  id-token: write
+  contents: read
+
+env:
+  HOMEBREW_NO_AUTO_UPDATE: 1
 
 jobs:
-  release:
+  core:
+    name: Core tests
     runs-on: xcode-27
-    environment:
-      name: github-pages
-      url: ${{ steps.pages.outputs.page_url }}source.json
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      - name: Release publishing regressions
+        run: python3 -B -m unittest discover -s Tools -p test_publish_release.py
+      - run: swift test
+        working-directory: Core
+
+  ipa:
+    name: Build ${{ matrix.platform }}
+    runs-on: xcode-27
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        platform: [iOS, tvOS]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The build number is the commit count.
+          fetch-depth: 0
+      - run: brew install xcodegen
+      # Shared with CI, which restores what main saved.
+      - uses: actions/cache@v6
+        with:
+          path: .build/xcode/SourcePackages
+          key: spm-${{ hashFiles('project.yml', 'Vendor/MPVKit/Package.swift') }}
+      - run: Tools/build-ipa.sh ${{ matrix.platform }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: loge-${{ matrix.platform }}
+          path: .build/ipa/loge-${{ matrix.platform }}.ipa
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+          # Everything is under .build, which the action skips by default.
+          include-hidden-files: true
+
+  mac:
+    name: Build macOS
+    runs-on: xcode-27
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      build: ${{ steps.version.outputs.build }}
+    steps:
+      - uses: actions/checkout@v7
         with:
           # The build number is the commit count, and release notes go back to the last build.
           fetch-depth: 0
@@ -56,30 +110,76 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" > /dev/null
           echo "MAC_SIGNING_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
       - run: brew install xcodegen
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: .build/xcode/SourcePackages
-          key: spm-release-${{ hashFiles('project.yml', 'Vendor/MPVKit/Package.swift') }}
-      - run: Tools/build-ipa.sh iOS tvOS
+          key: spm-${{ hashFiles('project.yml', 'Vendor/MPVKit/Package.swift') }}
+      - uses: actions/cache@v6
+        with:
+          path: .build/dmg-background
+          key: dmg-background-${{ hashFiles('Tools/render-dmg.swift') }}
       - run: Tools/build-dmg.sh
-
-      - name: Publish the release
+      - id: version
+        run: |
+          plist=.build/xcode/Build/Products/Release/loge.app/Contents/Info.plist
+          echo "version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$plist")" >> "$GITHUB_OUTPUT"
+          echo "build=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$plist")" >> "$GITHUB_OUTPUT"
+      # The feed embeds the notes and is signed with Sparkle's tools, which only run on a Mac.
+      - name: Sign the Mac update
         env:
           GH_TOKEN: ${{ github.token }}
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          BUILD: ${{ steps.version.outputs.build }}
         run: |
-          plist=.build/xcode/Build/Products/Release-iphoneos/loge.app/Info.plist
-          version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$plist")
-          build=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$plist")
           # A failed publish can leave its tag behind. Only published releases
           # belong in the changelog baseline, excluding this build on a rerun.
           previous=$(gh release list --exclude-drafts --limit 100 --json tagName \
-            --jq "[.[] | select(.tagName != \"build-$build\")][0].tagName // empty")
+            --jq "[.[] | select(.tagName != \"build-$BUILD\")][0].tagName // empty")
           range=${previous:+$previous..}HEAD
-          git log --no-merges --format='- %s' -n 20 "$range" > notes.md
-          Tools/prepare-mac-update.sh "build-$build" notes.md
-          Tools/publish-release.sh "build-$build" "$version ($build)" "$GITHUB_SHA" notes.md \
-            .build/ipa/loge-iOS.ipa .build/ipa/loge-tvOS.ipa .build/dmg/loge-macOS.dmg .build/mac-update/appcast.xml
+          git log --no-merges --format='- %s' -n 20 "$range" > .build/notes.md
+          Tools/prepare-mac-update.sh "build-$BUILD" .build/notes.md
+      - uses: actions/upload-artifact@v7
+        with:
+          name: loge-macOS
+          path: |
+            .build/dmg/loge-macOS.dmg
+            .build/mac-update/appcast.xml
+            .build/notes.md
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+          # Everything is under .build, which the action skips by default.
+          include-hidden-files: true
+      - name: Remove the signing keychain
+        if: always() && env.MAC_SIGNING_KEYCHAIN != ''
+        run: security delete-keychain "$MAC_SIGNING_KEYCHAIN"
+
+  publish:
+    needs: [core, ipa, mac]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}source.json
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.mac.outputs.version }}
+          BUILD: ${{ needs.mac.outputs.build }}
+        run: |
+          Tools/publish-release.sh "build-$BUILD" "$VERSION ($BUILD)" "$GITHUB_SHA" artifacts/notes.md \
+            artifacts/loge-iOS.ipa artifacts/loge-tvOS.ipa artifacts/dmg/loge-macOS.dmg artifacts/mac-update/appcast.xml
           # Use immutable published bytes; rerunning an older release must not roll back the feed.
           mkdir -p site
           gh release download --pattern appcast.xml --dir site --clobber
@@ -93,12 +193,9 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/releases" --paginate --slurp | jq 'add' > releases.json
           # Pages is served on the account's custom domain; github.io redirects there over plain HTTP.
           python3 Tools/sidestore-source.py releases.json https://tjh.li/loge > site/source.json
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: site
       - id: pages
-        uses: actions/deploy-pages@v4
-      - name: Remove the signing keychain
-        if: always() && env.MAC_SIGNING_KEYCHAIN != ''
-        run: security delete-keychain "$MAC_SIGNING_KEYCHAIN"
+        uses: actions/deploy-pages@v5

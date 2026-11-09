@@ -29,10 +29,18 @@ if [[ ! -x "$tools/bin/python" ]]; then
     python3 -m venv "$tools"
 fi
 "$tools/bin/python" -m pip install --quiet 'dmgbuild==1.6.7'
-swift -module-cache-path .build/swift-module-cache Tools/render-dmg.swift "$out/background.tiff"
+# The background changes only with its script, and rendering it compiles Swift (about 15 s),
+# so it is named by the script's hash and kept (the release workflow caches the folder).
+backgrounds=.build/dmg-background
+background=$backgrounds/$(shasum -a 256 Tools/render-dmg.swift | cut -c1-16).tiff
+if [[ ! -f $background ]]; then
+    rm -rf "$backgrounds"
+    mkdir -p "$backgrounds"
+    swift -module-cache-path .build/swift-module-cache Tools/render-dmg.swift "$background"
+fi
 rm -f "$out/loge-macOS.dmg"
 "$tools/bin/dmgbuild" -s Tools/dmg-settings.py \
     -D app="$app" \
-    -D background="$out/background.tiff" loge "$out/loge-macOS.dmg"
+    -D background="$background" loge "$out/loge-macOS.dmg"
 
 ls -lh "$out/loge-macOS.dmg"
