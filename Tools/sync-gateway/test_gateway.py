@@ -9,7 +9,10 @@ from pathlib import Path
 
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
-from gateway import create_app, digest
+import hashlib
+import urllib.parse
+
+from gateway import AdminLogin, create_app, digest
 
 # The same examples the app's Core tests send and decode, so a field renamed on either side fails.
 CONTRACT = json.loads((Path(__file__).resolve().parents[2]
@@ -241,6 +244,80 @@ class GatewayTests(unittest.TestCase):
         self.admin.delete('/admin/access/' + invitation['id'], headers=self.admin_headers)
         result = self.public.post('/v2/redeem', json={'code': invitation['code'], 'deviceName': 'Phone'})
         self.assertEqual(result.status_code, 410)
+
+
+class ProviderLogin(AdminLogin):
+    """Answers as Pocket ID would, recording each request."""
+    def __init__(self, groups=('loge-admins',)):
+        super().__init__('https://id.example', 'loge-admin', 'loge-admins', 'Pocket ID')
+        self.groups = list(groups)
+        self.requests = []
+
+    def fetch(self, url, form=None, token=None):
+        self.requests.append((url, form, token))
+        if url == 'https://id.example/.well-known/openid-configuration':
+            return {'issuer': 'https://id.example', 'authorization_endpoint': 'https://id.example/authorize',
+                    'token_endpoint': 'https://id.example/api/oidc/token', 'userinfo_endpoint': 'https://id.example/api/oidc/userinfo'}
+        if url.endswith('/token'):
+            return {'access_token': 'access-' + form['code']}
+        if url.endswith('/userinfo') and token == 'access-good':
+            return {'sub': 'user-1', 'name': 'Tim', 'groups': self.groups}
+        raise OSError('unexpected request')
+
+
+class AdminSignInTests(unittest.TestCase):
+    def client(self, login):
+        return TestClient(create_app(MemoryStore(), mode='admin', admin_secret='a' * 40, admin_login=login),
+                          base_url='http://localhost:5986', follow_redirects=False)
+
+    def sign_in(self, admin, code='good'):
+        location = urllib.parse.urlsplit(admin.get('/oidc/login').headers['location'])
+        query = dict(urllib.parse.parse_qsl(location.query))
+        return query, admin.get('/oidc/callback', params={'state': query['state'], 'code': code})
+
+    def test_group_member_signs_in_with_pkce_and_signs_out(self):
+        login = ProviderLogin()
+        admin = self.client(login)
+        self.assertEqual(admin.get('/admin/session').json(), {'signIn': True, 'provider': 'Pocket ID', 'name': None})
+        query, callback = self.sign_in(admin)
+        self.assertEqual((query['client_id'], query['redirect_uri'], query['code_challenge_method']),
+                         ('loge-admin', 'http://localhost:5986/oidc/callback', 'S256'))
+        verifier = next(form for url, form, _ in login.requests if url.endswith('/token'))['code_verifier']
+        challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b'=').decode()
+        self.assertEqual(challenge, query['code_challenge'])
+        self.assertTrue(callback.headers['location'].startswith('/#session='))
+        session = {'X-Admin-Session': callback.headers['location'].split('=', 1)[1]}
+        self.assertEqual(admin.get('/admin/session', headers=session).json()['name'], 'Tim')
+        self.assertEqual(admin.get('/admin/accounts', headers=session).status_code, 200)
+        self.assertEqual(admin.get('/admin/accounts', headers=session | {'Origin': 'http://localhost:3000'}).status_code, 403)
+        self.assertEqual(admin.get('/oidc/callback', params={'state': query['state'], 'code': 'good'}).headers['location'], '/#signin=failed')
+        admin.delete('/admin/session', headers=session)
+        self.assertEqual(admin.get('/admin/accounts', headers=session).status_code, 401)
+
+    def test_users_outside_the_group_and_failed_sign_ins_get_no_session(self):
+        _, callback = self.sign_in(self.client(ProviderLogin(groups=['media'])))
+        self.assertEqual(callback.headers['location'], '/#signin=denied')
+        _, callback = self.sign_in(self.client(ProviderLogin()), code='rejected')
+        self.assertEqual(callback.headers['location'], '/#signin=failed')
+        admin = self.client(ProviderLogin())
+        self.assertEqual(admin.get('/oidc/callback', params={'state': 'forged', 'code': 'good'}).headers['location'], '/#signin=failed')
+        self.assertEqual(admin.get('/admin/accounts', headers={'X-Admin-Session': 'forged'}).status_code, 401)
+
+    def test_token_still_works_while_the_provider_is_down(self):
+        login = ProviderLogin()
+        login.fetch = lambda *arguments, **keywords: (_ for _ in ()).throw(OSError('down'))
+        admin = self.client(login)
+        self.assertEqual(admin.get('/oidc/login').headers['location'], '/#signin=unavailable')
+        self.assertEqual(admin.get('/admin/accounts', headers={'X-Admin-Token': 'a' * 40}).status_code, 200)
+
+    def test_sign_in_is_off_without_configuration_and_requires_https(self):
+        admin = TestClient(create_app(MemoryStore(), mode='admin', admin_secret='a' * 40), base_url='http://localhost')
+        self.assertEqual(admin.get('/admin/session').json()['signIn'], False)
+        self.assertEqual(admin.get('/oidc/login').status_code, 404)
+        with self.assertRaises(ValueError):
+            AdminLogin('http://id.example', 'loge-admin', 'loge-admins')
+        with self.assertRaises(ValueError):
+            AdminLogin('https://id.example', 'loge-admin', '')
 
 
 if __name__ == '__main__':

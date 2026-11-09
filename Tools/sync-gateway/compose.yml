@@ -50,6 +50,11 @@ services:
       SYNC_DATABASE_URL: http://couchdb:5984/loge
       SYNC_DATABASE_CREDENTIAL_FILE: /run/secrets/gateway.json
       SYNC_ADMIN_SECRET_FILE: /run/secrets/admin-token
+      # Optional sign-in through an OpenID Connect provider such as Pocket ID; see README.
+      SYNC_ADMIN_OIDC_ISSUER: ${SYNC_ADMIN_OIDC_ISSUER:-}
+      SYNC_ADMIN_OIDC_CLIENT_ID: ${SYNC_ADMIN_OIDC_CLIENT_ID:-}
+      SYNC_ADMIN_OIDC_GROUP: ${SYNC_ADMIN_OIDC_GROUP:-}
+      SYNC_ADMIN_OIDC_NAME: ${SYNC_ADMIN_OIDC_NAME:-}
       SYNC_PUBLIC_ENDPOINT: ${SYNC_PUBLIC_ENDPOINT:?Set the public HTTPS endpoint ending in /v2}
     volumes:
       - ./secrets/gateway.json:/run/secrets/gateway.json:ro
