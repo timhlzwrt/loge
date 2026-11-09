@@ -44,6 +44,14 @@ struct NextEpisodeOverlay: View {
     let next: PlaybackRequest
     let hasEnded: Bool
     let play: () -> Void
+    #if os(tvOS)
+    /// Which button has focus. The card sits on the remote's surface, so the player moves focus
+    /// here itself, as the focus engine can't.
+    let focus: FocusState<Focus?>.Binding
+    let onCancel: () -> Void
+
+    enum Focus: Hashable { case play, cancel }
+    #endif
 
     @State private var secondsLeft = 10
     @State private var cancelled = false
@@ -66,10 +74,21 @@ struct NextEpisodeOverlay: View {
                         Button("Play Now", action: play)
                             .buttonStyle(.glassProminent)
                             .foregroundStyle(.black)
-                        Button("Cancel") { cancelled = true }
+                            #if os(tvOS)
+                            .focused(focus, equals: .play)
+                            #endif
+                        Button("Cancel") {
+                            cancelled = true
+                            #if os(tvOS)
+                            onCancel()
+                            #endif
+                        }
                             .buttonStyle(.glass)
                             #if os(macOS)
                             .tint(.clear)
+                            #endif
+                            #if os(tvOS)
+                            .focused(focus, equals: .cancel)
                             #endif
                     }
                     #if !os(tvOS)

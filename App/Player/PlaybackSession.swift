@@ -19,6 +19,8 @@ final class PlaybackSession {
     var isScreenPresented = false
     /// The source that was asked for didn't open, and another is being tried.
     private(set) var isTryingAnotherSource = false
+    /// The sources being listed to switch to another file; the Mac's Playback menu opens it too.
+    var choosingSource: SourcesRoute?
 
     @ObservationIgnored private let library: LibraryStore
     @ObservationIgnored private let addons: AddonStore
@@ -28,6 +30,7 @@ final class PlaybackSession {
     @ObservationIgnored private var isLookingUpNext = false
     @ObservationIgnored private var lastRecordedPosition: Double = 0
     @ObservationIgnored private var hasRememberedSource = false
+    @ObservationIgnored private var hasReportedStart = false
     @ObservationIgnored private var nowPlaying: NowPlaying?
     /// Found while the file opens; mpv can only add them once it's open.
     @ObservationIgnored private var externalSubtitles: Task<[ExternalSubtitle], Never>?
@@ -70,6 +73,7 @@ final class PlaybackSession {
         pictureInPicture.onRestore = { [weak self] completion in
             // Answered once the screen is back, so the window shrinks into it.
             guard let self else { completion(false); return }
+            if isScreenPresented { completion(true); return }
             pendingRestore = completion
             isScreenPresented = true
         }
@@ -105,6 +109,7 @@ final class PlaybackSession {
         scrobble(.stop)
         tasks.forEach { $0.cancel() }
         tasks = []
+        choosingSource = nil
         openingTimeout?.cancel()
         externalSubtitles?.cancel()
         externalSubtitles = nil
@@ -128,6 +133,26 @@ final class PlaybackSession {
         current = nil
         next = nil
         episodes = []
+    }
+
+    #if DEBUG
+    /// The playback fixture has no addon to look the next episode up from.
+    func offerNextForTesting(_ request: PlaybackRequest) { next = request }
+    #endif
+
+    var canChooseSource: Bool { current?.item != nil }
+
+    /// Lists the sources for what's playing; not for playback that has no title behind it.
+    func chooseSource() {
+        guard let current, let item = current.item else { return }
+        choosingSource = SourcesRoute(item: item, title: current.title)
+    }
+
+    /// Opens the same file again after a failure, from where it stopped.
+    func retry() {
+        guard var request = current else { return }
+        if lastRecordedPosition > 0 { request.startAt = lastRecordedPosition }
+        load(request)
     }
 
     func playNext() {
@@ -160,7 +185,8 @@ final class PlaybackSession {
     }
 
     func sceneDidEnterBackground() {
-        recordProgress()
+        // The app sends these while it still has time, rather than each saving starting its own.
+        recordProgress(flushSync: false)
         isInBackground = true
         if let pictureInPicture {
             // AVKit may deliver its start callback after the scene backgrounds.
@@ -169,6 +195,8 @@ final class PlaybackSession {
             if pictureInPicture.isPossible && player?.status == .playing { return }
             #endif
         }
+        // mpv reports the pause asynchronously, which can be too late to send before suspension.
+        scrobble(.pause)
         player?.pause()
         player?.setVideoEnabled(false)
     }
@@ -176,6 +204,12 @@ final class PlaybackSession {
     func sceneDidBecomeActive() {
         guard isInBackground else { return }
         isInBackground = false
+        // The window opened by itself on leaving, so coming back undoes that. One the viewer
+        // opened to browse beside stays.
+        if let pictureInPicture, pictureInPicture.isActive, !pictureInPicture.wasStartedByViewer {
+            isScreenPresented = true
+            pictureInPicture.returnToScreen()
+        }
         player?.restoreVideoOutput()
     }
 
@@ -193,6 +227,7 @@ final class PlaybackSession {
         next = nil
         isLookingUpNext = false
         hasRememberedSource = false
+        hasReportedStart = false
         lastRecordedPosition = 0
         let defaults = UserDefaults.standard
         let audio = defaults.string(forKey: PlaybackPreferences.audioKey) ?? PlaybackPreferences.defaultAudioLanguage
@@ -261,7 +296,12 @@ final class PlaybackSession {
         // Often enough that a crash or force-quit loses little, rarely enough not to churn storage.
         if abs(position - lastRecordedPosition) >= 10 {
             recordProgress(flushSync: false)
+            if let item = current?.item, let progress = reportableProgress(for: item) {
+                trakt.keepProgress(item, progress: progress)
+            }
         }
+        // Held back while sampling a source; see `reportableProgress`.
+        if !hasReportedStart && player?.status == .playing { scrobble(.start) }
         lookUpNextIfDue()
     }
 
@@ -318,12 +358,18 @@ final class PlaybackSession {
 
     /// Lets Trakt follow along; the account keeps its completion threshold aligned with the library.
     private func scrobble(_ action: TraktClient.ScrobbleAction) {
-        guard estimatedResumeFraction == nil, let item = current?.item,
-              let player, let duration = player.duration, duration > 0 else { return }
-        // Sampling a source isn't saved here; reported, its few seconds would replace another
-        // device's real position.
-        guard action == .start || library.recordsProgress(for: item.id, at: player.position) else { return }
-        trakt.scrobble(action, item, progress: player.position / duration * 100)
+        guard let item = current?.item, let progress = reportableProgress(for: item) else { return }
+        hasReportedStart = action == .start
+        trakt.scrobble(action, item, progress: progress)
+    }
+
+    /// 0–100, once playback is worth telling Trakt about. Sampling a source isn't saved here, and
+    /// reporting it would cost another device its position: a pause replaces that position, and
+    /// a start removes it.
+    private func reportableProgress(for item: WatchItem) -> Double? {
+        guard estimatedResumeFraction == nil, let player, let duration = player.duration, duration > 0,
+              library.recordsProgress(for: item.id, at: player.position) else { return nil }
+        return player.position / duration * 100
     }
 
     /// Progress from another device is a percentage; now that the real duration is known,

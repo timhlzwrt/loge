@@ -338,8 +338,7 @@ Play and Resume no longer open a saved stream URL: they wait for the fresh list 
 file or release from it, or stay on the list. ElfHosted refused an old link with its own error.
 
 8 November, player, sync and tests: on tvOS, up moves focus to a skip offer (it sits on the
-surface, so the focus engine can't reach it) and focus shows on unselected tracks. Up Next on
-tvOS is likely unreachable the same way; not fixed, part of the player proposal. Sync fixes:
+surface, so the focus engine can't reach it) and focus shows on unselected tracks. Sync fixes:
 removed titles stay removed while Trakt lists older paused progress (`mergeRemote` checks
 removal dates); progress saved during an upload isn't a conflict; artwork filled on one device
 survives merging; a marked-watched placeholder duration of 1 isn't used for Trakt progress; a
@@ -347,6 +346,27 @@ token Trakt rejects (401) signs out; pause and stop aren't scrobbled below `reco
 Background recovery now checks the picture's pixels; a negative control showed the older test
 couldn't see a black picture. iPhone simulators lack Picture in Picture, so iPad exercises the
 path that keeps playing.
+
+9 November, player and Trakt sweep. Player: on tvOS a skip offer takes focus as it appears, so Select
+skips; left, right and down still seek and open the panel from it. Up Next's buttons are reachable with up
+(focused by themselves at the end, where Select has nothing else to do). The remote surface stands aside
+while the panel or Up Next has focus, because lying under their buttons it beat the buttons beside the
+focused one; the same fix makes Info's column reachable. The panel fits its content and lists Sources. The
+sources sheet, `PlaybackSession.choosingSource`, now serves all platforms: the Mac has it in More and the
+Playback menu. Audio keeps tracks and timing; Speed and Playback Info moved to a new More menu, with
+`.menuOrder(.fixed)` and timing above long track lists. iPhone landscape puts the buttons on the timeline row.
+Zoom is a button on iPhone and Mac. Failures explain themselves and offer Try Again (`PlaybackSession.retry`).
+Picture in Picture that opened by itself on leaving closes on return to the full-screen player; one opened
+with the button stays. The Mac shows the title in full screen, changes the full-screen icon and toggles on
+double-click (built, not run here). Trakt: `TraktChange` is a saved queue, sent on reconnect, foreground and
+leaving (a background task); old positions lose to newer ones on Trakt, late finished plays go to history with
+their real time, removals `DELETE /sync/playback/{id}`. Progress Trakt listed and has since dropped is removed
+on other devices unless played here since, queued, or playing per `/users/me/watching`. `scrobble/start` does
+clear paused progress (official docs), so `start` now waits for `recordsProgress` like pause and stop, and the
+position is queued every 10 s in case the app is killed before the pause. Account sync: same-title progress
+takes the newest; removed-versus-played still asks. Packaged build 127 and both feeds advertise 26.0.
+`Test Streams` surviving uninstall on the iPhone 18 Pro simulator is a stale
+`data/Library/Preferences/li.tjh.MediaApp.plist` outside the app container (3 November): a fresh install reads it.
 
 Verification for these tasks: reuse `LibraryStoreTests`, `TraktTests`,
 `UITests/FlowTests.swift`, `UITests/PlaybackRegressionTests.swift`,

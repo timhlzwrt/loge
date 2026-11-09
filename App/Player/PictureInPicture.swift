@@ -9,6 +9,8 @@ final class PictureInPicture: NSObject {
     private(set) var isStarting = false
     private(set) var isPossible = false
     private(set) var failureMessage: String?
+    /// Opened with the button, rather than by itself on leaving the app.
+    private(set) var wasStartedByViewer = false
 
     /// The floating window took over; the player screen can close.
     @ObservationIgnored var onStart: () -> Void = {}
@@ -71,7 +73,15 @@ final class PictureInPicture: NSObject {
         isStopping = false
         failureMessage = nil
         isStarting = true
+        wasStartedByViewer = true
         controller?.startPictureInPicture()
+    }
+
+    /// Closes the window without ending playback, as its own restore button does.
+    func returnToScreen() {
+        guard isActive else { return }
+        isRestoring = true
+        controller?.stopPictureInPicture()
     }
 
     func stop() {
@@ -135,6 +145,7 @@ extension PictureInPicture: AVPictureInPictureControllerDelegate {
             guard let self else { return }
             isStarting = false
             isActive = false
+            wasStartedByViewer = false
             if !isRestoring && !isStopping { onClose() }
             isRestoring = false
         }
@@ -148,6 +159,7 @@ extension PictureInPicture: AVPictureInPictureControllerDelegate {
             guard let self else { return }
             isStarting = false
             isActive = false
+            wasStartedByViewer = false
             if !isStopping {
                 failureMessage = "Picture in Picture couldn't start. Try again while the video is playing."
                 onFailure()

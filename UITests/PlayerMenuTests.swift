@@ -21,10 +21,13 @@ final class PlayerMenuTests: XCTestCase {
         card.tap()
 
         // The controls show while the stream loads, so the menu is reachable straight away.
-        let options = app.buttons["Audio"]
+        let options = app.buttons["More"]
         XCTAssertTrue(options.waitForExistence(timeout: 15))
         options.tap()
-        XCTAssertTrue(app.buttons["Normal"].waitForExistence(timeout: 5), "Menu didn't open")
+        let speed = app.buttons["Speed"]
+        XCTAssertTrue(speed.waitForExistence(timeout: 5), "Menu didn't open")
+        speed.tap()
+        XCTAssertTrue(app.buttons["Normal"].waitForExistence(timeout: 5), "Speeds didn't open")
 
         // Long enough for playback to start and the 4-second auto-hide to pass.
         sleep(12)

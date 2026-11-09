@@ -339,16 +339,9 @@ final class PlaybackRegressionTests: XCTestCase {
         screenshot("\(name)-away")
         app.activate()
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
-        // Going Home with Picture in Picture leaves the video floating over the page it came
-        // from; the player screen comes back through the window's restore button.
-        if !position.waitForExistence(timeout: 4) {
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.77, dy: 0.1)).tap()
-            let restore = XCUIApplication(bundleIdentifier: "com.apple.springboard").buttons
-                .matching(NSPredicate(format: "label IN %@", ["Restore Full Screen", "Vollbildmodus wiederherstellen"])).firstMatch
-            XCTAssertTrue(restore.waitForExistence(timeout: 5))
-            restore.tap()
-            XCTAssertTrue(position.waitForExistence(timeout: 10))
-        }
+        // The window that opens by itself on going Home closes again on coming back.
+        XCTAssertTrue(position.waitForExistence(timeout: 10), "The player screen didn't come back")
+        screenshot("\(name)-returned")
         if !app.buttons["Close"].isHittable { app.tap() }
 
         // Without Picture in Picture, as on iPhone simulators, leaving pauses playback.
@@ -372,6 +365,87 @@ final class PlaybackRegressionTests: XCTestCase {
         XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 5), "Controls stopped responding")
         app.buttons["Close"].tap()
         XCTAssertTrue(app.buttons["Play fixture"].waitForExistence(timeout: 5))
+    }
+
+    @MainActor
+    func testFailureExplainsItselfAndTriesAgain() throws {
+        guard let url = ProcessInfo.processInfo.environment["PLAYBACK_FIXTURE_URL"] else {
+            throw XCTSkip("Set TEST_RUNNER_PLAYBACK_FIXTURE_URL for the isolated playback fixture.")
+        }
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments += ["--playback-ui-test"]
+        app.launchEnvironment["PLAYBACK_FIXTURE_URL"] = url + "?fail-once=\(UUID().uuidString)"
+        app.launch()
+        defer { app.terminate() }
+        app.buttons["Play fixture"].tap()
+        XCTAssertTrue(app.staticTexts["Couldn't play this source"].waitForExistence(timeout: 30))
+        screenshot("failure")
+        XCTAssertFalse(app.staticTexts["Loading failed."].exists)
+        app.buttons["Try Again"].tap()
+        let position = app.staticTexts["fixture-position"]
+        wait(for: [expectation(for: NSPredicate { _, _ in
+            (Int(position.value as? String ?? "") ?? -1) >= 1
+        }, evaluatedWith: app)], timeout: 15)
+        XCTAssertFalse(app.staticTexts["Couldn't play this source"].exists)
+    }
+
+    /// The buttons share the timeline's row in iPhone landscape, and every menu's actions can be reached.
+    @MainActor
+    func testPhoneLandscapeControlsAndMenus() throws {
+        guard UIDevice.current.userInterfaceIdiom == .phone else { throw XCTSkip("iPhone layout.") }
+        guard let url = ProcessInfo.processInfo.environment["PLAYBACK_FIXTURE_URL"] else {
+            throw XCTSkip("Set TEST_RUNNER_PLAYBACK_FIXTURE_URL for the isolated playback fixture.")
+        }
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments += ["--playback-ui-test"]
+        app.launchEnvironment["PLAYBACK_FIXTURE_URL"] = url
+        app.launch()
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer {
+            app.terminate()
+            XCUIDevice.shared.orientation = .portrait
+        }
+        app.buttons["Play fixture"].tap()
+        let position = app.staticTexts["fixture-position"]
+        XCTAssertTrue(position.waitForExistence(timeout: 30))
+        wait(for: [expectation(for: NSPredicate { _, _ in
+            (Int(position.value as? String ?? "") ?? -1) >= 2
+        }, evaluatedWith: app)], timeout: 15)
+        if !app.buttons["Pause"].isHittable { app.tap() }
+        app.buttons["Pause"].tap()
+        XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 5))
+        screenshot("phone-landscape-controls")
+
+        app.buttons["Audio"].tap()
+        let timing = app.buttons["Audio Timing…"]
+        XCTAssertTrue(timing.waitForExistence(timeout: 5))
+        screenshot("phone-landscape-audio-menu")
+        XCTAssertTrue(timing.isHittable, "Audio Timing is below the visible rows")
+        timing.tap()
+        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+        screenshot("phone-landscape-timing-panel")
+        app.buttons["Done"].tap()
+
+        let slider = app.sliders["Playback position"]
+        XCTAssertTrue(slider.waitForExistence(timeout: 5))
+        XCTAssertLessThan(abs(app.buttons["Audio"].frame.midY - slider.frame.midY), 30, "Buttons aren't on the timeline's row")
+
+        XCTAssertTrue(app.buttons["Zoom to Fill"].isHittable)
+        app.buttons["Zoom to Fill"].tap()
+        XCTAssertTrue(app.buttons["Fit to Screen"].waitForExistence(timeout: 3))
+        screenshot("phone-landscape-zoomed")
+        app.buttons["Fit to Screen"].tap()
+
+        app.buttons["More"].tap()
+        let info = app.buttons["Playback Info…"]
+        XCTAssertTrue(info.waitForExistence(timeout: 5))
+        screenshot("phone-landscape-more-menu")
+        XCTAssertTrue(info.isHittable, "Playback Info is below the visible rows")
+        info.tap()
+        XCTAssertTrue(app.staticTexts["Playback Info"].waitForExistence(timeout: 5))
+        screenshot("phone-landscape-playback-info")
     }
 
     /// Average brightness (0–255) left of centre, clear of the controls: near black when

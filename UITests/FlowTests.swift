@@ -81,7 +81,7 @@ final class FlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 30))
         let position = app.sliders["Playback position"].value as? String
         XCTAssertNotNil(position)
-        app.buttons["Audio"].tap()
+        app.buttons["More"].tap()
         app.buttons["Playback Info…"].tap()
         XCTAssertTrue(app.staticTexts["Playback Info"].waitForExistence(timeout: 5))
         screenshot("4k-playback-info")
@@ -521,7 +521,7 @@ final class FlowTests: XCTestCase {
         XCTAssertNotEqual(app.sliders["Playback position"].value as? String, position,
                           "Playback did not advance after PiP skips")
         screenshot("pip-skips-playing")
-        app.buttons["Audio"].tap()
+        app.buttons["More"].tap()
         app.buttons["Playback Info…"].tap()
         XCTAssertTrue(app.staticTexts["Video bitrate"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Audio bitrate"].exists)
@@ -676,7 +676,7 @@ final class FlowTests: XCTestCase {
         XCTAssertNotEqual(app.sliders["Playback position"].value as? String, initialPosition,
                           "Playback position did not advance while switching tracks")
         screenshot("tracks-playing")
-        app.buttons["Audio"].tap()
+        app.buttons["More"].tap()
         app.buttons["Playback Info…"].tap()
         XCTAssertTrue(app.staticTexts["Hardware decoder"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Buffered"].exists)

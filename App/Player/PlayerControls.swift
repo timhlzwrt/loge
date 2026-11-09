@@ -21,9 +21,13 @@ struct PlayerControls: View {
     /// Opens the list of sources for what's playing; nil when there's no list to go back to.
     let onChooseSource: (() -> Void)?
     let onInteract: () -> Void
+    /// In full screen the Mac's title bar, and the title in it, is gone.
+    let isFullScreen: Bool
+    let onToggleFullScreen: () -> Void
 
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     #endif
 
     var body: some View {
@@ -45,10 +49,18 @@ struct PlayerControls: View {
                 .frame(height: 140)
             Spacer(minLength: 0)
             LinearGradient(colors: [.clear, .black.opacity(0.7)], startPoint: .top, endPoint: .bottom)
-                .frame(height: 220)
+                .frame(height: bottomScrimHeight)
         }
         .ignoresSafeArea()
         .allowsHitTesting(false)
+    }
+
+    private var bottomScrimHeight: CGFloat {
+        #if os(iOS)
+        isPhoneLandscape ? 130 : 220
+        #else
+        220
+        #endif
     }
 
     // MARK: tvOS
@@ -71,6 +83,8 @@ struct PlayerControls: View {
     // MARK: iPhone and iPad
 
     #if os(iOS)
+    private var isPhoneLandscape: Bool { verticalSizeClass == .compact }
+
     private var phoneBody: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
@@ -98,18 +112,17 @@ struct PlayerControls: View {
             if let kind = adjustingTiming {
                 TimingPanel(player: player, kind: kind, onInteract: onInteract) { adjustingTiming = nil }
                     .frame(maxWidth: .infinity)
+            } else if isPhoneLandscape {
+                // Height is what's short here, and every row taken from it covers the picture.
+                HStack(spacing: 12) {
+                    timeline
+                    menuButtons
+                }
             } else {
                 timeline
                 HStack {
                     Spacer()
-                    GlassCapsule {
-                        SubtitlesMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen, adjustingTiming: $adjustingTiming)
-                        AudioMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen, adjustingTiming: $adjustingTiming)
-                        if let onChooseSource {
-                            Button("Sources", systemImage: "list.bullet", action: onChooseSource)
-                                .modifier(CapsuleIcon())
-                        }
-                    }
+                    menuButtons
                 }
                 .padding(.top, 12)
             }
@@ -128,6 +141,20 @@ struct PlayerControls: View {
         .foregroundStyle(.white)
         .buttonStyle(.plain)
         .background { scrims }
+    }
+
+    private var menuButtons: some View {
+        GlassCapsule {
+            SubtitlesMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen, adjustingTiming: $adjustingTiming)
+            AudioMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen, adjustingTiming: $adjustingTiming)
+            MoreMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen)
+            ZoomButton(player: player, onInteract: onInteract)
+                .modifier(CapsuleIcon())
+            if let onChooseSource {
+                Button("Sources", systemImage: "list.bullet", action: onChooseSource)
+                    .modifier(CapsuleIcon())
+            }
+        }
     }
 
     /// Plain symbols, no circles: the picture is the background.
@@ -162,9 +189,17 @@ struct PlayerControls: View {
     // MARK: Mac
 
     #if os(macOS)
-    /// One floating capsule at the bottom; the title is in the window's title bar.
+    /// One floating capsule at the bottom; the title is in the window's title bar until full screen.
     private var macBody: some View {
         VStack(spacing: 12) {
+            if isFullScreen {
+                Text(title)
+                    .font(.title3.weight(.semibold))
+                    .lineLimit(1)
+                    .shadow(color: .black.opacity(0.6), radius: 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding([.horizontal, .top], 24)
+            }
             Spacer()
             if let kind = adjustingTiming {
                 TimingPanel(player: player, kind: kind, onInteract: onInteract) { adjustingTiming = nil }
@@ -190,12 +225,14 @@ struct PlayerControls: View {
                     .padding(.horizontal, 6)
                 SubtitlesMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen, adjustingTiming: $adjustingTiming)
                 AudioMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen, adjustingTiming: $adjustingTiming)
+                MoreMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen, onChooseSource: onChooseSource)
+                ZoomButton(player: player, onInteract: onInteract)
                 if let pictureInPicture, pictureInPicture.isPossible {
                     Button("Picture in Picture", systemImage: "pip.enter", action: pictureInPicture.start)
                 }
-                Button("Full Screen", systemImage: "arrow.up.left.and.arrow.down.right") {
-                    NSApp.keyWindow?.toggleFullScreen(nil)
-                }
+                Button(isFullScreen ? "Exit Full Screen" : "Full Screen",
+                       systemImage: isFullScreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
+                       action: onToggleFullScreen)
             }
             .labelStyle(.iconOnly)
             .font(.system(size: 15, weight: .medium))
@@ -267,16 +304,23 @@ struct PlayerControls: View {
                     Spacer()
                     Text("−" + format(duration - position, longForm: longForm))
                 }
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
+                .font(timeFont)
             }
             #endif
         } else {
             // Live streams and files still loading have no duration to scrub through.
             Text(format(player.position, longForm: false))
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
+                .font(timeFont)
         }
+    }
+
+    /// Times are read at a glance over bright frames, on Apple TV from across the room.
+    private var timeFont: Font {
+        #if os(tvOS)
+        .callout.monospacedDigit().weight(.medium)
+        #else
+        .caption.monospacedDigit().weight(.medium)
+        #endif
     }
 
     #if !os(tvOS)

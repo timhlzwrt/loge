@@ -12,6 +12,7 @@ struct PlayerPanel: View {
     let title: String
     let player: MPVPlayer
     let onInteract: () -> Void
+    let onChooseSource: (() -> Void)?
     @State private var tab = Tab.subtitles
     @State private var showsPlaybackInfo = false
     @FocusState private var focusedTab: Tab?
@@ -36,8 +37,12 @@ struct PlayerPanel: View {
                 case .audio: audio
                 }
             }
+            // Only as tall as what the tab holds; two tracks needn't cover the picture.
+            .fixedSize(horizontal: false, vertical: true)
             .padding(36)
             .frame(width: 1100, alignment: .topLeading)
+            // Down from a tab lands here even with nothing straight below it, as on Info.
+            .focusSection()
             .glassEffect(in: .rect(cornerRadius: 36))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -62,6 +67,9 @@ struct PlayerPanel: View {
                 Button(player.isZoomedToFill ? "Fit to Screen" : "Zoom to Fill") {
                     player.setZoomToFill(!player.isZoomedToFill)
                     onInteract()
+                }
+                if let onChooseSource {
+                    Button("Sources", action: onChooseSource)
                 }
                 Button("Playback Info") { showsPlaybackInfo = true; onInteract() }
             }
