@@ -390,7 +390,7 @@ final class PlaybackRegressionTests: XCTestCase {
         XCTAssertFalse(app.staticTexts["Couldn't play this source"].exists)
     }
 
-    /// The buttons share the timeline's row in iPhone landscape, and every menu's actions can be reached.
+    /// The buttons sit beside the title above the timeline in iPhone landscape, and every menu's actions can be reached.
     @MainActor
     func testPhoneLandscapeControlsAndMenus() throws {
         guard UIDevice.current.userInterfaceIdiom == .phone else { throw XCTSkip("iPhone layout.") }
@@ -428,9 +428,9 @@ final class PlaybackRegressionTests: XCTestCase {
         screenshot("phone-landscape-timing-panel")
         app.buttons["Done"].tap()
 
-        let slider = app.sliders["Playback position"]
-        XCTAssertTrue(slider.waitForExistence(timeout: 5))
-        XCTAssertLessThan(abs(app.buttons["Audio"].frame.midY - slider.frame.midY), 30, "Buttons aren't on the timeline's row")
+        let timeline = app.otherElements["Playback position"]
+        XCTAssertTrue(timeline.waitForExistence(timeout: 5))
+        XCTAssertLessThanOrEqual(app.buttons["Audio"].frame.maxY, timeline.frame.minY, "Buttons aren't above the timeline")
 
         XCTAssertTrue(app.buttons["Zoom to Fill"].isHittable)
         app.buttons["Zoom to Fill"].tap()
