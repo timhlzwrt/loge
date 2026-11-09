@@ -45,7 +45,7 @@ struct AboutSection: View {
 private struct BuildInfo {
     let commit: String?
     let date: Date?
-    /// Nil on main, and for the detached checkouts the nightly job and install script build in.
+    /// Nil on main, and for the detached checkout the install script builds in.
     let branch: String?
     let isModified: Bool
 

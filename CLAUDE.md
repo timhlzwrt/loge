@@ -30,7 +30,7 @@ accent, system font, no cards/gradients/badges.
   scripts or build step; screenshots are web-sized copies from `docs/screenshots`. Hosted on
   Cloudflare Pages (project `loge`); `.github/workflows/web.yml` deploys it when `web/` changes on main.
 - `Tools/run-device.sh` — Debug build onto the connected iPhone/iPad with the free Personal Team.
-- `Tools/install.sh` — Release build of origin/main (in the nightly checkout) onto a device
+- `Tools/install.sh` — Release build of origin/main (in its own checkout, `.build/install`) onto a device
   chosen from a menu: a reachable iPhone/iPad, the Apple TV via atvloadly, or all.
 - `Tools/test-addon.py` — local stream addon at `http://127.0.0.1:8765/manifest.json` with
   test streams (MKV, HEVC, multi-track HLS, header-protected, broken, torrent).
@@ -59,18 +59,15 @@ Tools/build-ipa.sh [iOS|tvOS]                       # unsigned .ipa files in .bu
 Tools/install-tv.sh                                 # build tvOS, install on the Apple TV via atvloadly
 Tools/run-device.sh [--console|--no-launch]         # build, install, launch on the iPhone/iPad
 Tools/install.sh [--here]                           # latest main (or this checkout) on a device picked from a menu
-DEVICE=<udid> Tools/nightly-deploy.sh --install     # nightly install of main on both (launchd)
 ```
 
 `run-device.sh` signs with the free Personal Team signed in to Xcode (Settings > Accounts);
 the phone needs Developer Mode on (Settings > Privacy & Security) and the developer trusted
 once (Settings > General > VPN & Device Management). Free installs expire after 7 days.
 
-Devices are installed without a paid account. `nightly-deploy.sh` runs at 02:30 from launchd
-in its own checkout (`.build/nightly` of the main repo): when origin/main moved it installs a
-Release build on the Apple TV via `install-tv.sh` and on the iPhone over Wi-Fi via
-`run-device.sh`, and it reinstalls the iPhone after 5 days so the free signature never lapses.
-It logs to `~/Library/Logs/loge-nightly.log` and shows a notification when an install fails.
+Devices are installed without a paid account, normally from the SideStore source (the release
+of each push to main); the 02:30 nightly install (`nightly-deploy.sh`, launchd) was removed
+on 9 November for that reason. `install.sh` remains for installing a build by hand.
 atvloadly runs on a server on the home network (`ATVLOADLY`, default in `install-tv.sh`, set up
 in a separate infrastructure repo); it re-signs every night 03:00–06:30, and `install-tv.sh` uploads a
 new build to it. A free Apple ID allows 3 sideloaded apps at once across Xcode, Sideloadly and
