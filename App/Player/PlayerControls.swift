@@ -163,8 +163,11 @@ struct PlayerControls: View {
     private var menuButtons: some View {
         GlassCapsule {
             SubtitlesMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen, adjustingTiming: $adjustingTiming)
+                .equatable()
             AudioMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen, adjustingTiming: $adjustingTiming)
+                .equatable()
             MoreMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen)
+                .equatable()
             ZoomButton(player: player, onInteract: onInteract)
                 .modifier(CapsuleIcon())
             if let onChooseSource {
@@ -246,8 +249,11 @@ struct PlayerControls: View {
                 timeline
                     .padding(.horizontal, 6)
                 SubtitlesMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen, adjustingTiming: $adjustingTiming)
+                    .equatable()
                 AudioMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen, adjustingTiming: $adjustingTiming)
+                    .equatable()
                 MoreMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen, onChooseSource: onChooseSource)
+                    .equatable()
                 ZoomButton(player: player, onInteract: onInteract)
                 if let pictureInPicture, pictureInPicture.isPossible {
                     Button("Picture in Picture", systemImage: "pip.enter", action: pictureInPicture.start)

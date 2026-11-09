@@ -378,6 +378,11 @@ Skip Credits, Up Next with the next episode's still and its countdown. Two fixes
 skipping while paused (`availableSkip` used whole-second `position`; it reads the exact time now and ignores
 the last half second), and Skip Credits while paused left mpv on the last frame without reaching the end, so
 Up Next never counted down; a skip to the file's end now stops 0.2 s short and plays out the rest.
+Open player menus no longer reset every second (scrolling a long subtitle list jumped back): the controls
+redraw for the timeline, and the menus' closures made SwiftUI rebuild them each time. `SubtitlesMenu`,
+`AudioMenu` and `MoreMenu` are `Equatable` on the player and used with `.equatable()`; measured with
+`_logChanges`, an open Audio menu went from a rebuild per second to none. Playback UI tests expect the
+simulator in portrait; one left in landscape fails `testEpisodePausePersistsAndResumesAfterRelaunch`.
 
 Verification for these tasks: reuse `LibraryStoreTests`, `TraktTests`,
 `UITests/FlowTests.swift`, `UITests/PlaybackRegressionTests.swift`,

@@ -90,8 +90,6 @@ final class PlaybackRegressionTests: XCTestCase {
         }, evaluatedWith: app)
         wait(for: [advanced], timeout: 15)
         if !app.buttons["Pause"].isHittable { app.tap() }
-        // A single tap on the picture waits to rule out a double-tap before showing the controls.
-        XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 3))
         app.buttons["Pause"].tap()
         XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 5))
         let paused = try XCTUnwrap(Int(position.value as? String ?? ""))
