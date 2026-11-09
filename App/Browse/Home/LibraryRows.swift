@@ -7,6 +7,7 @@ struct ContinueWatchingRow: View {
     var onFocus: (MetaPreview) -> Void = { _ in }
 
     @Environment(LibraryStore.self) private var library
+    @Environment(TraktAccount.self) private var trakt
     @FocusState private var isFirstFocused: Bool
 
     var body: some View {
@@ -67,6 +68,7 @@ struct ContinueWatchingRow: View {
                 poster: entry.item.poster, background: entry.item.background))
             Button("Remove from Continue Watching", systemImage: "eye.slash") {
                 library.removeFromContinueWatching(metaID: entry.item.metaID)
+                trakt.removeFromContinueWatching(entry.item)
             }
         }
     }

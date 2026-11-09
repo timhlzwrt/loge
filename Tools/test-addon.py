@@ -9,6 +9,7 @@ Logs each request's path and X-Test-Token header so header forwarding can be che
 For local audio-language switching, first run `sh Tools/generate-playback-fixture.sh`,
 then `python3 Tools/test-addon.py --port 8766 --tracks-file /tmp/loge-multiaudio.mov`.
 Install its manifest in addition to the default server's manifest.
+Requesting /tracks.mov?fail-once=<anything> fails the first request for that query.
 """
 import json
 import argparse
@@ -73,6 +74,9 @@ def srt(name):
     return f"1\n00:00:00,500 --> 00:00:09,500\nTest subtitle: {name}\n".encode()
 
 
+FAILED_ONCE = set()
+
+
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         token = self.headers.get("X-Test-Token")
@@ -91,7 +95,13 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(data)
         elif self.path.split("?", 1)[0] == "/tracks.mov" and TRACKS_FILE is not None:
-            self.send_tracks()
+            # "?fail-once=<anything>" fails its first request, to check retrying a source.
+            query = self.path.partition("?")[2]
+            if query.startswith("fail-once=") and query not in FAILED_ONCE:
+                FAILED_ONCE.add(query)
+                self.send_error(404)
+            else:
+                self.send_tracks()
         elif self.path == "/protected.mkv":
             if token == TOKEN:
                 self.send_response(302)

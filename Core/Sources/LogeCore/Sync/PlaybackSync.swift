@@ -63,6 +63,11 @@ public struct PlaybackSyncSnapshot: Codable, Equatable, Sendable {
                 selected = rhs
             } else if PlaybackSyncState.equivalent(rhs, original) || PlaybackSyncState.equivalent(lhs, rhs) {
                 selected = lhs
+            } else if case .progress(let left) = lhs, case .progress(let right) = rhs {
+                // Both devices played it: the position left most recently is where the viewer is.
+                var newest = left.updatedAt >= right.updatedAt ? left : right
+                newest.item = newest.item.fillingArtwork(from: left.updatedAt >= right.updatedAt ? right.item : left.item)
+                selected = .progress(newest)
             } else if case .removed(let leftDate) = lhs, case .removed(let rightDate) = rhs {
                 selected = .removed(max(leftDate, rightDate))
             } else {

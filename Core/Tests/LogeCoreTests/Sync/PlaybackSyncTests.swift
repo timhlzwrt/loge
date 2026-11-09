@@ -24,15 +24,29 @@ struct PlaybackSyncTests {
         #expect(result.snapshot.entries["other"] != nil)
     }
 
-    @Test func concurrentProgressNeedsChoiceAndResolvingKeepsUnrelatedItems() {
+    @Test(arguments: [(1.0, 2.0, 500.0), (2.0, 1.0, 50.0)])
+    func theNewestPositionWinsWithoutAsking(_ localTime: Double, _ remoteTime: Double, _ winner: Double) {
         let base = PlaybackSyncSnapshot(entries: ["movie": entry()])
-        let local = PlaybackSyncSnapshot(entries: ["movie": entry(position: 50, time: 1), "local": entry("local")])
+        var local = PlaybackSyncSnapshot(entries: ["movie": entry(position: 50, time: localTime), "local": entry("local")])
+        local.entries["movie"]?.item.poster = "https://artwork.example/poster.jpg"
+        let remote = PlaybackSyncSnapshot(entries: ["movie": entry(position: 500, time: remoteTime), "remote": entry("remote")])
+        let result = PlaybackSyncSnapshot.merged(base: base, local: local, remote: remote)
+        #expect(result.conflictingIDs.isEmpty)
+        #expect(result.snapshot.entries["movie"]?.position == winner)
+        #expect(result.snapshot.entries["movie"]?.item.poster != nil)
+        #expect(result.snapshot.entries["local"] != nil)
+        #expect(result.snapshot.entries["remote"] != nil)
+    }
+
+    @Test func aTitleRemovedOnOneDeviceAndPlayedOnAnotherStillAsks() {
+        let base = PlaybackSyncSnapshot(entries: ["movie": entry()])
+        let local = PlaybackSyncSnapshot(removals: ["movie": t0 + 5], titleRemovals: ["movie": t0 + 5])
         let remote = PlaybackSyncSnapshot(entries: ["movie": entry(position: 500, time: 2), "remote": entry("remote")])
         let result = PlaybackSyncSnapshot.merged(base: base, local: local, remote: remote)
         #expect(result.conflictingIDs == ["movie"])
+        #expect(result.resolving(useLocal: true).entries["movie"] == nil)
         let chosen = result.resolving(useLocal: false)
         #expect(chosen.entries["movie"]?.position == 500)
-        #expect(chosen.entries["local"] != nil)
         #expect(chosen.entries["remote"] != nil)
     }
 

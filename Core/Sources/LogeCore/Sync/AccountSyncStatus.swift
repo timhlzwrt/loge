@@ -20,7 +20,7 @@ extension AccountSync {
             case .failed: "Couldn't sync"
             case .choosingInitialSetup: "Choose the initial setup"
             case .choosingSettings: "Choose conflicting settings"
-            case .choosingPlayback: "Choose playback position"
+            case .choosingPlayback: "Choose whether to keep removed titles"
             case .choosingSharedSettings: "Choose shared settings"
             case .choosingRemaining: "Choose remaining changes"
             case .choosingAgain(.thisDevice): "Changed on this device. Choose again."

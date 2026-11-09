@@ -22,6 +22,14 @@ struct PlaybackCommands: Commands {
                 .keyboardShortcut(.rightArrow, modifiers: [.command, .shift])
                 .disabled(playback.next == nil)
             Divider()
+            Button("Choose Source…", action: playback.chooseSource)
+                .keyboardShortcut("s", modifiers: [.command, .option])
+                .disabled(!playback.canChooseSource)
+            Button(player?.isZoomedToFill == true ? "Fit to Screen" : "Zoom to Fill") {
+                player?.setZoomToFill(player?.isZoomedToFill != true)
+            }
+            .disabled(player == nil)
+            Divider()
             Button("Picture in Picture") { playback.pictureInPicture?.start() }
                 .keyboardShortcut("p", modifiers: [.command, .option])
                 .disabled(playback.pictureInPicture?.isPossible != true)

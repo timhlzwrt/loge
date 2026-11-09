@@ -28,7 +28,7 @@ public final class AccountSync {
         if let choice, choice.initial {
             return "Choose whether to bring this device's setup and playback into this account, or use the account's saved data."
         }
-        return "Choose only the conflicting settings or playback positions. Independent changes are kept."
+        return "Choose only the conflicting settings, or whether a title removed on one device and played on another stays. Independent changes are kept."
     }
     public var conflictingProgressIDs: [String] { choice?.progress?.merge?.conflictingIDs.sorted() ?? [] }
 
@@ -360,7 +360,7 @@ public final class AccountSync {
             if let original = baselines.pendingProgressBase {
                 base = base.replacing(baselines.pendingProgressIDs, from: original, references: [local, remote])
             }
-            // Independent titles keep syncing while ambiguous episodes wait for a choice.
+            // Independent titles keep syncing while a title both removed and played waits for a choice.
             let merge = PlaybackSyncSnapshot.merged(base: base, local: local, remote: remote)
             let result = merge.resolving(useLocal: false)
             var revision = document?.revision

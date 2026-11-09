@@ -4,7 +4,7 @@
 
 **Status: pre-1.0.** This is a small, actively developed client. The priorities
 are reliable playback and clear cross-device behavior—not a list of promised
-release dates. This roadmap reflects the source as of **8 November 2026**.
+release dates. This roadmap reflects the source as of **9 November 2026**.
 
 ## Shipped
 
@@ -19,10 +19,11 @@ release dates. This roadmap reflects the source as of **8 November 2026**.
   available chapter/community skips and automatic next episodes.
 - [x] Continue Watching, episode resume, Up Next, Watch Later, custom lists
   and day-grouped viewing history.
-- [x] Trakt device-code sign-in, scrobbling, paused-progress import and
-  watched/unwatched updates.
+- [x] Trakt device-code sign-in, scrobbling, paused-progress import,
+  watched/unwatched updates, removals, and offline changes sent on reconnect.
 - [x] Optional encrypted self-hosted accounts with progress, watched state,
-  addons and preferences; offline merging and explicit conflict resolution.
+  addons and preferences; offline merging, the newest position winning, and a
+  choice when a title was removed on one device and played on another.
 - [x] Scoped shared setups, separate private progress, expiring invitations,
   device revocation and a local service administration page.
 - [x] GitHub release assets for iOS/tvOS/Mac, a SideStore source, a Mac
@@ -62,9 +63,10 @@ alone doesn't verify playback or Picture in Picture at runtime.
   platforms. Smoke-test supported OS simulator versions when their runtimes are
   available, and report exactly which runtimes ran. A deployment target or successful
   compilation isn't proof of runtime compatibility.
-- [ ] Check packaged Release builds and update feeds advertise the same minimums
-  as the app and LogeCore. The source (`project.yml`, `Package.swift`, the SideStore
-  feed) is covered by a Core test; a built release's plists and Sparkle feed aren't.
+- [x] Check packaged Release builds and update feeds advertise the same minimums
+  as the app and LogeCore. Build 127's iOS and tvOS `.ipa` files, Mac `.dmg`, Sparkle
+  feed and SideStore source all say 26.0 (checked by hand on 9 November; the source
+  files stay covered by a Core test, the artifacts by no automated check).
 
 Reuse `UITests/PlaybackRegressionTests.swift`, `UITests/FlowTests.swift`,
 `UITests/DiscoveryTVTests.swift`, `UITests/RemoteDriverTests.swift` and the Core test

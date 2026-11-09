@@ -39,6 +39,13 @@ public struct TraktPlayback: Sendable, Equatable {
     /// 0–100.
     public var progress: Double
     public var pausedAt: Date
+    /// What removing this progress takes; history entries have none.
+    public var id: Int?
+
+    /// The same title and episode, whichever IDs the two sides know it by.
+    func matches(_ item: WatchItem) -> Bool {
+        imdbID == item.metaID && season == item.season && episode == item.episode
+    }
 }
 
 public enum TraktError: Error, Equatable {
@@ -133,8 +140,9 @@ public struct TraktClient: Sendable {
         _ = try await request("scrobble/\(action.rawValue)", body: body, token: token)
     }
 
-    public func addToHistory(_ items: [WatchItem], token: TraktToken) async throws {
-        guard let body = Self.history(items) else { return }
+    /// - Parameter watchedAt: When they were watched, for changes sent later than they happened.
+    public func addToHistory(_ items: [WatchItem], watchedAt: Date? = nil, token: TraktToken) async throws {
+        guard let body = Self.history(items, watchedAt: watchedAt) else { return }
         _ = try await request("sync/history", body: body, token: token)
     }
 
@@ -146,6 +154,19 @@ public struct TraktClient: Sendable {
     public func playback(token: TraktToken) async throws -> [TraktPlayback] {
         let entries: [PlaybackEntry] = try await send("sync/playback", token: token)
         return entries.compactMap(\.playback)
+    }
+
+    /// Clears paused progress, so other devices stop offering to resume it.
+    public func removePlayback(id: Int, token: TraktToken) async throws {
+        _ = try await response("sync/playback/\(id)", token: token, method: "DELETE")
+    }
+
+    /// What the account is playing right now, if anything. Starting playback removes its paused
+    /// progress, so this tells that apart from someone removing the title.
+    public func watching(token: TraktToken) async throws -> TraktPlayback? {
+        let data = try await request("users/me/watching", token: token)
+        // 204 when nothing is playing.
+        return data.isEmpty ? nil : try Self.decode(HistoryEntry.self, from: data).playback
     }
 
     /// Completed plays newer than the progress this device still considers unfinished.
@@ -173,9 +194,15 @@ public struct TraktClient: Sendable {
     // MARK: Request bodies
 
     struct IDs: Encodable, Equatable { let imdb: String }
-    struct Title: Encodable, Equatable { let ids: IDs }
+    struct Title: Encodable, Equatable {
+        let ids: IDs
+        var watched_at: String?
+    }
     struct EpisodeNumber: Encodable, Equatable { let season: Int; let number: Int }
-    struct Number: Encodable, Equatable { let number: Int }
+    struct Number: Encodable, Equatable {
+        let number: Int
+        var watched_at: String?
+    }
 
     /// A movie, or an episode of a show, as scrobbles name it.
     struct Reference: Encodable, Equatable {
@@ -204,14 +231,15 @@ public struct TraktClient: Sendable {
         return item.type == MediaType.movie ? Reference(movie: title) : nil
     }
 
-    static func history(_ items: [WatchItem]) -> History? {
+    static func history(_ items: [WatchItem], watchedAt: Date? = nil) -> History? {
+        let time = watchedAt?.ISO8601Format()
         var movies: [Title] = []
         // Show → season → episode numbers.
         var shows: [String: [Int: [Int]]] = [:]
         for item in items {
             guard let reference = reference(for: item) else { continue }
             if let movie = reference.movie {
-                movies.append(movie)
+                movies.append(Title(ids: movie.ids, watched_at: time))
             } else if let episode = reference.episode {
                 shows[item.metaID, default: [:]][episode.season, default: []].append(episode.number)
             }
@@ -219,7 +247,7 @@ public struct TraktClient: Sendable {
         guard !movies.isEmpty || !shows.isEmpty else { return nil }
         return History(movies: movies, shows: shows.sorted { $0.key < $1.key }.map { imdb, seasons in
             History.Show(ids: IDs(imdb: imdb), seasons: seasons.sorted { $0.key < $1.key }.map { season, episodes in
-                History.Season(number: season, episodes: episodes.sorted().map(Number.init))
+                History.Season(number: season, episodes: episodes.sorted().map { Number(number: $0, watched_at: time) })
             })
         })
     }
@@ -243,6 +271,7 @@ public struct TraktClient: Sendable {
         struct Titled: Decodable { var ids: IDs }
         struct Episode: Decodable { var season: Int; var number: Int }
 
+        var id: Int?
         var progress: Double
         var paused_at: Date
         var type: String
@@ -254,11 +283,11 @@ public struct TraktClient: Sendable {
             switch type {
             case "movie":
                 guard let imdb = movie?.ids.imdb else { return nil }
-                return TraktPlayback(imdbID: imdb, progress: progress, pausedAt: paused_at)
+                return TraktPlayback(imdbID: imdb, progress: progress, pausedAt: paused_at, id: id)
             case "episode":
                 guard let imdb = show?.ids.imdb, let episode else { return nil }
                 return TraktPlayback(imdbID: imdb, season: episode.season, episode: episode.number,
-                                     progress: progress, pausedAt: paused_at)
+                                     progress: progress, pausedAt: paused_at, id: id)
             default:
                 return nil
             }
@@ -266,14 +295,14 @@ public struct TraktClient: Sendable {
     }
 
     private struct HistoryEntry: Decodable {
-        var watched_at: Date
+        var watched_at: Date?
         var type: String
         var movie: PlaybackEntry.Titled?
         var show: PlaybackEntry.Titled?
         var episode: PlaybackEntry.Episode?
 
         var playback: TraktPlayback? {
-            PlaybackEntry(progress: 100, paused_at: watched_at, type: type,
+            PlaybackEntry(progress: 100, paused_at: watched_at ?? .now, type: type,
                           movie: movie, show: show, episode: episode).playback
         }
     }
@@ -304,7 +333,7 @@ public struct TraktClient: Sendable {
     }
 
     private func response(_ path: String, body: (any Encodable)? = nil, token: TraktToken? = nil,
-                          query: [URLQueryItem] = []) async throws -> (Data, HTTPURLResponse?) {
+                          query: [URLQueryItem] = [], method: String? = nil) async throws -> (Data, HTTPURLResponse?) {
         let url = Self.baseURL.appending(path: path).appending(queryItems: query)
         var request = URLRequest(url: url)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -317,6 +346,7 @@ public struct TraktClient: Sendable {
             request.httpMethod = "POST"
             request.httpBody = try JSONEncoder().encode(body)
         }
+        if let method { request.httpMethod = method }
         let data: Data
         let response: URLResponse
         do {

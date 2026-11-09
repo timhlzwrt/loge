@@ -54,6 +54,12 @@ struct PlaybackFixtureView: View {
                 PlaybackSegment(kind: .recap, start: 20, end: 40),
                 PlaybackSegment(kind: .credits, start: 40, end: duration),
             ])
+            if ProcessInfo.processInfo.environment["PLAYBACK_FIXTURE_NEXT"] != nil,
+               var next = session.current, next.url.query() == nil {
+                next.title = "Next fixture"
+                next.url.append(queryItems: [.init(name: "source", value: "next")])
+                session.offerNextForTesting(next)
+            }
         }
     }
 }

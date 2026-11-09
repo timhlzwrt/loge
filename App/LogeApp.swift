@@ -97,6 +97,7 @@ struct LogeApp: App {
                     if ProcessInfo.processInfo.arguments.contains("--discovery-ui-test")
                         || ProcessInfo.processInfo.arguments.contains("--playback-ui-test") { return }
                     #endif
+                    trakt.sendPendingOnReconnect()
                     await accountSync.sync()
                     await addonStore.refreshManifests()
                     // Needs the addons to look up titles started on other devices.
@@ -104,7 +105,10 @@ struct LogeApp: App {
                     await library.fillMissingArtwork(from: addonStore)
                 }
                 .onChange(of: scenePhase) { _, newPhase in
-                    if newPhase == .background { playback.sceneDidEnterBackground() }
+                    if newPhase == .background {
+                        playback.sceneDidEnterBackground()
+                        finishSyncingBeforeSuspension()
+                    }
                     guard newPhase == .active else { return }
                     playback.sceneDidBecomeActive()
                     #if DEBUG
@@ -134,6 +138,12 @@ struct LogeApp: App {
         Window("Player", id: PlayerView.windowID) {
             PlayerView()
                 .environment(playback)
+                // The sources sheet opened from the player needs them, and can add an addon.
+                .environment(addonStore)
+                .environment(library)
+                .environment(trakt)
+                .environment(tmdb)
+                .environment(accountSync)
                 .frame(minWidth: 640, minHeight: 360)
                 .tint(accent.color)
                 .preferredColorScheme(.dark)
@@ -144,6 +154,23 @@ struct LogeApp: App {
         // As a principal window it would otherwise reopen empty at launch.
         .defaultLaunchBehavior(.suppressed)
         .restorationBehavior(.disabled)
+        #endif
+    }
+
+    /// What leaving just saved would otherwise wait for the next launch: the system can suspend
+    /// the app before these requests finish. The Mac doesn't suspend.
+    private func finishSyncingBeforeSuspension() {
+        #if !os(macOS)
+        let time = BackgroundTime()
+        Task {
+            // A sync already running may have started before the last save, so one follows it.
+            while accountSync.isSyncing {
+                do { try await Task.sleep(for: .milliseconds(200)) } catch { break }
+            }
+            await accountSync.sync()
+            await trakt.sendPending()
+            time.end()
+        }
         #endif
     }
 
@@ -177,6 +204,24 @@ struct LogeApp: App {
     }
 
 }
+
+#if !os(macOS)
+/// Asks the system for the moments the last sync needs before the app is suspended.
+@MainActor
+private final class BackgroundTime {
+    private var id = UIBackgroundTaskIdentifier.invalid
+
+    init() {
+        id = UIApplication.shared.beginBackgroundTask(withName: "Last sync") { [weak self] in self?.end() }
+    }
+
+    func end() {
+        guard id != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(id)
+        id = .invalid
+    }
+}
+#endif
 
 #if DEBUG
 private struct SyncUITestCode: Decodable { let code: String }

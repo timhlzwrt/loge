@@ -90,8 +90,8 @@ so two services do not compete over your watch activity.
 
 **What stays local:** Watch Later, custom lists and remembered stream selections
 are not synchronized by either service. Trakt does not carry addon configuration
-or preferences and does not import your full watched history. Self-hosted sync
-retains offline edits; Trakt has no offline upload queue.
+or preferences and does not import your full watched history. Both services keep
+changes made offline on the device and send them on reconnect.
 
 ## Install and start watching
 

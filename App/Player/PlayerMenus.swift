@@ -41,18 +41,19 @@ struct SubtitlesMenu: View {
     var body: some View {
         let subtitles = player.distinctTracks(.sub)
         Menu {
+            // Above the tracks: a long list runs off a landscape phone's screen.
+            if subtitles.contains(where: \.isSelected) {
+                Button("Subtitle Timing…", systemImage: "timer") { adjustingTiming = .sub }
+            }
+            Picker("Subtitle Size", selection: $subtitleScale) {
+                ForEach(PlaybackPreferences.subtitleScales, id: \.scale) { Text($0.name).tag($0.scale) }
+            }
+            .pickerStyle(.menu)
             Picker("Subtitles", selection: player.selection(for: .sub)) {
                 Text("Off").tag(Int?.none)
                 ForEach(subtitles) { Text($0.displayName).tag(Optional($0.id)) }
             }
             .pickerStyle(.inline)
-            Picker("Subtitle Size", selection: $subtitleScale) {
-                ForEach(PlaybackPreferences.subtitleScales, id: \.scale) { Text($0.name).tag($0.scale) }
-            }
-            .pickerStyle(.menu)
-            if subtitles.contains(where: \.isSelected) {
-                Button("Subtitle Timing…", systemImage: "timer") { adjustingTiming = .sub }
-            }
             Color.clear.frame(height: 0).modifier(MenuPresenceTracker(isOpen: $isOpen))
         } label: {
             Label("Subtitles", systemImage: "captions.bubble")
@@ -60,24 +61,25 @@ struct SubtitlesMenu: View {
                 .modifier(CapsuleIcon())
                 #endif
         }
+        // In the order written; by default a menu near the bottom of the screen reverses it.
+        .menuOrder(.fixed)
         .disabled(subtitles.isEmpty)
         .simultaneousGesture(TapGesture().onEnded(onInteract))
         .onChange(of: subtitleScale) { _, scale in player.setSubtitleScale(scale) }
     }
 }
 
-/// Audio tracks, speed and audio timing.
+/// Audio tracks and audio timing.
 struct AudioMenu: View {
     let player: MPVPlayer
     let onInteract: () -> Void
     @Binding var isOpen: Bool
     @Binding var adjustingTiming: MPVPlayer.Track.Kind?
-    @State private var showsPlaybackInfo = false
 
     var body: some View {
-        let player = player
         let audio = player.distinctTracks(.audio)
         Menu {
+            Button("Audio Timing…", systemImage: "timer") { adjustingTiming = .audio }
             // A single audio track leaves nothing to choose.
             if audio.count > 1 {
                 Picker("Audio", selection: player.selection(for: .audio)) {
@@ -85,12 +87,6 @@ struct AudioMenu: View {
                 }
                 .pickerStyle(.inline)
             }
-            Picker("Speed", selection: Binding(get: { player.speed }, set: { player.setSpeed($0) })) {
-                ForEach(PlaybackSpeed.all, id: \.self) { Text(PlaybackSpeed.name($0)).tag($0) }
-            }
-            .pickerStyle(.inline)
-            Button("Audio Timing…", systemImage: "timer") { adjustingTiming = .audio }
-            Button("Playback Info…", systemImage: "info.circle") { showsPlaybackInfo = true }
             Color.clear.frame(height: 0).modifier(MenuPresenceTracker(isOpen: $isOpen))
         } label: {
             Label("Audio", systemImage: "waveform")
@@ -98,6 +94,38 @@ struct AudioMenu: View {
                 .modifier(CapsuleIcon())
                 #endif
         }
+        .menuOrder(.fixed)
+        .simultaneousGesture(TapGesture().onEnded(onInteract))
+    }
+}
+
+/// Speed and details about the playback, and on the Mac the sources.
+struct MoreMenu: View {
+    let player: MPVPlayer
+    let onInteract: () -> Void
+    @Binding var isOpen: Bool
+    var onChooseSource: (() -> Void)?
+    @State private var showsPlaybackInfo = false
+
+    var body: some View {
+        let player = player
+        Menu {
+            Picker("Speed", systemImage: "speedometer", selection: Binding(get: { player.speed }, set: { player.setSpeed($0) })) {
+                ForEach(PlaybackSpeed.all, id: \.self) { Text(PlaybackSpeed.name($0)).tag($0) }
+            }
+            .pickerStyle(.menu)
+            Button("Playback Info…", systemImage: "info.circle") { showsPlaybackInfo = true }
+            if let onChooseSource {
+                Button("Sources…", systemImage: "list.bullet", action: onChooseSource)
+            }
+            Color.clear.frame(height: 0).modifier(MenuPresenceTracker(isOpen: $isOpen))
+        } label: {
+            Label("More", systemImage: "ellipsis")
+                #if os(iOS)
+                .modifier(CapsuleIcon())
+                #endif
+        }
+        .menuOrder(.fixed)
         .simultaneousGesture(TapGesture().onEnded(onInteract))
         .sheet(isPresented: $showsPlaybackInfo) { PlaybackInfoView(player: player) }
         .onChange(of: showsPlaybackInfo) { _, shown in
@@ -107,6 +135,20 @@ struct AudioMenu: View {
     }
 }
 #endif
+
+/// Crops the picture to the screen or fits all of it; on iPhone pinching does the same.
+struct ZoomButton: View {
+    let player: MPVPlayer
+    let onInteract: () -> Void
+
+    var body: some View {
+        Button(player.isZoomedToFill ? "Fit to Screen" : "Zoom to Fill",
+               systemImage: player.isZoomedToFill ? "rectangle.arrowtriangle.2.inward" : "rectangle.arrowtriangle.2.outward") {
+            player.setZoomToFill(!player.isZoomedToFill)
+            onInteract()
+        }
+    }
+}
 
 /// Speeds offered in the player; none is remembered between videos.
 enum PlaybackSpeed {
@@ -155,7 +197,6 @@ struct TimingPanel: View {
                     .disabled(delay == 0)
             }
         }
-        .labelStyle(.iconOnly)
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
         .frame(maxWidth: 460)

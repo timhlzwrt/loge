@@ -187,8 +187,10 @@ the simulator's lock button: picture (checked in the screenshot's pixels), timel
 controls and mpv's A/V offset. Run it on an iPad too: iPhone simulators have no Picture
 in Picture, so they take the path that pauses, while real iPhones and iPads keep playing.
 Actual screen-lock recovery is outside simulator verification and isn't a planned
-hardware-testing task. `DiscoveryTVTests.testPlayerRemoteReachesSkipPanelAndClose` uses
-the same fixture for the remote's path through the player on tvOS.
+hardware-testing task. `DiscoveryTVTests` uses the same fixture for the remote's path through the player on
+tvOS: skip offers, Up Next (`PLAYBACK_FIXTURE_NEXT=1` offers a next episode), the panel,
+Sources and the failure screen. A `?fail-once=<anything>` query on the fixture's URL fails
+its first request, for Try Again.
 `DiscoveryTVTests.testLibraryFocusMovesBetweenRows`
 and the remote driver's `TEST_RUNNER_DISCOVERY_SCREEN=library` use an isolated
 library fixture for navigation checks without changing the user's saved titles.
