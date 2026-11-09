@@ -34,8 +34,8 @@ login's database access and installs the gateway-only validator; it does not
 delete the old encrypted `configuration` document, which no current app reads.
 
 Forward only `/v2/*` from the HTTPS reverse proxy to `127.0.0.1:5985`. Cap request bodies at 1 MiB and
-set `Cache-Control: no-store`. Disable access/body logging. Do not forward `/admin`
-or port 5986. If the proxy runs on another host, bind the gateway on a private
+set `Cache-Control: no-store`. Disable access/body logging. Do not forward `/admin`,
+`/oidc` or port 5986. If the proxy runs on another host, bind the gateway on a private
 address and firewall it to the proxy. Administrative port 5986 must remain
 localhost-only or restricted to a management host reached through an SSH tunnel.
 The admin application additionally checks Host, Origin and a separate token.
@@ -51,6 +51,26 @@ tab's memory. Create an account to obtain its one-use, 24-hour enrollment code.
 Set the correct public endpoint before creating codes. Existing accounts need
 their recovery key or a code from a connected device; administrative enrollment
 cannot decrypt or recover their data.
+
+### Signing in with Pocket ID
+
+The panel can also sign administrators in through an OpenID Connect provider such
+as [Pocket ID](https://pocket-id.org); the token keeps working as a fallback. In
+Pocket ID, create an OIDC client marked as a public client (it uses PKCE, so there
+is no secret), with the callback URL `http://localhost:5986/oidc/callback` (and
+`<SYNC_ADMIN_ORIGIN>/oidc/callback` if set), and restrict it to an administrators
+group. Then set, before `docker compose up -d`:
+
+```sh
+export SYNC_ADMIN_OIDC_ISSUER=https://id.example.com
+export SYNC_ADMIN_OIDC_CLIENT_ID=<client ID>
+export SYNC_ADMIN_OIDC_GROUP=<group name>   # checked by the gateway too
+export SYNC_ADMIN_OIDC_NAME="Pocket ID"     # button label
+```
+
+The administration container must reach the issuer over HTTPS. A sign-in lasts
+8 hours or until the panel is locked; like the token, it lives only in the tab's
+memory, and restarting the container ends all sign-ins.
 
 The page supports account creation/disabling, new enrollment codes, device and
 invitation revocation, and shared-setup disabling. Disabling or revoking stops

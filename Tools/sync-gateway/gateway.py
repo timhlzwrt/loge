@@ -16,10 +16,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.concurrency import run_in_threadpool
 
 MAX_BODY = 1_048_576
+ADMIN_SESSION_SECONDS = 8 * 3600
+ADMIN_LOGIN_SECONDS = 600
 CATEGORIES = {"addons", "playback", "appearance"}
 ID = re.compile(r"^[a-f0-9]{32}$")
 # Invitation and device records are named by the SHA-256 digest of their secret.
@@ -188,6 +190,109 @@ class Service:
                 "invitation": self.invitation(identifier, "device")}
 
 
+class AdminLogin:
+    """Signs administrators in through an OpenID Connect provider such as Pocket ID.
+
+    The page is a public client using PKCE. Group membership comes from the userinfo endpoint,
+    read directly over TLS, so the gateway needs no ID token signature handling."""
+
+    def __init__(self, issuer, client_id, group, name=""):
+        parsed = urllib.parse.urlsplit(issuer)
+        if parsed.scheme != "https" or not parsed.hostname or parsed.query or parsed.fragment:
+            raise ValueError("SYNC_ADMIN_OIDC_ISSUER must be an HTTPS URL")
+        if not client_id or not group:
+            raise ValueError("SYNC_ADMIN_OIDC_ISSUER also needs SYNC_ADMIN_OIDC_CLIENT_ID and SYNC_ADMIN_OIDC_GROUP")
+        self.issuer = issuer.rstrip("/")
+        self.client_id = client_id
+        self.group = group
+        self.name = name
+        self.metadata = None
+        self.pending = {}
+        self.sessions = {}
+        self.lock = threading.Lock()
+
+    @classmethod
+    def from_environment(cls):
+        issuer = os.environ.get("SYNC_ADMIN_OIDC_ISSUER", "")
+        if not issuer:
+            return None
+        return cls(issuer, os.environ.get("SYNC_ADMIN_OIDC_CLIENT_ID", ""),
+                   os.environ.get("SYNC_ADMIN_OIDC_GROUP", ""), os.environ.get("SYNC_ADMIN_OIDC_NAME", ""))
+
+    def fetch(self, url, form=None, token=None):
+        headers = {"Accept": "application/json"}
+        if token:
+            headers["Authorization"] = "Bearer " + token
+        data = urllib.parse.urlencode(form).encode() if form is not None else None
+        with urllib.request.urlopen(urllib.request.Request(url, data=data, headers=headers), timeout=10) as response:
+            value = json.load(response)
+        if not isinstance(value, dict):
+            raise ValueError("Expected a JSON object")
+        return value
+
+    def endpoints(self):
+        # Discovered on first use, so the token fallback works while the provider is down.
+        if self.metadata is None:
+            metadata = self.fetch(self.issuer + "/.well-known/openid-configuration")
+            if str(metadata.get("issuer", "")).rstrip("/") != self.issuer:
+                raise ValueError("Provider metadata names a different issuer")
+            for key in ("authorization_endpoint", "token_endpoint", "userinfo_endpoint"):
+                if not str(metadata.get(key, "")).startswith("https://"):
+                    raise ValueError("Provider metadata lacks an HTTPS " + key)
+            self.metadata = metadata
+        return self.metadata
+
+    def start(self, redirect_uri):
+        endpoint = self.endpoints()["authorization_endpoint"]
+        state = secrets.token_urlsafe(32)
+        verifier = secrets.token_urlsafe(64)
+        challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+        with self.lock:
+            self.pending = {key: login for key, login in self.pending.items() if login["expires"] > time.time()}
+            if len(self.pending) >= 50:
+                raise ValueError("Too many sign-ins in progress")
+            self.pending[state] = {"verifier": verifier, "redirect": redirect_uri, "expires": time.time() + ADMIN_LOGIN_SECONDS}
+        query = urllib.parse.urlencode({"response_type": "code", "client_id": self.client_id, "redirect_uri": redirect_uri,
+                                        "scope": "openid profile groups", "state": state,
+                                        "code_challenge": challenge, "code_challenge_method": "S256"})
+        return endpoint + ("&" if "?" in endpoint else "?") + query
+
+    def finish(self, state, code, redirect_uri):
+        """Returns a new session token; PermissionError means the user isn't in the group."""
+        with self.lock:
+            login = self.pending.pop(state, None)
+        if not login or not code or login["expires"] <= time.time() or login["redirect"] != redirect_uri:
+            raise ValueError("Unknown or expired sign-in")
+        endpoints = self.endpoints()
+        tokens = self.fetch(endpoints["token_endpoint"], {"grant_type": "authorization_code", "code": code,
+            "redirect_uri": redirect_uri, "client_id": self.client_id, "code_verifier": login["verifier"]})
+        if not isinstance(tokens.get("access_token"), str):
+            raise ValueError("Provider returned no access token")
+        user = self.fetch(endpoints["userinfo_endpoint"], token=tokens["access_token"])
+        groups = user.get("groups")
+        if not isinstance(user.get("sub"), str) or not isinstance(groups, list) or self.group not in groups:
+            raise PermissionError("Not an administrator")
+        name = next((value for value in (user.get("name"), user.get("preferred_username"))
+                     if isinstance(value, str) and value.strip()), "administrator")
+        session = secrets.token_urlsafe(32)
+        with self.lock:
+            self.sessions = {key: entry for key, entry in self.sessions.items() if entry["expires"] > time.time()}
+            self.sessions[digest(session)] = {"name": name[:80], "expires": time.time() + ADMIN_SESSION_SECONDS}
+        return session
+
+    def user(self, session):
+        if not session:
+            return None
+        with self.lock:
+            entry = self.sessions.get(digest(session))
+        return entry["name"] if entry and entry["expires"] > time.time() else None
+
+    def end(self, session):
+        if session:
+            with self.lock:
+                self.sessions.pop(digest(session), None)
+
+
 def group_summary(group):
     return {key: group[key] for key in ("id", "name", "categories", "ownerID")}
 
@@ -231,7 +336,7 @@ def validate_envelope(value):
         fail(400, "Encrypted payload is invalid.")
 
 
-def create_app(store=None, mode=None, admin_secret=None):
+def create_app(store=None, mode=None, admin_secret=None, admin_login=None):
     store = store or CouchStore(os.environ["SYNC_DATABASE_URL"], os.environ["SYNC_DATABASE_CREDENTIAL_FILE"])
     service = Service(store)
     mode = mode or os.environ.get("SYNC_MODE", "public")
@@ -259,6 +364,7 @@ def create_app(store=None, mode=None, admin_secret=None):
                     or parsed.path or parsed.query or parsed.fragment):
                 raise ValueError("SYNC_ADMIN_ORIGIN must be an HTTPS origin without a path")
             configured_host = parsed.netloc
+        login = admin_login or AdminLogin.from_environment()
 
         def check_admin_origin(request):
             # Keep the SSH-tunnel path and allow only the explicitly configured LAN origin.
@@ -271,12 +377,16 @@ def create_app(store=None, mode=None, admin_secret=None):
                 fail(403, "Use the configured internal admin address or a localhost SSH tunnel.")
             if request.headers.get("origin") not in (None, expected_origin):
                 fail(403, "Origin is not allowed.")
+            return expected_origin
 
         def administrator(request):
             check_admin_origin(request)
             token = request.headers.get("X-Admin-Token", "")
-            if not hmac.compare_digest(token.encode(), secret.encode()):
-                fail(401, "Enter the local administrator token.")
+            if hmac.compare_digest(token.encode(), secret.encode()):
+                return
+            if login and login.user(request.headers.get("X-Admin-Session")):
+                return
+            fail(401, "Sign in or enter the local administrator token.")
 
         def enrollment_code(invitation):
             endpoint = os.environ.get("SYNC_PUBLIC_ENDPOINT")
@@ -290,6 +400,41 @@ def create_app(store=None, mode=None, admin_secret=None):
             check_admin_origin(request)
             return HTMLResponse(Path(__file__).with_name("admin.html").read_text(),
                 headers={"Content-Security-Policy": "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'"})
+
+        @app.get("/admin/session")
+        def session_state(request: Request):
+            check_admin_origin(request)
+            return {"signIn": login is not None, "provider": login.name if login else "",
+                    "name": login.user(request.headers.get("X-Admin-Session")) if login else None}
+
+        @app.delete("/admin/session")
+        def sign_out(request: Request):
+            check_admin_origin(request)
+            if login:
+                login.end(request.headers.get("X-Admin-Session"))
+            return {"ok": True}
+
+        if login:
+            # The session token returns in the fragment and stays in the tab's memory, like the
+            # administrator token: a cookie would also reach every other port on localhost.
+            @app.get("/oidc/login")
+            def oidc_login(request: Request):
+                origin = check_admin_origin(request)
+                try:
+                    return RedirectResponse(login.start(origin + "/oidc/callback"), 303)
+                except (OSError, ValueError):
+                    return RedirectResponse("/#signin=unavailable", 303)
+
+            @app.get("/oidc/callback")
+            def oidc_callback(request: Request, state: str = "", code: str = ""):
+                origin = check_admin_origin(request)
+                try:
+                    session = login.finish(state, code, origin + "/oidc/callback")
+                except PermissionError:
+                    return RedirectResponse("/#signin=denied", 303)
+                except (OSError, ValueError):
+                    return RedirectResponse("/#signin=failed", 303)
+                return RedirectResponse("/#session=" + session, 303)
 
         @app.get("/admin/accounts")
         def accounts(request: Request):

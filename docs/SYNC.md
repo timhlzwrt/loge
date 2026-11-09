@@ -93,7 +93,9 @@ documents.
 4. Keep administration on localhost or behind a management-host firewall and SSH
    tunnel. Never forward its port 5986 or `/admin` paths through public Caddy.
 5. Open the local management page, unlock it with the server-only administrator
-   token, then create accounts and give each person their own enrollment code.
+   token (or sign in through Pocket ID or another OpenID Connect provider; see
+   `Tools/sync-gateway/README.md`), then create accounts and give each person
+   their own enrollment code.
 
 The management page supports creating/disabling accounts, issuing enrollment
 codes, revoking devices/invitations and disabling shared setups. It cannot show

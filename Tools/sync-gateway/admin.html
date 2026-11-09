@@ -8,7 +8,7 @@
 :root{color-scheme:dark;font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#eeeff0;background:#141517;--muted:#a0a2a8;--line:#303136;--surface:#1b1c1f}
 *{box-sizing:border-box}[hidden]{display:none!important}body{margin:0}button,input,textarea{font:inherit}button,a,input,textarea{-webkit-tap-highlight-color:transparent}button{min-height:44px;padding:10px 18px;border:1px solid transparent;border-radius:9px;background:#eeeef0;color:#191a1c;font-weight:600;cursor:pointer}button:hover{background:#fff}button:disabled{opacity:.45;cursor:wait}button.secondary{color:#d5d6da;background:transparent;border-color:#3c3e44}button.secondary:hover{background:#2a2c30}button.quiet{background:transparent;color:#b8bac0;padding:8px 12px;font-weight:500}button.quiet:hover{background:#292b2f;color:#fff}button.danger{color:#efb0a5}button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid #eee;outline-offset:4px}input,textarea{width:100%;min-height:46px;border:1px solid #41434a;border-radius:8px;background:#161719;color:#f4f4f5;padding:11px 13px}input::placeholder{color:#7d8088}label{display:block;font-size:13px;font-weight:600;margin-bottom:8px}h1,h2,p{margin:0}h1{font-size:32px;line-height:1.2;font-weight:600;letter-spacing:-1px}h2{font-size:22px;line-height:1.3;letter-spacing:-.4px}p{color:var(--muted)}small{font-size:13px;color:var(--muted)}
 .topbar{height:88px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 40px;gap:20px}.brand{display:flex;align-items:baseline;gap:18px}.wordmark{font-size:31px;letter-spacing:-2px;font-weight:650;color:#fff;line-height:1}.brand span{font-size:13px;color:var(--muted);border-left:1px solid #484a50;padding-left:18px}.top-actions{display:flex;align-items:center;gap:16px}.session{font-size:12px;color:var(--muted)}
-#unlock{max-width:410px;margin:clamp(64px,13vh,150px) auto 64px;padding:0 24px}.eyebrow{font-size:11px;letter-spacing:1.8px;text-transform:uppercase;color:#9699a0;margin-bottom:14px}#unlock h1{margin-bottom:16px}#unlock>p{margin-bottom:32px}#unlock button{width:100%;margin-top:16px}#unlock small{display:block;margin-top:22px;line-height:1.6}
+#unlock{max-width:410px;margin:clamp(64px,13vh,150px) auto 64px;padding:0 24px}.eyebrow{font-size:11px;letter-spacing:1.8px;text-transform:uppercase;color:#9699a0;margin-bottom:14px}#unlock h1{margin-bottom:16px}#unlock>p{margin-bottom:32px}#unlock button,#unlock .button{width:100%;margin-top:16px}.button{display:flex;align-items:center;justify-content:center;min-height:44px;padding:10px 18px;border-radius:9px;background:#eeeef0;color:#191a1c;font-weight:600;text-decoration:none}.button:hover{background:#fff}#signInOption .button{margin:0 0 30px}#unlock small{display:block;margin-top:22px;line-height:1.6}
 .workspace{max-width:1320px;margin:auto;display:grid;grid-template-columns:220px minmax(0,1fr);min-height:calc(100vh - 88px)}.sidebar{border-right:1px solid var(--line);padding:38px 22px;display:flex;flex-direction:column;gap:38px}nav{display:flex;flex-direction:column;gap:6px}nav button{display:flex;justify-content:space-between;align-items:center;text-align:left;color:#a7a9b0;background:transparent;font-weight:500;padding:11px 14px}nav button:hover{background:#222327;color:#fff}nav button[aria-current=page]{background:#2a2b30;color:#fff}nav span{font-size:12px;color:#94979f;font-variant-numeric:tabular-nums}.sidebar-note{padding:0 14px;max-width:180px;font-size:12px;line-height:1.7;color:#858891}.sidebar-note strong{display:block;color:#b9bbc1;font-weight:500;margin-bottom:7px}.main{padding:46px 48px 64px;min-width:0}.section-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;margin-bottom:32px}.section-heading p{margin-top:10px;max-width:510px;font-size:14px;line-height:1.6}.toolbar{display:flex;gap:12px;align-items:center;padding-bottom:18px;border-bottom:1px solid var(--line)}.toolbar input{max-width:300px;min-height:42px;background:var(--surface);font-size:14px}.toolbar small{margin-left:auto}.entry{display:flex;align-items:center;gap:16px;padding:23px 0;border-bottom:1px solid var(--line)}.identity{flex:1;min-width:0}.entry-title{font-size:15px;font-weight:550;overflow-wrap:anywhere}.entry small{display:block;margin-top:5px;font-size:12px;line-height:1.6;overflow-wrap:anywhere}.row-actions{display:flex;gap:6px;flex-shrink:0}.entry .state{color:#b8babf}.entry .disabled{color:#9a8580}.empty{padding:64px 16px;text-align:center}.empty h2{font-size:17px;margin-bottom:8px;letter-spacing:0}.empty p{font-size:14px;max-width:360px;margin:auto}.notice{max-width:1224px;margin:16px auto 0;padding:14px 18px;border:1px solid #68504b;background:#2a2221;border-radius:8px;color:#f0c1b7;font-size:14px;overflow-wrap:anywhere}.page-footer{margin-top:32px;font-size:12px;color:#858891}
 dialog{color:inherit;background:#202124;border:1px solid #44464b;border-radius:16px;width:min(500px,calc(100% - 32px));max-height:calc(100% - 40px);padding:30px;box-shadow:0 24px 100px #0008}dialog::backdrop{background:#0009}dialog h2{margin-bottom:12px}dialog p{font-size:14px;margin-bottom:24px;line-height:1.65}dialog .dialog-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:26px}dialog textarea{font:12px/1.6 ui-monospace,SFMono-Regular,monospace;min-height:126px;resize:vertical;word-break:break-all}dialog small{display:block;margin-top:12px}.dialog-notice{color:#efb0a5;font-size:13px;margin-top:12px}.code-meta{font-size:12px;color:#c7c9ce;margin-bottom:16px}.copy-status{min-height:20px}
 @media(min-width:1500px){.topbar{padding-inline:max(40px,calc((100vw - 1240px)/2))}}
@@ -18,13 +18,14 @@ dialog{color:inherit;background:#202124;border:1px solid #44464b;border-radius:1
 </style>
 </head>
 <body>
-<header class="topbar"><div class="brand"><div class="wordmark">loge</div><span>Sync administration</span></div><div class="top-actions" id="sessionActions" hidden><span class="session">Administrator session</span><button id="lock" class="secondary">Lock panel</button></div></header>
+<header class="topbar"><div class="brand"><div class="wordmark">loge</div><span>Sync administration</span></div><div class="top-actions" id="sessionActions" hidden><span class="session" id="sessionLabel">Administrator session</span><button id="lock" class="secondary">Lock panel</button></div></header>
 <div id="notice" class="notice" role="status" hidden></div>
 <form id="unlock">
 <div class="eyebrow">Your sync server</div><h1>Manage your sync.</h1>
 <p>Manage accounts, connected devices and the setups they share.</p>
+<div id="signInOption" hidden><a id="signIn" class="button" href="/oidc/login">Sign in</a></div>
 <label for="token">Administrator code</label><input id="token" type="password" autocomplete="off" spellcheck="false" required autofocus>
-<button type="submit">Unlock panel</button><small>Your code stays in this browser tab for this session. Encrypted settings and playback data stay private.</small>
+<button type="submit" id="unlockButton">Unlock panel</button><small>Your code stays in this browser tab for this session. Encrypted settings and playback data stay private.</small>
 </form>
 <div id="content" class="workspace" hidden>
 <aside class="sidebar"><nav aria-label="Administration">
@@ -50,11 +51,11 @@ const views={
   invitations:{title:'Invitations',description:'Unused codes for connecting a device or joining a shared setup.',empty:'No pending invitations',hint:'New device and sharing codes appear here until used or expired.',footer:'Only unused, unexpired invitations are shown. Codes work once and expire after 24 hours.'},
   groups:{title:'Shared setups',description:'Addons and settings shared between accounts. Playback progress stays private.',empty:'No shared setups',hint:'Use Share setup in the loge app to choose what to share.',footer:'Disabling a setup pauses access for everyone sharing it.'}
 };
-let adminToken='',session=0,currentView='accounts',records={accounts:[],devices:[],invitations:[],groups:[]},names={},pendingAction=null;
+let adminToken='',sessionToken='',session=0,currentView='accounts',records={accounts:[],devices:[],invitations:[],groups:[]},names={},pendingAction=null;
 function message(value){$('notice').textContent=value;$('notice').hidden=!value;}
 async function api(path,method='GET',data){
   const generation=session;
-  const response=await fetch(path,{method,headers:{'X-Admin-Token':adminToken,'Content-Type':'application/json'},body:data?JSON.stringify(data):undefined,credentials:'omit'});
+  const response=await fetch(path,{method,headers:sessionToken?{'X-Admin-Session':sessionToken,'Content-Type':'application/json'}:{'X-Admin-Token':adminToken,'Content-Type':'application/json'},body:data?JSON.stringify(data):undefined,credentials:'omit'});
   let value;try{value=await response.json();}catch{throw Error('The server returned an unreadable response. Try refreshing.');}
   if(generation!==session)throw Error('The panel was locked. Unlock it to continue.');
   if(!response.ok)throw Error(typeof value.detail==='string'?value.detail:'The request failed. Try again.');
@@ -118,7 +119,7 @@ async function refresh(){
   render();
 }
 $('unlock').onsubmit=event=>{event.preventDefault();busy($('unlock').querySelector('button'),async()=>{
-  adminToken=$('token').value;$('token').value='';try{await refresh();$('unlock').hidden=true;$('content').hidden=false;$('sessionActions').hidden=false;message('');$('viewTitle').focus();}catch(error){adminToken='';message(error.message);$('token').focus();}
+  adminToken=$('token').value;$('token').value='';try{await refresh();showPanel('Administrator session');}catch(error){adminToken='';message(error.message);$('token').focus();}
 });};
 $('newAccount').onclick=()=>{$('createNotice').textContent='';$('createDialog').showModal();$('name').focus();};
 $('cancelCreate').onclick=()=>$('createDialog').close();
@@ -132,7 +133,22 @@ $('codeDialog').onclose=()=>{$('code').value='';$('copyStatus').textContent='';}
 $('copyCode').onclick=async()=>{try{await navigator.clipboard.writeText($('code').value);$('copyStatus').textContent='Code copied.';}catch{$('code').focus();$('code').select();$('copyStatus').textContent='Select and copy the code above.';}};
 $('reload').onclick=()=>busy($('reload'),async()=>{message('');try{await refresh();}catch(error){message(error.message);}});
 $('search').oninput=render;for(const node of document.querySelectorAll('[data-view]'))node.onclick=()=>selectView(node.dataset.view,true);
-$('lock').onclick=()=>{session++;adminToken='';names={};for(const dialog of document.querySelectorAll('dialog'))dialog.close();for(const key of Object.keys(records)){records[key]=[];$(key).replaceChildren();}pendingAction=null;$('name').value='';$('content').hidden=true;$('sessionActions').hidden=true;$('unlock').hidden=false;selectView('accounts');message('');$('token').focus();};
+$('lock').onclick=()=>busy($('lock'),async()=>{let notice='';if(sessionToken){try{await api('/admin/session','DELETE');}catch{notice='Locked here, but the server could not end the sign-in. It expires within 8 hours.';}}
+  session++;adminToken='';sessionToken='';names={};for(const dialog of document.querySelectorAll('dialog'))dialog.close();for(const key of Object.keys(records)){records[key]=[];$(key).replaceChildren();}pendingAction=null;$('name').value='';$('content').hidden=true;$('sessionActions').hidden=true;$('unlock').hidden=false;selectView('accounts');message(notice);$('token').focus();});
+function showPanel(label){$('sessionLabel').textContent=label;$('unlock').hidden=true;$('content').hidden=false;$('sessionActions').hidden=false;message('');$('viewTitle').focus();}
+const signInErrors={denied:'This account isn’t allowed to manage the sync server.',failed:'Sign-in didn’t finish. Try again.',unavailable:'The sign-in provider can’t be reached. Use the administrator code.'};
+const fragment=new URLSearchParams(location.hash.slice(1));if(location.hash)history.replaceState(null,'',location.pathname);
+(async()=>{
+  try{
+    const state=await api('/admin/session');
+    if(state.signIn){$('signIn').textContent=state.provider?'Sign in with '+state.provider:'Sign in';$('signInOption').hidden=false;$('unlockButton').className='secondary';}
+    if(fragment.has('signin'))message(signInErrors[fragment.get('signin')]||signInErrors.failed);
+    if(!fragment.get('session'))return;
+    sessionToken=fragment.get('session');
+    const signedIn=await api('/admin/session');if(!signedIn.name)throw Error('The sign-in expired. Sign in again.');
+    await refresh();showPanel('Signed in as '+signedIn.name);
+  }catch(error){sessionToken='';message(error.message);}
+})();
 </script>
 </body>
 </html>
