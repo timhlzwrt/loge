@@ -114,6 +114,10 @@ jobs:
         with:
           path: .build/xcode/SourcePackages
           key: spm-${{ hashFiles('project.yml', 'Vendor/MPVKit/Package.swift') }}
+      - uses: actions/cache@v6
+        with:
+          path: .build/dmg-background
+          key: dmg-background-${{ hashFiles('Tools/render-dmg.swift') }}
       - run: Tools/build-dmg.sh
       - id: version
         run: |

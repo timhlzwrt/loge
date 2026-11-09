@@ -1,0 +1,11 @@
+# Keeps the workflows' actions on current versions: one grouped pull request a month,
+# which CI checks like any other.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ['*']
