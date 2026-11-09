@@ -373,6 +373,11 @@ top, transport on glass circles in the middle, series over episode at the bottom
 under the finger and moves by how far it's dragged, so touching it never skips. The picture dims evenly while
 the controls show. Skip offers sit bottom right above the menus; Up Next is in the top right corner, since at
 the bottom it covered the play button on a landscape phone. tvOS and the Mac are unchanged.
+Checked with real data (Breaking Bad S1 E4's TheIntroDB times, a local file of the matching length): Skip Intro,
+Skip Credits, Up Next with the next episode's still and its countdown. Two fixes: a skip offer stayed up after
+skipping while paused (`availableSkip` used whole-second `position`; it reads the exact time now and ignores
+the last half second), and Skip Credits while paused left mpv on the last frame without reaching the end, so
+Up Next never counted down; a skip to the file's end now stops 0.2 s short and plays out the rest.
 
 Verification for these tasks: reuse `LibraryStoreTests`, `TraktTests`,
 `UITests/FlowTests.swift`, `UITests/PlaybackRegressionTests.swift`,

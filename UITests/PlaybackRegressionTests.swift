@@ -36,12 +36,15 @@ final class PlaybackRegressionTests: XCTestCase {
         wait(for: [recapEnded], timeout: 5)
         XCTAssertTrue(app.buttons["Skip Credits"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.staticTexts["fixture-ended"].value as? String, "no")
+        // Paused, a skip to the very end used to leave mpv short of it, so Up Next never counted down.
+        if !app.buttons["Pause"].isHittable { app.tap() }
+        app.buttons["Pause"].tap()
         app.buttons["Skip Credits"].tap()
         let creditsEnded = expectation(for: NSPredicate { _, _ in
-            (Int(position.value as? String ?? "") ?? -1) >= 58
-                || app.staticTexts["fixture-ended"].value as? String == "yes"
+            app.staticTexts["fixture-ended"].value as? String == "yes"
         }, evaluatedWith: app)
         wait(for: [creditsEnded], timeout: 5)
+        XCTAssertFalse(app.buttons["Skip Credits"].exists, "The offer stayed after skipping")
         if !app.buttons["Close"].isHittable { app.tap() }
         app.buttons["Close"].tap()
         XCTAssertTrue(app.buttons["Play fixture"].waitForExistence(timeout: 5))
@@ -87,6 +90,8 @@ final class PlaybackRegressionTests: XCTestCase {
         }, evaluatedWith: app)
         wait(for: [advanced], timeout: 15)
         if !app.buttons["Pause"].isHittable { app.tap() }
+        // A single tap on the picture waits to rule out a double-tap before showing the controls.
+        XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 3))
         app.buttons["Pause"].tap()
         XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 5))
         let paused = try XCTUnwrap(Int(position.value as? String ?? ""))

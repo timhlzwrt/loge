@@ -437,7 +437,15 @@ struct PlayerView: View {
 
     private func skipOffer(_ skip: PlaybackChapter.Skip, player: MPVPlayer) -> some View {
         Button(skip.kind.rawValue) {
-            player.seek(to: skip.end)
+            if let duration = player.duration, skip.end >= duration {
+                // Credits run to the end of the file. Seeking right to the end while paused leaves
+                // mpv on the last frame without reaching the end, so Up Next never counts down;
+                // stopping just short and playing out the rest always ends it.
+                player.seek(to: max(duration - 0.2, 0))
+                player.play()
+            } else {
+                player.seek(to: skip.end)
+            }
             showControls()
         }
         .font(.subheadline.weight(.semibold))
