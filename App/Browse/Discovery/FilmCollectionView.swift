@@ -171,7 +171,7 @@ struct RecordedCollectionView: View {
         }
         .scrollClipDisabled()
         .background(Color.canvas)
-        .navigationTitle(collection.name)
+        .pageTitle(collection.name)
         .task(id: phase) {
             guard phase == .loading else { return }
             do {

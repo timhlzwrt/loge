@@ -46,7 +46,7 @@ struct HistoryView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.canvas)
-        .navigationTitle("History")
+        .pageTitle("History")
     }
 
     /// Entries are already newest first, so each day's run of them stays together.

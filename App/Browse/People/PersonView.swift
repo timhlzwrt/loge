@@ -82,7 +82,7 @@ struct PersonView: View {
         .scrollClipDisabled()
         .background(Color.canvas)
         .hidingPhoneTabBar()
-        .navigationTitle(route.person.name)
+        .pageTitle(route.person.name)
         .task(id: LoadKey(revision: tmdb.revision, attempt: attempt)) {
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--person-role-ui-test") {
