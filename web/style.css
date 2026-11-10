@@ -666,6 +666,9 @@ code {
   .pane-faq {
     grid-column: 3 / span 10;
   }
+  .pane-legal {
+    grid-column: 1 / span 10;
+  }
   .footer {
     padding-left: 2.5rem;
     padding-right: 2.5rem;
