@@ -15,7 +15,7 @@
   <a href="CONTRIBUTING.md">Contribute</a>
 </p>
 
-![loge on Mac and iPhone: film discovery, festival collections and title details](docs/screenshots/overview.png)
+![The loge player on a landscape iPhone, paused on Night of the Living Dead](docs/screenshots/iphone-player.jpg)
 
 **Your addons provide the streams.** Cinemeta supplies built-in movie and series
 catalogs, search and IMDb ratings. Add a playback addon to watch. loge does not
@@ -121,17 +121,14 @@ required for basic browsing and playback.
 ## Screenshots
 
 <p align="center">
-  <img src="docs/screenshots/iphone-home.jpg" width="260" alt="iPhone Home with a featured film and popular movie posters">
-  &nbsp;
-  <img src="docs/screenshots/iphone-details.png" width="260" alt="iPhone title details with artwork, rating, playback and library actions">
+  <img src="docs/screenshots/iphone-sources.jpg" width="300" alt="Sources sheet with a 4K remux, a 1080p BluRay and an SD file, each with size and bitrate">
 </p>
 
-Real app captures, not UI mockups. The overview combines a Mac discovery capture
-with iPhone title details.
+![loge on Apple TV, paused on Night of the Living Dead](docs/screenshots/tv-player.jpg)
 
-![iPad landscape layout: sidebar navigation and film details](docs/screenshots/ipad-details.jpg)
-
-[Full-size images and capture notes →](docs/screenshots/README.md)
+Real app captures, not mockups. They show *Night of the Living Dead* (1968), which
+is in the public domain, so no third-party artwork appears.
+[Capture notes →](docs/screenshots/README.md)
 
 ## Know the limits
 

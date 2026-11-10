@@ -2,82 +2,32 @@
 
 [Back to loge](../../README.md)
 
-These are real app captures. Film artwork, logos and portraits belong to their
-respective owners; the app's **Settings → About → Data Sources** lists credits.
-The images demonstrate interface layout, not a guarantee that an addon can
-stream a pictured title. None contains configured addon URLs or account secrets.
+Real app captures, not mockups. They only show *Night of the Living Dead* (1968),
+which is in the public domain, played from the Internet Archive's own copies
+(`notld-4k-uhd-remux`, `night-of-the-living-dead_1968`) through a local throwaway
+addon that listed only those three files. None contains addon URLs or account
+secrets.
 
-## iPhone
-
-![Home with a featured film and popular catalogs](iphone-home.jpg)
-
-`iphone-home.jpg` shows the built-in Home catalogs on a fresh install, captured
-on **10 November 2026** on an **iPhone 18 Pro simulator / iOS 27.2** (English UK
-region), with Continue Watching and Watch Later from that simulator's library.
-
-![Sources sheet with a 4K remux, a 1080p BluRay and an SD file](iphone-sources.jpg)
 ![Player paused on a landscape iPhone](iphone-player.jpg)
-![Title page with Resume after playing part of the film](iphone-details-resume.jpg)
+![Sources sheet with a 4K remux, a 1080p BluRay and an SD file](iphone-sources.jpg)
 
-`iphone-sources.jpg`, `iphone-player.jpg` and `iphone-details-resume.jpg` were
-captured the same day on the same simulator. They show *Night of the Living Dead*
-(1968), which is in the public domain, played from the Internet Archive's own
-copies (`notld-4k-uhd-remux`, `night-of-the-living-dead_1968`) through a local
-throwaway addon that listed only those three files. The sources sheet is cropped to
-its list, leaving out the title artwork behind it.
+`iphone-player.jpg` and `iphone-sources.jpg` were captured on **10 November 2026** on an
+**iPhone 18 Pro simulator / iOS 27.2** (English UK region). The sources sheet is cropped
+to its list, leaving out the title artwork behind it.
 
-![Interstellar details with rating, playback and library actions](iphone-details.png)
+![Player paused on Apple TV](tv-player.jpg)
 
-`iphone-details.png` was captured on **7 November 2026** from the current Debug
-build on an **iPhone 18 Pro simulator / iOS 27.2**, using live catalog metadata.
-The status bar was normalized by the capture tool; app content was not altered.
+`tv-player.jpg` was captured the same day on an **Apple TV 4K (4th generation)
+simulator / tvOS 27.2**, driven with `UITests/RemoteDriverTests.swift` and resized
+from 4K.
 
-## iPad
-
-![Landscape film details with sidebar navigation](ipad-details.jpg)
-
-`ipad-details.jpg` was captured on **10 November 2026** on an **iPad Pro 11-inch
-(M5) simulator / iPadOS 27.2**, in landscape with live catalog metadata and a
-normalized status bar.
-
-## Mac
-
-![Mac discovery shelves with films, festivals and directors](mac-discovery.png)
-
-`mac-discovery.png` is the unaltered **After** portion of the existing
-[`mac-shelves-before-after.png`](mac-shelves-before-after.png) capture from
-3 November. Its crop rectangle is `(0, 908, 1280, 1728)` in the original image.
-It is an earlier Mac browsing capture, not a fresh verification of Mac playback
-or the latest sidebar order. Native Mac screenshot access was unavailable for
-this documentation pass, so an authentic existing image is used instead.
-
-## README overview
-
-![Mac discovery and iPhone title details side by side](overview.png)
-
-`overview.png` places the Mac crop and current iPhone details capture side by
-side on a charcoal background with platform labels. Screens are only resized,
-not redrawn. No artificial device frames, playback sources or credentials were added.
-
-## Apple TV
-
-![Player paused on Night of the Living Dead](tv-player.jpg)
-
-`tv-player.jpg` was captured on **10 November 2026** on the same Apple TV simulator,
-playing the Internet Archive's SD copy of *Night of the Living Dead* (1968). The
-project page uses it instead of the Home captures below, which show copyrighted
-artwork.
-
-![Home with a focused poster in Popular Movies](tv-home.jpg)
-![Home opening on Continue Watching](tv-continue.jpg)
-
-Captured on **10 November 2026** on an **Apple TV 4K (4th generation) simulator /
-tvOS 27.2**, driven with `UITests/RemoteDriverTests.swift`, resized from 4K. The
-Breaking Bad entry is existing library state in that simulator.
+The project page at loge.tjh.li uses web-sized copies of these in `web/images`.
 
 ## Updating these images
 
-- Use public catalog metadata or deterministic fixtures, never private setup fields.
-- Show the real affected screen at a readable size. Retain aspect ratio and alt text.
-- Strip incidental private data; do not alter feature state to imply unshipped behavior.
-- Update the device, OS, date and fixture/live-data notes when replacing a capture.
+- Show only public-domain or self-made material. Posters, backdrops, logos and
+  portraits of real titles are copyrighted, so keep them out of frame, including
+  artwork behind sheets and in catalog rows.
+- Use deterministic fixtures, never private setup fields or addon URLs.
+- Show the real screen at a readable size; keep aspect ratio and alt text.
+- Update the device, OS, date and source notes when replacing a capture.
