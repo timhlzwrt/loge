@@ -11,8 +11,20 @@ stream a pictured title. None contains configured addon URLs or account secrets.
 
 ![Home with a featured film and popular catalogs](iphone-home.jpg)
 
-`iphone-home.jpg` is the existing repository capture of the built-in Home
-catalogs. It is retained rather than replaced with a staged library.
+`iphone-home.jpg` shows the built-in Home catalogs on a fresh install, captured
+on **10 November 2026** on an **iPhone 18 Pro simulator / iOS 27.2** (English UK
+region), with Continue Watching and Watch Later from that simulator's library.
+
+![Sources sheet with a 4K remux, a 1080p BluRay and an SD file](iphone-sources.jpg)
+![Player paused on a landscape iPhone](iphone-player.jpg)
+![Title page with Resume after playing part of the film](iphone-details-resume.jpg)
+
+`iphone-sources.jpg`, `iphone-player.jpg` and `iphone-details-resume.jpg` were
+captured the same day on the same simulator. They show *Night of the Living Dead*
+(1968), which is in the public domain, played from the Internet Archive's own
+copies (`notld-4k-uhd-remux`, `night-of-the-living-dead_1968`) through a local
+throwaway addon that listed only those three files. The sources sheet is cropped to
+its top.
 
 ![Interstellar details with rating, playback and library actions](iphone-details.png)
 
@@ -22,9 +34,9 @@ The status bar was normalized by the capture tool; app content was not altered.
 
 ## iPad
 
-![Landscape film details with sidebar navigation](ipad-details.png)
+![Landscape film details with sidebar navigation](ipad-details.jpg)
 
-`ipad-details.png` was captured on **7 November 2026** on an **iPad Pro 11-inch
+`ipad-details.jpg` was captured on **10 November 2026** on an **iPad Pro 11-inch
 (M5) simulator / iPadOS 27.2**, in landscape with live catalog metadata and a
 normalized status bar.
 
@@ -49,11 +61,12 @@ not redrawn. No artificial device frames, playback sources or credentials were a
 
 ## Apple TV
 
-A new tvOS screenshot was not captured in this pass: the connected Device panel
-exposes iPhone/iPad simulators, not an Apple TV target. Do not substitute an
-iPad/Mac image or a mockup as a tvOS screenshot. Apple TV has a separate
-focus-driven layout. The tvOS remote driver (`UITests/RemoteDriverTests.swift`) can
-drive the Apple TV simulator for screenshots; see the [roadmap](../../ROADMAP.md).
+![Home with a focused poster in Popular Movies](tv-home.jpg)
+![Home opening on Continue Watching](tv-continue.jpg)
+
+Captured on **10 November 2026** on an **Apple TV 4K (4th generation) simulator /
+tvOS 27.2**, driven with `UITests/RemoteDriverTests.swift`, resized from 4K. The
+Breaking Bad entry is existing library state in that simulator.
 
 ## Updating these images
 
