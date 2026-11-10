@@ -505,6 +505,51 @@ code {
   border-radius: 2rem;
 }
 
+/* --------------------------------------------------------------- legal */
+
+.legal {
+  max-width: 52rem;
+  padding-top: 4rem;
+  padding-bottom: 4rem;
+}
+.legal-head h1 {
+  margin: 1.5rem 0 1rem;
+  font-size: clamp(2.25rem, 8vw, 3.5rem);
+  font-weight: 800;
+  font-stretch: 125%;
+  line-height: 0.95;
+  letter-spacing: -0.035em;
+}
+.legal-head {
+  margin-bottom: 3rem;
+}
+.legal .pane {
+  margin-bottom: 2rem;
+}
+.legal .pane > .label {
+  margin: -0.75rem 0 1.25rem;
+}
+.legal h3 {
+  margin: 2rem 0 0.75rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+  font-stretch: 115%;
+}
+.legal p {
+  margin: 0 0 1rem;
+  max-width: 62ch;
+  line-height: 1.6;
+}
+.legal address {
+  margin: 0 0 1.5rem;
+  font-style: normal;
+  font-size: 1.0625rem;
+  line-height: 1.6;
+}
+.legal .specs {
+  margin-bottom: 1.25rem;
+}
+
 /* -------------------------------------------------------------- footer */
 
 .footer {

@@ -24,7 +24,7 @@ captured the same day on the same simulator. They show *Night of the Living Dead
 (1968), which is in the public domain, played from the Internet Archive's own
 copies (`notld-4k-uhd-remux`, `night-of-the-living-dead_1968`) through a local
 throwaway addon that listed only those three files. The sources sheet is cropped to
-its top.
+its list, leaving out the title artwork behind it.
 
 ![Interstellar details with rating, playback and library actions](iphone-details.png)
 
@@ -60,6 +60,13 @@ side on a charcoal background with platform labels. Screens are only resized,
 not redrawn. No artificial device frames, playback sources or credentials were added.
 
 ## Apple TV
+
+![Player paused on Night of the Living Dead](tv-player.jpg)
+
+`tv-player.jpg` was captured on **10 November 2026** on the same Apple TV simulator,
+playing the Internet Archive's SD copy of *Night of the Living Dead* (1968). The
+project page uses it instead of the Home captures below, which show copyrighted
+artwork.
 
 ![Home with a focused poster in Popular Movies](tv-home.jpg)
 ![Home opening on Continue Watching](tv-continue.jpg)
