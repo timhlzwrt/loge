@@ -73,8 +73,8 @@ has not been established and should not be inferred from the CI runner label.
 - Native macOS arm64 build: **passed**, deployment target **26.0**.
 - Device-target Release builds for iOS/tvOS and a generic Mac Release build:
   **passed** at **26.0**, with code signing disabled for this build check.
-- The local generic Mac Release binary contains **arm64 and x86_64** slices;
-  that establishes compilation, not Intel hardware/runtime verification.
+- The Mac Release binary is **arm64** only (`ARCHS` in `project.yml`); Intel Macs
+  are not supported.
 - All three used `SWIFT_TREAT_WARNINGS_AS_ERRORS=YES` with Xcode 27.2.
 - LogeCore: **247 tests passed**; opt-in live-service checks were skipped.
 - Release-publishing regressions: **12 tests passed**.
