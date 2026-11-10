@@ -523,6 +523,11 @@ code {
 .legal-head {
   margin-bottom: 3rem;
 }
+.legal-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
 .legal .pane {
   margin-bottom: 2rem;
 }
@@ -666,9 +671,6 @@ code {
   .pane-faq {
     grid-column: 3 / span 10;
   }
-  .pane-legal {
-    grid-column: 1 / span 10;
-  }
   .footer {
     padding-left: 2.5rem;
     padding-right: 2.5rem;
@@ -767,6 +769,19 @@ code {
 }
 .bar .bar-end a:hover {
   color: var(--accent);
+}
+
+/* The language switch, as on tjh.li: the short code on phones, the name on wider screens. */
+.lang-long {
+  display: none;
+}
+@media (min-width: 640px) {
+  .lang-short {
+    display: none;
+  }
+  .lang-long {
+    display: inline;
+  }
 }
 
 @media (min-width: 1024px) {

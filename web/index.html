@@ -6,6 +6,9 @@
     <title>loge · Stremio addons on iPhone, iPad, Apple TV and Mac</title>
     <meta name="description" content="loge is a free, open-source Stremio addon client for iPhone, iPad, Apple TV and Mac, written in SwiftUI and playing with mpv.">
     <link rel="canonical" href="https://loge.tjh.li/">
+    <link rel="alternate" hreflang="en" href="https://loge.tjh.li/">
+    <link rel="alternate" hreflang="de" href="https://loge.tjh.li/de/">
+    <link rel="alternate" hreflang="x-default" href="https://loge.tjh.li/">
     <link rel="icon" href="/icon.png" type="image/png">
     <link rel="apple-touch-icon" href="/icon.png">
     <link rel="preload" href="/fonts/mona-sans.woff2" as="font" type="font/woff2" crossorigin>
@@ -14,6 +17,7 @@
     <meta property="og:title" content="loge">
     <meta property="og:description" content="A Stremio addon client for iPhone, iPad, Apple TV and Mac. Browse films and series, choose your source, play with mpv.">
     <meta property="og:url" content="https://loge.tjh.li/">
+    <meta property="og:locale" content="en_GB">
     <meta property="og:image" content="https://loge.tjh.li/images/iphone-player.jpg">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="theme-color" content="#f2f4f9" media="(prefers-color-scheme: light)">
@@ -184,32 +188,6 @@
               with your device, build number (Settings → About) and what happened.</p>
           </details>
         </section>
-        <section id="legal" class="pane pane-legal" aria-labelledby="legal-heading">
-          <h2 id="legal-heading">Legal</h2>
-          <dl class="specs">
-            <div><dt>Provider</dt><dd>Tim Jonas Holzwarth, Stuttgart,
-              <a class="link" href="mailto:hi@tjh.li">hi@tjh.li</a>. A non-commercial hobby project:
-              no ads, payments, donations or accounts.</dd></div>
-            <div><dt>Copyright</dt><dd>© 2026 Tim Jonas Holzwarth. The app is free software under the
-              <a class="link" href="https://github.com/timhlzwrt/loge/blob/main/LICENSE">GPL-3.0</a>;
-              this page’s text, design and screenshots may not be reused without permission. The
-              film shown is the public-domain <em>Night of the Living Dead</em> (1968).</dd></div>
-            <div><dt>Content</dt><dd>loge provides, stores and recommends no films or series. Whoever
-              adds an addon is responsible for using it lawfully. Linked sites are the
-              responsibility of their operators.</dd></div>
-            <div><dt>Privacy</dt><dd>No cookies, no analytics; fonts and images come from this server.
-              Cloudflare delivers the page and processes your IP address, the time, the address
-              requested and browser details to serve and protect it (Art. 6(1)(f) GDPR, EU-US
-              Data Privacy Framework). I keep no logs. The app sends nothing to me: it talks
-              directly to Cinemeta, Wikidata, TheIntroDB and the services you set up.</dd></div>
-            <div><dt>Trademarks</dt><dd>Apple, iPhone, iPad, Apple TV and Mac are trademarks of
-              Apple Inc.; Stremio, Trakt and TMDB belong to their owners. loge is independent and
-              not affiliated with any of them, and uses the TMDB API without being endorsed or
-              certified by TMDB.</dd></div>
-          </dl>
-          <p class="after">The binding text in German, with your rights under the GDPR:
-            <a class="link" href="/legal">Rechtliches und Datenschutz</a>.</p>
-        </section>
       </div>
 
       <footer class="pane footer">
@@ -224,8 +202,7 @@
         </div>
         <p class="footer-by">
           © 2026 <a class="link" href="https://tjh.li">Tim Jonas Holzwarth</a> ·
-          <a class="link" href="#legal">Legal</a> ·
-          <a class="link" href="/legal">Rechtliches und Datenschutz</a> ·
+          <a class="link" href="/legal">Legal &amp; privacy</a> ·
           <a class="link" href="https://github.com/timhlzwrt/loge/issues/new/choose">Report a problem</a>
         </p>
       </footer>
@@ -242,10 +219,10 @@
         <a href="#features">Features</a>
         <a href="#install">Install</a>
         <a href="#faq">FAQ</a>
-        <a href="#legal">Legal</a>
       </nav>
       <div class="bar-end">
         <a class="label" href="https://github.com/timhlzwrt/loge/releases/latest">Download</a>
+        <a class="label lang" href="/de/" hreflang="de" lang="de" aria-label="Diese Seite auf Deutsch"><span class="lang-short">DE</span><span class="lang-long">Deutsch</span></a>
       </div>
     </header>
   </body>
