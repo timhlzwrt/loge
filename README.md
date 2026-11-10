@@ -129,7 +129,7 @@ required for basic browsing and playback.
 Real app captures, not UI mockups. The overview combines a Mac discovery capture
 with iPhone title details.
 
-![iPad landscape layout: sidebar navigation and film details](docs/screenshots/ipad-details.png)
+![iPad landscape layout: sidebar navigation and film details](docs/screenshots/ipad-details.jpg)
 
 [Full-size images and capture notes →](docs/screenshots/README.md)
 
