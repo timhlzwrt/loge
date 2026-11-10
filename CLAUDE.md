@@ -41,12 +41,16 @@ accent, system font, no cards/gradients/badges.
   `vo=avfoundation` (an `AVSampleBufferDisplayLayer`, for Picture in Picture and HDR). Rebuild
   with `rebuild-libmpv.sh`; see its README.
 - `.github/workflows/ci.yml` — pull requests: Core tests and warning-free builds for iOS, tvOS and macOS.
-- `.github/workflows/release.yml` — every push to main that touches the app (docs, web, UI tests
-  and the sync gateway don't): Core tests and the three platforms in parallel, then unsigned
+- `.github/workflows/release.yml` — every push to main that changes what goes into the builds (an
+  allowlist of app, Core sources, vendor, project and build/publish scripts; README, LICENSE, docs,
+  web and tests don't): Core tests and the three platforms in parallel, then unsigned
   iOS and tvOS `.ipa` files and a self-signed Mac `.dmg` (`Tools/build-dmg.sh`; not notarized, so Gatekeeper needs "Open
   Anyway" once) as release `build-<commit count>`, and the SideStore source (`Tools/sidestore-source.py`) on
   GitHub Pages at `https://tjh.li/loge/source.json` (the account's custom Pages domain).
   Run by hand on another branch, it builds and signs without publishing.
+- `.github/workflows/source.yml` — writes that Pages site (source, Mac appcast, icon, screenshots
+  from `web/images`) from the published releases; called after each release, and run alone when
+  the source script or images change, so the SideStore page updates without a new build.
 
 ## Commands
 

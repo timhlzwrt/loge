@@ -1,0 +1,55 @@
+name: SideStore source
+
+# Writes the SideStore source and the Mac update feed to GitHub Pages from the published
+# releases. The release workflow calls it after each release; a change to the source's text or
+# images runs it alone, so the page updates without a new build.
+on:
+  push:
+    branches: [main]
+    paths:
+      - Tools/sidestore-source.py
+      - web/images/**
+      - App/Assets.xcassets/AppIcon.appiconset/icon-1024.png
+      - .github/workflows/source.yml
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pages:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Job-level, so it also queues when called from the release workflow.
+    concurrency:
+      group: sidestore-source
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}source.json
+    steps:
+      - uses: actions/checkout@v7
+      - name: Write the site
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p site/images
+          # The latest release's published bytes, so rerunning an older release can't roll the feed back.
+          gh release download --pattern appcast.xml --dir site --clobber
+          cp App/Assets.xcassets/AppIcon.appiconset/icon-1024.png site/icon.png
+          cp web/images/*.jpg site/images/
+          gh api "repos/$GITHUB_REPOSITORY/releases" --paginate --slurp | jq 'add' > releases.json
+          # Pages is served on the account's custom domain; github.io redirects there over plain HTTP.
+          python3 Tools/sidestore-source.py releases.json https://tjh.li/loge > site/source.json
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+      - id: pages
+        uses: actions/deploy-pages@v5
