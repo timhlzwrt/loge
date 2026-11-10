@@ -140,7 +140,7 @@ struct DataSourcesView: View {
         .scrollContentBackground(.hidden)
         #endif
         .background(Color.canvas)
-        .navigationTitle("Data Sources")
+        .pageTitle("Data Sources")
         .task {
             do { editions = try FestivalEdition.all() }
             catch { festivalSourceFailure = true }

@@ -125,7 +125,8 @@ private struct TrackList: View {
     var body: some View {
         let tracks = player.distinctTracks(kind)
         let selection = player.selection(for: kind)
-        VStack(alignment: .leading, spacing: 8) {
+        // Wider than the steppers' 8: a focused row's platter reaches above its text, over the label.
+        VStack(alignment: .leading, spacing: 22) {
             Text("Language")
                 .font(.caption)
                 .foregroundStyle(.secondary)

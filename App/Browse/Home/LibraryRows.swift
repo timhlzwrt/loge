@@ -147,8 +147,12 @@ struct MyListView: View {
                 ContentUnavailableView(
                     "Nothing saved yet",
                     systemImage: "bookmark",
-                    description: Text("Tap Watch Later on a title to save it here, or Lists to start a list of your own.")
+                    description: Text("Choose Watch Later on a title to save it here, or Lists to start a list of your own.")
                 )
+                #if os(tvOS)
+                // With nothing to focus, the remote can't reach the tab menu and Menu leaves the app.
+                .focusable()
+                #endif
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 36) {

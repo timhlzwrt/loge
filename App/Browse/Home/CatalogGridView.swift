@@ -71,7 +71,7 @@ struct CatalogGridView: View {
         // A new filter is a new list, so it starts from the top.
         .id(Filter(sortID: sortID, genre: genre))
         .background(Color.canvas)
-        .navigationTitle(title)
+        .pageTitle(title)
         .toolbar {
             if !sortOptions.isEmpty {
                 ToolbarItem {

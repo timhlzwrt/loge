@@ -56,6 +56,12 @@ struct SourcesView: View {
                     }
                 }
                 #endif
+                #if os(tvOS)
+                // A sheet is a narrow panel there, with Done squeezed against the title; Menu closes this.
+                .fullScreenCover(isPresented: $isAddingAddon) {
+                    NavigationStack { AddonsSettingsView() }
+                }
+                #else
                 .sheet(isPresented: $isAddingAddon) {
                     NavigationStack {
                         AddonsSettingsView()
@@ -66,6 +72,7 @@ struct SourcesView: View {
                             }
                     }
                 }
+                #endif
             } else {
                 content(providers)
             }
@@ -76,7 +83,8 @@ struct SourcesView: View {
         #if !os(tvOS)
         .navigationTitle(route.title)
         #endif
-        .task {
+        // Again when the addons change: one installed from the empty state above has to be asked too.
+        .task(id: providers.map(\.id)) {
             await load(providers)
             // Leaving Sources cancels loading even when a shared prefetched request finishes later.
             guard !Task.isCancelled else { return }

@@ -82,6 +82,30 @@ final class DiscoveryTVTests: XCTestCase {
     }
 
     @MainActor
+    func testRemoteRestartsEndedPlayback() throws {
+        let app = try launchPlayer()
+        defer { app.terminate() }
+        let ended = app.staticTexts["fixture-ended"]
+        let position = app.staticTexts["fixture-position"]
+        for usePlayPause in [false, true] {
+            skipToEnd(app)
+            wait(for: [expectation(for: NSPredicate(format: "value == 'yes'"), evaluatedWith: ended)], timeout: 5)
+
+            if usePlayPause {
+                XCUIRemote.shared.press(.playPause)
+            } else {
+                XCUIRemote.shared.press(.select)
+            }
+            let restarted = expectation(for: NSPredicate { _, _ in
+                let seconds = Int(position.value as? String ?? "") ?? -1
+                return ended.value as? String == "no" && seconds >= 1 && seconds < 10
+            }, evaluatedWith: app)
+            wait(for: [restarted], timeout: 10)
+            screenshot(usePlayPause ? "tv-restarted-playpause" : "tv-restarted-select")
+        }
+    }
+
+    @MainActor
     func testRemoteCancelsTheUpNextCountdown() throws {
         let app = try launchPlayer(environment: ["PLAYBACK_FIXTURE_NEXT": "1"])
         defer { app.terminate() }

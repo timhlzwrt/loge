@@ -19,7 +19,7 @@ struct SettingsView: View {
             .scrollContentBackground(.hidden)
             #endif
             .background(Color.canvas)
-            .navigationTitle("Settings")
+            .pageTitle("Settings")
     }
 
     @ViewBuilder private var settingsContent: some View {
@@ -108,7 +108,7 @@ struct SettingsPage<Content: View>: View {
             .scrollContentBackground(.hidden)
             #endif
             .background(Color.canvas)
-            .navigationTitle(title)
+            .pageTitle(title)
     }
 }
 
@@ -179,7 +179,7 @@ struct AddonsSettingsView: View {
         .scrollContentBackground(.hidden)
         #endif
         .background(Color.canvas)
-        .navigationTitle("Addons")
+        .pageTitle("Addons")
         #if os(iOS)
         .toolbar {
             if !store.addons.isEmpty { EditButton() }
