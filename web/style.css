@@ -534,21 +534,9 @@ code {
 .legal .pane > .label {
   margin: -0.75rem 0 1.25rem;
 }
-.legal h3 {
-  margin: 2rem 0 0.75rem;
-  font-size: 1.125rem;
-  font-weight: 600;
-  font-stretch: 115%;
-}
 .legal p {
   margin: 0 0 1rem;
   max-width: 62ch;
-  line-height: 1.6;
-}
-.legal address {
-  margin: 0 0 1.5rem;
-  font-style: normal;
-  font-size: 1.0625rem;
   line-height: 1.6;
 }
 .legal .specs {
