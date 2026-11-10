@@ -22,6 +22,11 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+      # The tjh.li zone's Browser Cache TTL keeps assets for 4 hours whatever the
+      # headers say, so a returning visitor got the new page with the old stylesheet.
+      # A per-commit query string gives the stylesheet and images new URLs each deploy.
+      - name: Version asset URLs
+        run: sed -i -E "s#(href|src)=\"/(style\.css|images/[^\"]+)\"#\1=\"/\2?v=${GITHUB_SHA::7}\"#g" web/index.html
       - uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
