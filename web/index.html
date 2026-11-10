@@ -16,237 +16,198 @@
     <meta property="og:url" content="https://loge.tjh.li/">
     <meta property="og:image" content="https://loge.tjh.li/images/tv-home.jpg">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="theme-color" content="#141416">
+    <meta name="theme-color" content="#f2f4f9" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0a0d13" media="(prefers-color-scheme: dark)">
   </head>
 
   <body>
     <a class="skip" href="#main">Skip to content</a>
 
     <main id="main" class="page">
-      <header class="hero">
-        <h1 class="hero-name">loge</h1>
-        <p class="hero-line">
-          <strong>Your Stremio addons on every Apple screen.</strong>
-          <span>A native app for iPhone, iPad, Apple TV and Mac. Browse films and series,
-            pick the source you want, and play it with mpv.</span>
+      <section class="hero">
+        <p class="label hero-note rise d5">Free and open source · GPL-3.0</p>
+        <h1 class="hero-name rise d1"><span class="initial">l</span>oge</h1>
+        <p class="hero-line rise d2">
+          <strong>Stremio addons, native on Apple devices.</strong>
+          <span>iPhone, iPad, Apple TV and Mac.</span>
         </p>
-        <div class="hero-actions">
-          <a class="button" href="https://github.com/timhlzwrt/loge/releases/latest">Download</a>
-          <a class="link" href="#install">How to install</a>
-          <a class="link" href="https://github.com/timhlzwrt/loge">Source on GitHub <span aria-hidden="true">↗</span></a>
-        </div>
-        <p class="label hero-meta">Free and open source · GPL-3.0</p>
-      </header>
+        <ul class="hero-links rise d3">
+          <li><a class="big-link" href="https://github.com/timhlzwrt/loge/releases/latest">Download<span aria-hidden="true">↗</span></a></li>
+          <li><a class="big-link" href="#install">Install</a></li>
+          <li><a class="big-link" href="https://github.com/timhlzwrt/loge">Source<span aria-hidden="true">↗</span></a></li>
+        </ul>
+        <a class="scroll-cue rise d6" href="#about" aria-label="Scroll down">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 6l5 5 5-5"/></svg>
+        </a>
+      </section>
 
-      <figure class="shot shot-tv hero-shot">
-        <img src="/images/tv-home.jpg" width="2400" height="1350" fetchpriority="high"
-          alt="loge on Apple TV: Hocus Pocus fills the screen above a focused row of popular movies">
-        <figcaption class="label">Apple TV · Home</figcaption>
-      </figure>
+      <div class="grid">
+        <figure class="shot shot-tv">
+          <img src="/images/tv-home.jpg" width="2400" height="1350" fetchpriority="high"
+            alt="loge on Apple TV: Hocus Pocus fills the screen above a focused row of popular movies">
+          <figcaption class="label">Apple TV · Home</figcaption>
+        </figure>
 
-      <section id="features" class="feature feature-browse" aria-labelledby="browse-heading">
-        <div class="feature-text">
-          <p class="label">Browse</p>
-          <h2 id="browse-heading">Artwork first, from the first launch.</h2>
-          <p>
-            Popular films and series, Letterboxd lists, genres, festival winners and great
-            directors are built in, so Home is full before you add anything. Catalogs from
-            your own addons join them. Title pages bring seasons, Up Next, cast and crew,
-            reviews and, with a free TMDB key, More Like This and a Recommended row ranked
-            on your device.
-          </p>
-        </div>
+        <section id="about" class="pane pane-about" aria-labelledby="about-heading">
+          <h2 id="about-heading">About</h2>
+          <div class="prose">
+            <p>loge is an app for watching what your Stremio addons find, built natively for each
+              Apple device rather than wrapped in a web view. It opens on artwork, lets you pick
+              exactly which stream to play and hands it to mpv.</p>
+            <p>The streams come from addons you install yourself. loge brings catalogs to browse
+              but does not host, bundle or sell any content.</p>
+          </div>
+        </section>
+
+        <p class="stat stat-platforms">
+          <span class="label">Platforms</span>
+          <span class="stat-figure">4</span>
+          <span class="stat-text">from one SwiftUI app, each with its own layout</span>
+        </p>
+
+        <section id="features" class="pane pane-features" aria-labelledby="features-heading">
+          <h2 id="features-heading">What it does</h2>
+          <article class="row">
+            <div class="row-head">
+              <h3>Browse</h3>
+              <span class="tags"><span class="label">Cinemeta</span><span class="label">TMDB</span></span>
+            </div>
+            <p>Popular films and series, Letterboxd lists, genres, festival winners and directors
+              are built in, so Home is full before you add anything. Title pages bring seasons,
+              Up Next, cast, reviews and More Like This.</p>
+          </article>
+          <article class="row">
+            <div class="row-head">
+              <h3>Sources</h3>
+              <span class="tags"><span class="label">Every addon</span></span>
+            </div>
+            <p>Each stream is read into resolution, HDR, codec, audio, size and bitrate, then
+              grouped by quality. loge remembers the release you chose for the next episode and
+              falls back to another source when a link fails.</p>
+          </article>
+          <article class="row">
+            <div class="row-head">
+              <h3>Playback</h3>
+              <span class="tags"><span class="label">mpv</span></span>
+            </div>
+            <p>Hardware-decoded MKV, HEVC and HLS. Subtitles from files and subtitle addons,
+              audio in your language, intro and credits skips, Up Next, Picture in Picture and
+              AirPlay.</p>
+          </article>
+          <article class="row">
+            <div class="row-head">
+              <h3>Library</h3>
+              <span class="tags"><span class="label">Trakt</span><span class="label">Self-hosted</span></span>
+            </div>
+            <p>Continue Watching, Watch Later, your own lists and a history by day. Progress
+              follows you between devices through Trakt or a
+              <a class="link" href="https://github.com/timhlzwrt/loge/blob/main/docs/SYNC.md">sync service you run yourself</a>.</p>
+          </article>
+          <article class="row">
+            <div class="row-head">
+              <h3>Apple TV</h3>
+              <span class="tags"><span class="label">tvOS</span></span>
+            </div>
+            <p>A focus-driven Home that fills the screen with artwork, the Siri Remote throughout,
+              and frame-rate and dynamic-range matching for playback.</p>
+          </article>
+        </section>
+
         <figure class="shot shot-phone">
           <img src="/images/iphone-home.jpg" width="640" height="1391" loading="lazy" decoding="async"
-            alt="iPhone Home with a featured film, its logo and Play button, above Continue Watching">
+            alt="iPhone Home with a featured film above Continue Watching">
           <figcaption class="label">iPhone · Home</figcaption>
         </figure>
-        <figure class="shot shot-mac">
-          <img src="/images/mac-discovery.jpg" width="1280" height="820" loading="lazy" decoding="async"
-            alt="Mac sidebar and Home shelves: animation, film festivals and popular directors">
-          <figcaption class="label">Mac · Festivals and directors</figcaption>
-        </figure>
-      </section>
 
-      <section class="feature feature-sources" aria-labelledby="sources-heading">
-        <div class="feature-text">
-          <p class="label">Sources</p>
-          <h2 id="sources-heading">Every stream, read for you.</h2>
-          <p>
-            All your addons are asked at once. loge reads each stream into resolution, HDR,
-            codec, audio and size, groups them by quality and estimates the bitrate, so a
-            58 GB remux and a 560 MB encode are easy to tell apart.
-          </p>
-          <ul class="points">
-            <li>Remembers the release you chose and plays the next episode from it.</li>
-            <li>Falls back to another source when a link fails.</li>
-            <li>Marks the best source your connection can carry.</li>
-          </ul>
-        </div>
-        <figure class="shot shot-phone">
-          <img src="/images/iphone-sources.jpg" width="640" height="785" loading="lazy" decoding="async"
-            alt="Sources sheet for Night of the Living Dead: a 4K HEVC remux, a 1080p BluRay and an SD file, each with size and bitrate">
-          <figcaption class="label">iPhone · Sources</figcaption>
-        </figure>
-      </section>
-
-      <section class="feature feature-play" aria-labelledby="play-heading">
         <figure class="shot shot-player">
           <img src="/images/iphone-player.jpg" width="1800" height="828" loading="lazy" decoding="async"
             alt="The player on a landscape iPhone, paused on Night of the Living Dead, with skip buttons, timeline and track menus">
           <figcaption class="label">iPhone · Player</figcaption>
         </figure>
-        <div class="feature-text">
-          <p class="label">Playback</p>
-          <h2 id="play-heading">mpv, with the controls you expect.</h2>
-          <p>
-            Hardware-decoded mpv plays MKV, HEVC, HLS and almost anything else an addon
-            serves, behind controls that feel at home on each device.
-          </p>
-          <dl class="specs">
-            <div><dt>Subtitles</dt><dd>Embedded tracks and subtitle addons, with timing adjustment</dd></div>
-            <div><dt>Audio</dt><dd>Your language picked by default, any track a tap away</dd></div>
-            <div><dt>Skips</dt><dd>Intro, recap and credits, then Up Next with a countdown</dd></div>
-            <div><dt>Away</dt><dd>Picture in Picture, AirPlay, Lock Screen and Control Center</dd></div>
-            <div><dt>Apple TV</dt><dd>Frame-rate and dynamic-range matching</dd></div>
-          </dl>
-        </div>
-      </section>
 
-      <section class="feature feature-library" aria-labelledby="library-heading">
-        <div class="feature-text">
-          <p class="label">Library</p>
-          <h2 id="library-heading">Pick up where you left off.</h2>
-          <p>
-            Continue Watching, Watch Later, your own lists and a history by day. Stop an
-            episode on your phone and resume it on the TV: sign in to Trakt for scrobbling
-            and progress, or run the <a class="link" href="https://github.com/timhlzwrt/loge/blob/main/docs/SYNC.md">small sync service</a>
-            yourself to carry progress, addons and settings, encrypted on the device.
-          </p>
-        </div>
-        <figure class="shot shot-tv">
-          <img src="/images/tv-continue.jpg" width="2400" height="1350" loading="lazy" decoding="async"
-            alt="Apple TV Home with Breaking Bad in Continue Watching: season 1, episode 4, 33 minutes left">
-          <figcaption class="label">Apple TV · Continue Watching</figcaption>
-        </figure>
-        <figure class="shot shot-phone">
-          <img src="/images/iphone-details.jpg" width="640" height="1391" loading="lazy" decoding="async"
-            alt="iPhone title page for Night of the Living Dead with Resume, Watch Later, Lists and Sources">
-          <figcaption class="label">iPhone · Title page</figcaption>
-        </figure>
-      </section>
+        <section id="install" class="pane pane-install" aria-labelledby="install-heading">
+          <h2 id="install-heading">Install</h2>
+          <p class="lead">loge is sideloaded; a free Apple ID is enough. Every change to the app
+            is a new build on <a class="link" href="https://github.com/timhlzwrt/loge/releases">GitHub Releases</a>.</p>
+          <article class="row">
+            <div class="row-head">
+              <h3>iPhone, iPad</h3>
+              <span class="tags"><span class="label">.ipa</span></span>
+            </div>
+            <p>Add the SideStore source to get every build as an update, or sign the .ipa with
+              <a class="link" href="https://github.com/nab138/iloader">iloader</a>.</p>
+            <code class="source">https://tjh.li/loge/source.json</code>
+          </article>
+          <article class="row">
+            <div class="row-head">
+              <h3>Apple TV</h3>
+              <span class="tags"><span class="label">.ipa</span></span>
+            </div>
+            <p>Install the tvOS build with
+              <a class="link" href="https://github.com/bitxeno/atvloadly">atvloadly</a> or
+              <a class="link" href="https://sideloadly.io">Sideloadly</a>.</p>
+          </article>
+          <article class="row">
+            <div class="row-head">
+              <h3>Mac</h3>
+              <span class="tags"><span class="label">.dmg</span><span class="label">Apple silicon</span></span>
+            </div>
+            <p>Drag loge into Applications and choose <em>Open Anyway</em> in Privacy &amp;
+              Security on first launch. Updates then arrive in the app.</p>
+          </article>
+          <p class="after">Then open <strong>Settings → Addons</strong> and paste your provider’s
+            <code>manifest.json</code> URL.
+            <a class="link" href="https://github.com/timhlzwrt/loge/blob/main/docs/INSTALLATION.md">Full guide ↗</a></p>
+        </section>
 
-      <section class="feature feature-devices" aria-labelledby="devices-heading">
-        <div class="feature-text">
-          <p class="label">Everywhere</p>
-          <h2 id="devices-heading">One app, shaped for each screen.</h2>
-          <dl class="specs">
-            <div><dt>iPhone</dt><dd>Three tabs, a turning player, everything in reach of your thumb</dd></div>
-            <div><dt>iPad</dt><dd>A sidebar and two-column title pages in landscape</dd></div>
-            <div><dt>Apple TV</dt><dd>Focus-driven Home with full-screen artwork and the Siri Remote</dd></div>
-            <div><dt>Mac</dt><dd>Sidebar, a Playback menu and a full-screen player window. Apple silicon</dd></div>
-          </dl>
-        </div>
-        <figure class="shot shot-ipad">
-          <img src="/images/ipad-details.jpg" width="1400" height="965" loading="lazy" decoding="async"
-            alt="iPad in landscape: sidebar beside a two-column title page with cast and information on the right">
-          <figcaption class="label">iPad · Title page</figcaption>
-        </figure>
-      </section>
-
-      <section id="install" class="install" aria-labelledby="install-heading">
-        <h2 id="install-heading">Install</h2>
-        <p class="lead">
-          loge is installed by sideloading, like other open-source players. A free Apple ID is
-          enough. Every change to the app becomes a new build on
-          <a class="link" href="https://github.com/timhlzwrt/loge/releases">GitHub Releases</a>.
+        <p class="stat stat-price">
+          <span class="label">Price</span>
+          <span class="stat-figure">0 €</span>
+          <span class="stat-text">no ads, no account, source on GitHub</span>
         </p>
-        <ol class="steps">
-          <li>
-            <h3>Download</h3>
-            <p>Get <code>loge-iOS.ipa</code>, <code>loge-tvOS.ipa</code> or
-              <code>loge-macOS.dmg</code> from the
-              <a class="link" href="https://github.com/timhlzwrt/loge/releases/latest">latest release</a>.</p>
-          </li>
-          <li>
-            <h3>Install</h3>
-            <dl class="rows">
-              <div>
-                <dt class="label">iPhone, iPad</dt>
-                <dd>Add the SideStore source to get every new build as an update, or sign the
-                  .ipa with <a class="link" href="https://github.com/nab138/iloader">iloader</a>.
-                  <code class="source">https://tjh.li/loge/source.json</code></dd>
-              </div>
-              <div>
-                <dt class="label">Apple TV</dt>
-                <dd>Install the tvOS .ipa with
-                  <a class="link" href="https://github.com/bitxeno/atvloadly">atvloadly</a> or
-                  <a class="link" href="https://sideloadly.io">Sideloadly</a>.</dd>
-              </div>
-              <div>
-                <dt class="label">Mac</dt>
-                <dd>Drag loge into Applications. On first launch, choose <em>Open Anyway</em>
-                  in Privacy &amp; Security. Updates then arrive in the app.</dd>
-              </div>
-            </dl>
-          </li>
-          <li>
-            <h3>Add an addon</h3>
-            <p>Open <strong>Settings → Addons</strong> and paste your provider’s
-              <code>manifest.json</code> URL. Then open any title and press Play.</p>
-          </li>
-        </ol>
-        <p class="note">
-          <a class="link" href="https://github.com/timhlzwrt/loge/blob/main/docs/INSTALLATION.md">Full installation guide and troubleshooting ↗</a>
-        </p>
-      </section>
 
-      <section id="faq" class="faq" aria-labelledby="faq-heading">
-        <h2 id="faq-heading">Questions</h2>
-        <details>
-          <summary>Does loge come with anything to watch?</summary>
-          <p>It comes with catalogs to browse, not streams. Playback comes from the Stremio
-            addons you install; loge does not host, bundle or sell content.</p>
-        </details>
-        <details>
-          <summary>Which addons work?</summary>
-          <p>Any Stremio addon that returns HTTP(S) streams. Torrent and magnet results are left
-            out, so torrent-based addons need a debrid service that turns them into links.
-            Subtitle addons such as OpenSubtitles work too.</p>
-        </details>
-        <details>
-          <summary>Why isn’t it in the App Store?</summary>
-          <p>It is a personal project without a paid developer account. With a free Apple ID,
-            iPhone and Apple TV installs are signed for seven days; SideStore and atvloadly
-            refresh them for you.</p>
-        </details>
-        <details>
-          <summary>Can I download for offline viewing?</summary>
-          <p>No. loge streams; keeping files offline is out of scope.</p>
-        </details>
-        <details>
-          <summary>Which languages does it support?</summary>
-          <p>The interface is in English. Audio and subtitle languages are chosen separately in
-            Settings, and loge picks matching tracks automatically.</p>
-        </details>
-        <details>
-          <summary>Something doesn’t work.</summary>
-          <p>loge is young and changes often. Please
-            <a class="link" href="https://github.com/timhlzwrt/loge/issues/new/choose">open an issue</a>
-            with your device, the build number from Settings → About, and what happened.</p>
-        </details>
-      </section>
+        <section id="faq" class="pane pane-faq" aria-labelledby="faq-heading">
+          <h2 id="faq-heading">Questions</h2>
+          <details>
+            <summary>Does loge come with anything to watch?</summary>
+            <p>Catalogs to browse, not streams. Playback comes from the Stremio addons you install.</p>
+          </details>
+          <details>
+            <summary>Which addons work?</summary>
+            <p>Any addon that returns HTTP(S) streams. Torrent results are left out, so torrent
+              addons need a debrid service that turns them into links. Subtitle addons work too.</p>
+          </details>
+          <details>
+            <summary>Why isn’t it in the App Store?</summary>
+            <p>It is a personal project without a paid developer account. With a free Apple ID,
+              iPhone and Apple TV installs last seven days; SideStore and atvloadly refresh them.</p>
+          </details>
+          <details>
+            <summary>Can I download for offline viewing?</summary>
+            <p>No, loge streams.</p>
+          </details>
+          <details>
+            <summary>Something doesn’t work.</summary>
+            <p><a class="link" href="https://github.com/timhlzwrt/loge/issues/new/choose">Open an issue</a>
+              with your device, the build number from Settings → About and what happened.</p>
+          </details>
+        </section>
+      </div>
 
-      <footer class="footer">
+      <footer class="pane footer">
+        <div class="footer-row">
+          <span class="label">License</span>
+          <a class="link" href="https://github.com/timhlzwrt/loge/blob/main/LICENSE">GPL-3.0</a>
+        </div>
+        <div class="footer-row">
+          <span class="label">Playback</span>
+          <span><a class="link" href="https://mpv.io">mpv</a> and <a class="link" href="https://ffmpeg.org">FFmpeg</a>
+            through <a class="link" href="https://github.com/mpvkit/MPVKit">MPVKit</a></span>
+        </div>
         <p>
-          loge is free software under the
-          <a class="link" href="https://github.com/timhlzwrt/loge/blob/main/LICENSE">GPL-3.0</a>.
-          Playback uses <a class="link" href="https://mpv.io">mpv</a> and
-          <a class="link" href="https://ffmpeg.org">FFmpeg</a> through
-          <a class="link" href="https://github.com/mpvkit/MPVKit">MPVKit</a>.
-          It is an independent project, not an official Stremio application, and uses the TMDB
-          API without being endorsed or certified by TMDB. Artwork in the screenshots belongs to
-          its owners; the film playing is the public-domain <em>Night of the Living Dead</em> (1968).
+          An independent project, not an official Stremio application. Uses the TMDB API without
+          being endorsed or certified by TMDB. Artwork in the screenshots belongs to its owners;
+          the film playing is the public-domain <em>Night of the Living Dead</em> (1968).
         </p>
         <p class="footer-by">
           Made by <a class="link" href="https://tjh.li">Tim Holzwarth</a> ·
@@ -255,19 +216,22 @@
       </footer>
     </main>
 
-    <nav class="bar" aria-label="Sections">
+    <header class="bar">
       <a class="bar-home" href="#main">
         <svg width="14" height="20" viewBox="0 0 14 20" aria-hidden="true">
           <path d="M3 2v11a5 5 0 0 0 5 5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
         </svg>
         loge
       </a>
-      <div class="bar-links">
+      <nav class="bar-links" aria-label="Sections">
+        <a href="#about">About</a>
         <a href="#features">Features</a>
         <a href="#install">Install</a>
         <a href="#faq">FAQ</a>
+      </nav>
+      <div class="bar-end">
+        <a class="label" href="https://github.com/timhlzwrt/loge/releases/latest">Download</a>
       </div>
-      <a class="bar-end" href="https://github.com/timhlzwrt/loge/releases/latest">Download</a>
-    </nav>
+    </header>
   </body>
 </html>

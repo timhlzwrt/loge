@@ -26,7 +26,7 @@ accent, system font, no cards/gradients/badges.
 - `App/Settings/` — an index of pages: Sync, addons (install/reorder/remove), Trakt, TMDB, accent;
   playback preferences inline; About with version, credits and the Data Sources page
   (all attribution lives there rather than under artwork).
-- `web/` — the project page for loge.tjh.li: static HTML/CSS in tjh.li's type on the app's charcoal canvas, no
+- `web/` — the project page for loge.tjh.li: static HTML/CSS in tjh.li's design (type, neutrals, accent, panes), no
   scripts or build step; screenshots are web-sized copies from `docs/screenshots`. Hosted on
   Cloudflare Pages (project `loge`); `.github/workflows/web.yml` deploys it when `web/` changes on main.
 - `Tools/run-device.sh` — Debug build onto the connected iPhone/iPad with the free Personal Team.
