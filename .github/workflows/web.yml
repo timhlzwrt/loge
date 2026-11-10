@@ -26,7 +26,7 @@ jobs:
       # headers say, so a returning visitor got the new page with the old stylesheet.
       # A per-commit query string gives the stylesheet and images new URLs each deploy.
       - name: Version asset URLs
-        run: sed -i -E "s#(href|src)=\"/(style\.css|images/[^\"]+)\"#\1=\"/\2?v=${GITHUB_SHA::7}\"#g" web/*.html
+        run: find web -name '*.html' -exec sed -i -E "s#(href|src)=\"/(style\.css|images/[^\"]+)\"#\1=\"/\2?v=${GITHUB_SHA::7}\"#g" {} +
       - uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}

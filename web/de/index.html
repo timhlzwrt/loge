@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>loge · Stremio-Addons auf iPhone, iPad, Apple TV und Mac</title>
+    <meta name="description" content="loge ist ein kostenloser Open-Source-Client für Stremio-Addons auf iPhone, iPad, Apple TV und Mac, geschrieben in SwiftUI, mit Wiedergabe über mpv.">
+    <link rel="canonical" href="https://loge.tjh.li/de/">
+    <link rel="alternate" hreflang="en" href="https://loge.tjh.li/">
+    <link rel="alternate" hreflang="de" href="https://loge.tjh.li/de/">
+    <link rel="alternate" hreflang="x-default" href="https://loge.tjh.li/">
+    <link rel="icon" href="/icon.png" type="image/png">
+    <link rel="apple-touch-icon" href="/icon.png">
+    <link rel="preload" href="/fonts/mona-sans.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/style.css">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="loge">
+    <meta property="og:description" content="Ein Client für Stremio-Addons auf iPhone, iPad, Apple TV und Mac. Filme und Serien entdecken, Quelle wählen, mit mpv abspielen.">
+    <meta property="og:url" content="https://loge.tjh.li/de/">
+    <meta property="og:locale" content="de_DE">
+    <meta property="og:image" content="https://loge.tjh.li/images/iphone-player.jpg">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="theme-color" content="#f2f4f9" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0a0d13" media="(prefers-color-scheme: dark)">
+  </head>
+
+  <body>
+    <a class="skip" href="#main">Zum Inhalt</a>
+
+    <main id="main" class="page">
+      <section class="hero">
+        <p class="label hero-note rise d5">Kostenlos und Open Source · GPL-3.0</p>
+        <h1 class="hero-name rise d1"><span class="initial">l</span>oge</h1>
+        <p class="hero-line rise d2">
+          <strong>Deine Stremio-Addons. Auf jedem Apple-Bildschirm.</strong>
+          <span>Du wählst den Stream, mpv spielt ihn ab.</span>
+        </p>
+        <ul class="hero-links rise d3">
+          <li><a class="big-link" href="https://github.com/timhlzwrt/loge/releases/latest">Download<span aria-hidden="true">↗</span></a></li>
+          <li><a class="big-link" href="#install">Installieren</a></li>
+          <li><a class="big-link" href="https://github.com/timhlzwrt/loge">Quellcode<span aria-hidden="true">↗</span></a></li>
+        </ul>
+        <a class="scroll-cue rise d6" href="#features" aria-label="Nach unten">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 6l5 5 5-5"/></svg>
+        </a>
+      </section>
+
+      <div class="grid">
+        <figure class="shot shot-tv">
+          <img src="/images/iphone-player.jpg" width="1800" height="828" fetchpriority="high"
+            alt="Der Player auf einem iPhone im Querformat, pausiert bei Night of the Living Dead, mit Sprungtasten, Zeitleiste und Spurmenüs">
+          <figcaption class="label">iPhone · Player</figcaption>
+        </figure>
+
+        <section id="features" class="pane pane-standouts" aria-labelledby="standouts-heading">
+          <h2 id="standouts-heading">Was loge besonders macht</h2>
+          <div class="standouts">
+            <article class="standout">
+              <span class="label">01 · Quellen</span>
+              <h3>Jeder Stream, entschlüsselt</h3>
+              <p>4K, HDR, Codec, Ton, Größe und Bitrate aus allen Addons auf einmal. Nach Qualität sortiert, mit der besten Wahl für deine Verbindung.</p>
+            </article>
+            <article class="standout">
+              <span class="label">02 · Serien</span>
+              <h3>Bingen auf Autopilot</h3>
+              <p>Gleiches Release, nächste Folge. Vorspann und Abspann übersprungen, Up Next zählt runter, eine Ersatzquelle, wenn ein Link ausfällt.</p>
+            </article>
+            <article class="standout">
+              <span class="label">03 · Wiedergabe</span>
+              <h3>mpv-Power, Apple-Feinschliff</h3>
+              <p>MKV, HEVC und HLS, hardwaredekodiert. Bild-in-Bild, AirPlay und Sperrbildschirm inklusive.</p>
+            </article>
+            <article class="standout">
+              <span class="label">04 · Apple TV</span>
+              <h3>Gemacht für den großen Bildschirm</h3>
+              <p>Artwork im Vollbild, die Siri Remote überall, und Bildrate und HDR passend zu jedem Film.</p>
+            </article>
+            <article class="standout">
+              <span class="label">05 · Entdecken</span>
+              <h3>Nie ein leerer Start</h3>
+              <p>Festivalgewinner, Letterboxd-Listen und große Regisseure, schon eingebaut. Mit TMDB gibt es Empfehlungen, auf deinem Gerät sortiert.</p>
+            </article>
+            <article class="standout">
+              <span class="label">06 · Sync</span>
+              <h3>Hier pausieren, dort weiterschauen</h3>
+              <p>Vom Handy zum Fernseher über Trakt oder
+                <a class="link" href="https://github.com/timhlzwrt/loge/blob/main/docs/SYNC.md">deinen eigenen Server</a>,
+                verschlüsselt auf dem Gerät.</p>
+            </article>
+          </div>
+        </section>
+
+        <figure class="shot shot-phone">
+          <img src="/images/iphone-sources.jpg" width="640" height="687" loading="lazy" decoding="async"
+            alt="Quellenliste für Night of the Living Dead: ein 4K-HEVC-Remux, eine 1080p-BluRay und eine SD-Datei, jeweils mit Größe und Bitrate">
+          <figcaption class="label">iPhone · Quellen</figcaption>
+        </figure>
+
+        <p class="stat stat-servers">
+          <span class="label">Unsere Server</span>
+          <span class="stat-figure">0</span>
+          <span class="stat-text">Dein Gerät spricht direkt mit deinen Addons.</span>
+        </p>
+
+        <figure class="shot shot-player">
+          <img src="/images/tv-player.jpg" width="2400" height="1350" loading="lazy" decoding="async"
+            alt="loge auf dem Apple TV, pausiert bei Night of the Living Dead, mit Titel und Zeitleiste">
+          <figcaption class="label">Apple TV · Player</figcaption>
+        </figure>
+
+        <section class="pane pane-more" aria-labelledby="more-heading">
+          <h2 id="more-heading">Und mehr</h2>
+          <dl class="specs">
+            <div><dt>Untertitel</dt><dd>Eingebettet oder aus Addons, Timing anpassbar</dd></div>
+            <div><dt>Ton</dt><dd>Deine Sprache, automatisch gewählt</dd></div>
+            <div><dt>Spulen</dt><dd>Live-Vorschaubilder auf der Zeitleiste</dd></div>
+            <div><dt>Mediathek</dt><dd>Später ansehen, Listen, Verlauf nach Tagen</dd></div>
+            <div><dt>Titelseiten</dt><dd>Staffeln, Besetzung, Kritiken, Ähnliche Titel</dd></div>
+            <div><dt>iPad</dt><dd>Seitenleiste und zweispaltige Seiten</dd></div>
+            <div><dt>Mac</dt><dd>Wiedergabemenü, Player im Vollbild</dd></div>
+          </dl>
+        </section>
+
+        <section id="install" class="pane pane-install" aria-labelledby="install-heading">
+          <h2 id="install-heading">Installieren</h2>
+          <p class="lead">Per Sideloading mit kostenloser Apple-ID. Jede Änderung erscheint als neuer Build auf
+            <a class="link" href="https://github.com/timhlzwrt/loge/releases">GitHub Releases</a>.</p>
+          <article class="row">
+            <div class="row-head">
+              <h3>iPhone, iPad</h3>
+              <span class="tags"><span class="label">.ipa</span></span>
+            </div>
+            <p>Füge die SideStore-Quelle für automatische Updates hinzu oder signiere die .ipa mit
+              <a class="link" href="https://github.com/nab138/iloader">iloader</a>.</p>
+            <code class="source">https://tjh.li/loge/source.json</code>
+          </article>
+          <article class="row">
+            <div class="row-head">
+              <h3>Apple TV</h3>
+              <span class="tags"><span class="label">.ipa</span></span>
+            </div>
+            <p>Installiere sie mit
+              <a class="link" href="https://github.com/bitxeno/atvloadly">atvloadly</a> oder
+              <a class="link" href="https://sideloadly.io">Sideloadly</a>.</p>
+          </article>
+          <article class="row">
+            <div class="row-head">
+              <h3>Mac</h3>
+              <span class="tags"><span class="label">.dmg</span><span class="label">Apple silicon</span></span>
+            </div>
+            <p>In den Programme-Ordner ziehen und einmal unter Datenschutz &amp; Sicherheit
+              erlauben. Updates kommen dann in der App.</p>
+          </article>
+          <p class="after">Letzter Schritt: <strong>Settings → Addons</strong>, deine
+            <code>manifest.json</code>-URL einfügen.
+            <a class="link" href="https://github.com/timhlzwrt/loge/blob/main/docs/INSTALLATION.md">Vollständige Anleitung (Englisch) ↗</a></p>
+        </section>
+
+        <p class="stat stat-price">
+          <span class="label">Preis</span>
+          <span class="stat-figure">0 €</span>
+          <span class="stat-text">Keine Werbung. Kein Konto. Open Source.</span>
+        </p>
+
+        <section id="faq" class="pane pane-faq" aria-labelledby="faq-heading">
+          <h2 id="faq-heading">Fragen</h2>
+          <details>
+            <summary>Bringt loge etwas zum Anschauen mit?</summary>
+            <p>Kataloge ja. Streams kommen von deinen Addons; loge hostet nichts.</p>
+          </details>
+          <details>
+            <summary>Welche Addons funktionieren?</summary>
+            <p>Jedes Addon mit HTTP(S)-Streams. Torrent-Addons brauchen einen Debrid-Dienst.
+              Untertitel-Addons funktionieren auch.</p>
+          </details>
+          <details>
+            <summary>Warum ist es nicht im App Store?</summary>
+            <p>Kein bezahlter Entwickler-Account. Installationen mit kostenloser Apple-ID halten
+              sieben Tage; SideStore und atvloadly erneuern sie für dich.</p>
+          </details>
+          <details>
+            <summary>Kann ich offline schauen?</summary>
+            <p>Nein, loge streamt.</p>
+          </details>
+          <details>
+            <summary>Etwas funktioniert nicht.</summary>
+            <p><a class="link" href="https://github.com/timhlzwrt/loge/issues/new/choose">Eröffne ein Issue</a>
+              mit deinem Gerät, der Build-Nummer (Settings → About) und was passiert ist.</p>
+          </details>
+        </section>
+      </div>
+
+      <footer class="pane footer">
+        <div class="footer-row">
+          <span class="label">Lizenz</span>
+          <a class="link" href="https://github.com/timhlzwrt/loge/blob/main/LICENSE">GPL-3.0</a>
+        </div>
+        <div class="footer-row">
+          <span class="label">Wiedergabe</span>
+          <span><a class="link" href="https://mpv.io">mpv</a> und <a class="link" href="https://ffmpeg.org">FFmpeg</a>
+            über <a class="link" href="https://github.com/mpvkit/MPVKit">MPVKit</a></span>
+        </div>
+        <p class="footer-by">
+          © 2026 <a class="link" href="https://tjh.li">Tim Jonas Holzwarth</a> ·
+          <a class="link" href="/de/legal">Rechtliches &amp; Datenschutz</a> ·
+          <a class="link" href="https://github.com/timhlzwrt/loge/issues/new/choose">Problem melden</a>
+        </p>
+      </footer>
+    </main>
+
+    <header class="bar">
+      <a class="bar-home" href="#main">
+        <svg width="14" height="20" viewBox="0 0 14 20" aria-hidden="true">
+          <path d="M3 2v11a5 5 0 0 0 5 5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+        </svg>
+        loge
+      </a>
+      <nav class="bar-links" aria-label="Abschnitte">
+        <a href="#features">Funktionen</a>
+        <a href="#install">Installieren</a>
+        <a href="#faq">Fragen</a>
+      </nav>
+      <div class="bar-end">
+        <a class="label" href="https://github.com/timhlzwrt/loge/releases/latest">Download</a>
+        <a class="label lang" href="/" hreflang="en" lang="en" aria-label="This page in English"><span class="lang-short">EN</span><span class="lang-long">English</span></a>
+      </div>
+    </header>
+  </body>
+</html>
