@@ -1,7 +1,7 @@
 # loge
 
 loge: a Stremio-addon client for iPhone/iPad, Apple TV and Mac, in native SwiftUI, public on
-GitHub under GPL-3.0 and installed by sideloading (SideStore source, no App Store). The project, scheme, product and `LogeCore` package are all named loge; only the bundle ID
+GitHub under the PolyForm Noncommercial License 1.0.0 (source-available, no commercial use; GPL-3.0 until 10 November 2026) and installed by sideloading (SideStore source, no App Store). The project, scheme, product and `LogeCore` package are all named loge; only the bundle ID
 (`li.tjh.MediaApp`), Keychain service names and log subsystem keep the old working name, so
 saved data and sign-ins carry over. It browses catalogs from Stremio addons, shows details, lists streams and
 plays them with mpv. The look follows the Strand app: charcoal canvas, artwork-led, white
@@ -152,7 +152,7 @@ the commit count. The repo went public with a README for outside users; agent ha
 and dated review reports were removed. Others install through the SideStore source.
 `FlowTests.testTrackSwitchingWhilePlaying` is flaky: menus sometimes don't open in time.
 
-Decisions: public under GPL-3.0, distributed as a SideStore source (each user signs with a free
+Decisions: public under PolyForm Noncommercial 1.0.0 (was GPL-3.0), distributed as a SideStore source (each user signs with a free
 Apple ID; Apple TV via Sideloadly); MPVKit player (vendored with an AVFoundation video output); addons added as manual
 manifest URLs; cross-device sync via Trakt (not iCloud), with the user's own Trakt app keys
 entered in Settings; no paid Apple developer account, devices are sideloaded (see Commands).

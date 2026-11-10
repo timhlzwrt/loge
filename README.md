@@ -193,7 +193,9 @@ Initial builds download the vendored MPVKit binary dependencies. See
 
 ## Licence and credits
 
-loge is [GPL-3.0](LICENSE). Playback uses [mpv](https://mpv.io) and
+loge is source-available under the [PolyForm Noncommercial License 1.0.0](LICENSE):
+free to use, change and share for any non-commercial purpose, not for commercial use.
+Playback uses [mpv](https://mpv.io) and
 [FFmpeg](https://ffmpeg.org) through the LGPL build of
 [MPVKit](https://github.com/mpvkit/MPVKit) (1.1.0-n9.0.2, mpv 0.41.0).
 The [vendored patches and rebuild instructions](Vendor/MPVKit) are included.

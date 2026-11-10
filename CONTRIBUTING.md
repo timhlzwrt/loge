@@ -87,4 +87,6 @@ For Mac release-signing changes, read [Mac updates](docs/MAC_UPDATES.md).
 - Signed Mac update publishing requires the maintainer's Actions secret; it is
   not required for ordinary development and must never enter a pull request.
 
-Contributions are made under the repository's [GPL-3.0 licence](LICENSE).
+Contributions are made under the repository's [PolyForm Noncommercial licence](LICENSE). By
+opening a pull request you also allow Tim Jonas Holzwarth to use, change and relicense your
+contribution under any terms, including commercially.
