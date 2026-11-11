@@ -19,6 +19,11 @@ struct SourcesView: View {
     @State private var sourceOrder = StreamDetails.SortOrder.cachedFirst
     @State private var secondaryOrder = StreamDetails.SortOrder.addonOrder
     @State private var maximumBitrate = 0
+    #if os(tvOS)
+    @FocusState private var focusedSourceID: ListedSource.ID?
+    @State private var initialFocusID: ListedSource.ID?
+    @State private var hasPlacedFocus = false
+    #endif
     #if os(macOS)
     @State private var selectedID: ListedSource.ID?
     #endif
@@ -91,6 +96,14 @@ struct SourcesView: View {
             playContinuingSourceIfPossible()
             // Either way the attempt is over; without a match the list is the way forward.
             hasAutoplayed = true
+            #if os(tvOS)
+            if !hasPlacedFocus {
+                let groups = groups(providers)
+                if let id = lastPlayedID(in: groups) ?? recommendedID(in: groups) ?? groups.first?.entries.first?.id {
+                    initialFocusID = id
+                }
+            }
+            #endif
         }
         .onDisappear {
             if let entry = pendingPlay { play(entry.stream, from: entry.provider) }
@@ -156,8 +169,13 @@ struct SourcesView: View {
                 }
             }
             .frame(maxWidth: 760, alignment: .leading)
-            List {
-                list(groups, providers: providers)
+            ScrollViewReader { proxy in
+                List {
+                    list(groups, providers: providers)
+                }
+                .task(id: initialFocusID) {
+                    if let initialFocusID { proxy.scrollTo(initialFocusID) }
+                }
             }
             .frame(width: 860)
             .frame(maxWidth: .infinity, alignment: .trailing)
@@ -349,7 +367,17 @@ struct SourcesView: View {
         }
         #else
         Button { choose(entry) } label: { label }
-            #if !os(tvOS)
+            #if os(tvOS)
+            .id(entry.id)
+            .focused($focusedSourceID, equals: entry.id)
+            .task(id: initialFocusID) {
+                // The list must mount the row before the focus engine can select it.
+                if !hasPlacedFocus, initialFocusID == entry.id {
+                    hasPlacedFocus = true
+                    focusedSourceID = entry.id
+                }
+            }
+            #else
             .buttonStyle(.plain)
             #endif
         #endif

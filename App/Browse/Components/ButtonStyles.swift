@@ -57,8 +57,8 @@ struct PrimaryButtonStyle: ButtonStyle {
 /// Drawn rather than using the `.glass` button style, which pads the circle beyond the
 /// primary button's height.
 struct GlassIconButtonStyle: ButtonStyle {
-    /// A short name under the icon on iPhone and iPad, where no pointer can bring it up. The
-    /// Mac names these on hover and Apple TV leaves them to focus, so both ignore this.
+    /// A short name under the icon on iPhone and iPad, and while focused on Apple TV.
+    /// The Mac names these on hover.
     var caption: String?
     /// Just the icon, no circle: a phone's row under a full-width Play, where a line of
     /// bubbles beneath the capsule looked busy.
@@ -85,6 +85,20 @@ struct GlassIconButtonStyle: ButtonStyle {
                     IconCaption(text: caption)
                 }
                 .contentShape(.rect)
+            } else {
+                icon
+            }
+            #elseif os(tvOS)
+            if let caption {
+                VStack(spacing: 12) {
+                    icon
+                    Text(caption)
+                        .font(.system(size: 20, weight: .medium))
+                        .fixedSize()
+                        .frame(width: size)
+                        .opacity(isFocused ? 1 : 0)
+                        .accessibilityHidden(true)
+                }
             } else {
                 icon
             }

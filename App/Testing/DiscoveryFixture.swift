@@ -17,9 +17,32 @@ enum DiscoveryFixture {
     @ViewBuilder
     static var screen: some View {
         // A `-DISCOVERY_SCREEN name` launch argument works too, for launchers that can't set the environment.
-        switch ProcessInfo.processInfo.environment["DISCOVERY_SCREEN"] ?? UserDefaults.standard.string(forKey: "DISCOVERY_SCREEN") {
+        let screen = ProcessInfo.processInfo.environment["DISCOVERY_SCREEN"] ?? UserDefaults.standard.string(forKey: "DISCOVERY_SCREEN")
+        switch screen {
         case "settings":
             SettingsView()
+        case "sources", "addons":
+            Group {
+                if screen == "addons" {
+                    AddonsSettingsView()
+                } else {
+                    SourcesView(route: SourcesRoute(item: WatchItem(id: title.id, type: title.type,
+                        metaID: title.id, title: title.name), title: title.name))
+                }
+            }
+            .environment(sourceStore)
+            .environment(sourceLibrary)
+            .task {
+                guard let manifest = ProcessInfo.processInfo.environment["DISCOVERY_ADDON_URL"],
+                      !sourceStore.addons.contains(where: { $0.id == manifest }) else { return }
+                if ProcessInfo.processInfo.environment["DISCOVERY_LAST_SOURCE"] != nil,
+                   let base = URL(string: manifest)?.deletingLastPathComponent() {
+                    sourceLibrary.rememberSource(RememberedSource(itemID: title.id, providerURL: manifest,
+                        url: base.appending(path: "missing.mkv"), headers: [:], bingeGroup: nil), metaID: title.id)
+                }
+                do { try await sourceStore.install(manifestURL: manifest) }
+                catch { assertionFailure("Couldn't install the local UI fixture addon: \(error)") }
+            }
         case "library":
             if let library = library {
                 ScrollView {
@@ -38,6 +61,7 @@ enum DiscoveryFixture {
                 .environment(recommendationLibrary)
         case "details":
             MetaDetailView(preview: title)
+                .environment(sourceLibrary)
         case "person":
             PersonView(route: PersonRoute(person: Person(name: "Christopher Nolan", roles: [.director], tmdbID: 525)))
         case "festival":
@@ -64,6 +88,21 @@ enum DiscoveryFixture {
             .navigationTitle("Discovery")
         }
     }
+
+    private static let sourceDefaults: UserDefaults = {
+        let suite = "loge.discovery-source-fixture"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        return defaults
+    }()
+
+    private static let sourceStore: AddonStore = {
+        let store = AddonStore(defaults: sourceDefaults)
+        for addon in store.addons { store.remove(addon.id) }
+        return store
+    }()
+
+    private static let sourceLibrary = LibraryStore(defaults: sourceDefaults)
 
     /// Interstellar watched, Arrival started and Inception saved: all three are recommended,
     /// but only titles the viewer doesn't know yet may appear.

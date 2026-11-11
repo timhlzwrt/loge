@@ -14,6 +14,12 @@ struct CatalogGridView: View {
     @State private var phase = Phase.loading
     @State private var reachedEnd = false
     @State private var loadGeneration = UUID()
+    #if os(tvOS)
+    /// Only the first poster is bound to focus, as in `CatalogRow`. The grid opens empty, so
+    /// focus starts on the Sort and Genre buttons and has to be brought down once titles arrive.
+    @FocusState private var isFirstFocused: Bool
+    @State private var hasPlacedFocus = false
+    #endif
 
     private enum Phase: Equatable {
         case loading, idle, failed
@@ -47,50 +53,101 @@ struct CatalogGridView: View {
     }
 
     var body: some View {
+        content
+            .background(Color.canvas)
+            .pageTitle(title)
+            #if !os(tvOS)
+            .toolbar {
+                if !sortOptions.isEmpty {
+                    ToolbarItem {
+                        sortMenu
+                    }
+                }
+                if hasGenres {
+                    ToolbarItem {
+                        genreMenu
+                    }
+                }
+            }
+            #endif
+            .task { await loadSortOptions() }
+            .task(id: Filter(sortID: sortID, genre: genre)) {
+                loadGeneration = UUID()
+                items = []
+                reachedEnd = false
+                phase = .idle
+                await loadNextPage()
+            }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        #if os(tvOS)
+        VStack(spacing: 0) {
+            if !sortOptions.isEmpty || hasGenres {
+                // In a toolbar these sit in the top right corner, where Up only reaches them
+                // from the last columns. A section as wide as the grid takes focus from any column.
+                HStack(spacing: 20) {
+                    if !sortOptions.isEmpty { sortMenu }
+                    if hasGenres { genreMenu }
+                    Spacer(minLength: 0)
+                }
+                .padding(.bottom, 24)
+                .focusSection()
+                // Posters lift and scroll past the grid's top edge, and would cross the buttons.
+                .background { Color.canvas.ignoresSafeArea(edges: .horizontal) }
+                .zIndex(1)
+            }
+            grid
+        }
+        #else
+        grid
+        #endif
+    }
+
+    private var grid: some View {
         ScrollView {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: Metrics.posterWidth), spacing: Metrics.rowSpacing)],
                       spacing: Metrics.rowSpacing) {
                 ForEach(items) { meta in
-                    NavigationLink(value: meta) {
-                        PosterTile(meta: meta, width: nil)
+                    #if os(tvOS)
+                    if meta.id == items.first?.id {
+                        tile(meta).focused($isFirstFocused)
+                    } else {
+                        tile(meta)
                     }
-                    .tileButtonStyle()
-                    .onAppear {
-                        // Start the next page a little before the end comes into view.
-                        if meta.id == items.dropLast(6).last?.id || meta.id == items.last?.id {
-                            Task { await loadNextPage() }
-                        }
-                    }
+                    #else
+                    tile(meta)
+                    #endif
                 }
             }
             .padding(.horizontal, Metrics.gutter)
+            #if os(tvOS)
+            // Room for the first row's focus lift under the buttons.
+            .padding(.top, 20)
+            #endif
             footer
                 .padding(.vertical, 24)
         }
         .scrollClipDisabled()
         // A new filter is a new list, so it starts from the top.
         .id(Filter(sortID: sortID, genre: genre))
-        .background(Color.canvas)
-        .pageTitle(title)
-        .toolbar {
-            if !sortOptions.isEmpty {
-                ToolbarItem {
-                    sortMenu
-                }
-            }
-            if source.defaultGenre == nil && !catalog.genres.isEmpty {
-                ToolbarItem {
-                    genreMenu
-                }
-            }
+    }
+
+    private var hasGenres: Bool {
+        source.defaultGenre == nil && !catalog.genres.isEmpty
+    }
+
+    private func tile(_ meta: MetaPreview) -> some View {
+        NavigationLink(value: meta) {
+            PosterTile(meta: meta, width: nil)
         }
-        .task { await loadSortOptions() }
-        .task(id: Filter(sortID: sortID, genre: genre)) {
-            loadGeneration = UUID()
-            items = []
-            reachedEnd = false
-            phase = .idle
-            await loadNextPage()
+        .tileButtonStyle()
+        .onAppear {
+            // Start the next page a little before the end comes into view.
+            if meta.id == items.dropLast(6).last?.id || meta.id == items.last?.id {
+                Task { await loadNextPage() }
+            }
         }
     }
 
@@ -176,6 +233,13 @@ struct CatalogGridView: View {
             items += fresh
             reachedEnd = fresh.isEmpty || !shown.catalog.supportsPaging
             phase = .idle
+            #if os(tvOS)
+            // Once: after choosing a genre or sort order, focus belongs on that button.
+            if !hasPlacedFocus, !items.isEmpty {
+                hasPlacedFocus = true
+                isFirstFocused = true
+            }
+            #endif
         } catch {
             guard generation == loadGeneration, requestedGenre == genre else { return }
             phase = error is CancellationError || Task.isCancelled ? .idle : .failed

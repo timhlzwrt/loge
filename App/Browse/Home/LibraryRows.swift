@@ -335,6 +335,8 @@ struct ListsMenu: View {
                 IconCaption(text: "Lists")
             }
         }
+        #elseif os(tvOS)
+        menu.buttonStyle(GlassIconButtonStyle(caption: "Lists", isBare: isBare))
         #else
         menu.buttonStyle(GlassIconButtonStyle(isBare: isBare))
         #endif
@@ -352,6 +354,7 @@ struct ListsMenu: View {
             Label("Save to", systemImage: "rectangle.stack.badge.plus")
         }
         .menuIndicator(.hidden)
+        .accessibilityLabel("Save to a List")
     }
 }
 

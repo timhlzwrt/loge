@@ -7,7 +7,10 @@ struct PlaybackFixtureView: View {
     @Environment(PlaybackSession.self) private var session
     @Environment(LibraryStore.self) private var library
     private var item: WatchItem? {
-        ProcessInfo.processInfo.environment["PLAYBACK_FIXTURE_PROGRESS_ID"].map {
+        if ProcessInfo.processInfo.environment["PLAYBACK_FIXTURE_MOVIE"] != nil {
+            return WatchItem(id: "fixture-movie", type: "movie", metaID: "fixture-movie", title: "Movie fixture")
+        }
+        return ProcessInfo.processInfo.environment["PLAYBACK_FIXTURE_PROGRESS_ID"].map {
             WatchItem(id: "\($0):1:1", type: "series", metaID: $0, title: "Progress fixture", season: 1, episode: 1)
         }
     }
