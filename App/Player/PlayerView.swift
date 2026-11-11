@@ -246,6 +246,11 @@ struct PlayerView: View {
         .onChange(of: player?.status == .ended && session.next != nil) { _, waiting in
             if waiting && !isPanelShown { nextFocus = .play }
         }
+        .onChange(of: player?.status == .ended) { _, ended in
+            if ended, session.current?.item?.type == MediaType.movie, session.next == nil {
+                closePlayback()
+            }
+        }
         .animation(.easeInOut(duration: 0.2), value: isPanelShown)
         #elseif os(macOS)
         .focusable()

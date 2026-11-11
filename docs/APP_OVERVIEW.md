@@ -191,6 +191,9 @@ hardware-testing task. `DiscoveryTVTests` uses the same fixture for the remote's
 tvOS: skip offers, Up Next (`PLAYBACK_FIXTURE_NEXT=1` offers a next episode), the panel,
 Sources and the failure screen. A `?fail-once=<anything>` query on the fixture's URL fails
 its first request, for Try Again.
+Source-focus and addon-removal checks use an isolated addon store. Run a second
+`Tools/test-addon.py` without `--tracks-file` on port 8765 and set
+`TEST_RUNNER_DISCOVERY_ADDON_URL=http://127.0.0.1:8765/manifest.json` for these checks.
 `DiscoveryTVTests.testLibraryFocusMovesBetweenRows`
 and the remote driver's `TEST_RUNNER_DISCOVERY_SCREEN=library` use an isolated
 library fixture for navigation checks without changing the user's saved titles.

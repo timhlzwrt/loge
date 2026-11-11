@@ -96,11 +96,6 @@ struct MetaDetailView: View {
             proxy.size.width >= 880 && proxy.size.width > proxy.size.height
         } action: { hasRoomForColumns = $0 && !Metrics.isPhone }
         #endif
-        #if os(tvOS)
-        .background(alignment: .top) {
-            backdrop
-        }
-        #else
         // The backdrop stays put behind the page, so it fades as the hero scrolls away
         // instead of showing behind episodes and cast.
         .onScrollGeometryChange(for: Double.self) { geometry in
@@ -111,7 +106,6 @@ struct MetaDetailView: View {
         .background(alignment: .top) {
             HeroScroll.Fading(scroll: heroScroll) { backdrop }
         }
-        #endif
         .background(Color.canvas)
         .hidingPhoneTabBar()
         #if os(iOS)

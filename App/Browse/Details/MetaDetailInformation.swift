@@ -5,6 +5,9 @@ import SwiftUI
 struct InformationSection: View {
     let meta: Meta
     let details: TMDBDetails?
+    #if os(tvOS)
+    @FocusState private var isFocused: Bool
+    #endif
 
     var body: some View {
         let facts = facts
@@ -31,10 +34,22 @@ struct InformationSection: View {
                     }
                 }
             }
-            .padding(.horizontal, Metrics.gutter)
             #if os(tvOS)
+            .padding(20)
+            .background(.white.opacity(isFocused ? 0.08 : 0), in: .rect(cornerRadius: Metrics.cardRadius))
+            .overlay {
+                RoundedRectangle(cornerRadius: Metrics.cardRadius)
+                    .strokeBorder(.white.opacity(isFocused ? 0.6 : 0), lineWidth: 2)
+            }
             // Without a focus stop down here, the remote can't scroll to this section.
+            .accessibilityElement(children: .combine)
             .focusable()
+            .focused($isFocused)
+            .focusEffectDisabled()
+            .accessibilityIdentifier("detail-information")
+            .padding(.horizontal, Metrics.gutter - 20)
+            #else
+            .padding(.horizontal, Metrics.gutter)
             #endif
         }
     }
