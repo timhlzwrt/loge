@@ -148,6 +148,9 @@ iPhone browsing is portrait-only (`AppDelegate`); the player turns.
 - The phone hero shows the portrait poster: a title near the top of a poster reads twice with
   the logo, and that can't be detected.
 - The Mac player window is a principal window, since an associated one can't go full screen.
+- Navigation is the four tabs (Home, My Lists, Search, Settings) with `.tabBarOnly`, no sidebar
+  anywhere. Search has the search role except on iPhone, where the role would detach it from
+  the one pill; iPad and Mac draw it as the magnifier at the pill's trailing end.
 - Search's keyboard reappearing after going back is the system restoring a focused field;
   clearing focus on leaving doesn't stop it.
 

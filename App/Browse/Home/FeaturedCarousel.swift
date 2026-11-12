@@ -150,10 +150,6 @@ struct FeaturedPage: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(meta.name)
-            #if os(macOS)
-            // Lets the backdrop run on under the floating sidebar.
-            .backgroundExtensionEffect()
-            #endif
 
             VStack(alignment: isCentred ? .center : .leading, spacing: 12) {
                 NavigationLink(value: meta) {

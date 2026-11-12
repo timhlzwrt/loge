@@ -39,7 +39,7 @@ struct ContinueWatchingRow: View {
                 }
                 .scrollClipDisabled()
                 #if os(tvOS)
-                // Home opens on what's being watched rather than on the sidebar.
+                // Home opens on what's being watched rather than on the tab bar.
                 .defaultFocus($isFirstFocused, true)
                 #endif
             }
