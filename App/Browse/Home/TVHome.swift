@@ -9,9 +9,18 @@ final class HomeFocus {
     var title: MetaPreview?
     var collection: FilmCollection?
     var director: TMDBPopularDirector?
+    var genre: DiscoveryCatalogs.Genre?
 
     func show(_ title: MetaPreview) {
         self.title = title
+        collection = nil
+        director = nil
+        genre = nil
+    }
+
+    /// Genres name themselves over their still, rather than leave the last title on screen.
+    func show(_ genre: DiscoveryCatalogs.Genre) {
+        self.genre = genre
         collection = nil
         director = nil
     }
@@ -22,6 +31,8 @@ final class HomeFocus {
 struct TVHome: View {
     let sources: [CatalogSource]
     @State private var focus = HomeFocus()
+    /// Returning to Home runs `.task` again; its artwork is already cached by then.
+    @State private var prefetched = false
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -41,24 +52,31 @@ struct TVHome: View {
                             MyListRow(onFocus: focus.show)
                             RecommendedRow(onFocus: focus.show)
                             ForEach(sources.prefix(3)) { source in
-                                CatalogRow(source: source, page: sources, isPrimary: source == sources.first, onFocus: focus.show)
+                                CatalogRow(source: source, page: sources, isPrimary: source == sources.first,
+                                           onFocus: focus.show, onFirstLoaded: { first in
+                                    // Only an empty header: focus may already be on Continue Watching.
+                                    if source == sources.first, focus.title == nil { focus.show(first) }
+                                })
                             }
-                            GenreRow()
+                            GenreRow(onFocus: focus.show)
                             ForEach(sources.dropFirst(3)) { source in
                                 CatalogRow(source: source, page: sources, onFocus: focus.show)
                             }
                             DiscoveryCollectionRow(title: "Film Festivals", collections: FilmCollection.festivals) {
                                 focus.director = nil
+                                focus.genre = nil
                                 focus.collection = $0
                                 proxy.scrollTo("festival-row", anchor: .top)
                             }
                             .id("festival-row")
                             PopularDirectorsRow(onFocus: { director in
                                 focus.collection = nil
+                                focus.genre = nil
                                 focus.director = director
                                 proxy.scrollTo("director-row", anchor: .top)
                             }, onFallbackFocus: { collection in
                                 focus.director = nil
+                                focus.genre = nil
                                 focus.collection = collection
                                 proxy.scrollTo("director-row", anchor: .top)
                             })
@@ -74,6 +92,8 @@ struct TVHome: View {
         }
         .background(Color.canvas)
         .task {
+            guard !prefetched else { return }
+            prefetched = true
             await prefetchArtwork(of: sources)
         }
     }
@@ -82,17 +102,21 @@ struct TVHome: View {
 /// The focused title's backdrop, hidden while a festival or director has focus.
 struct TVHomeBackdrop: View {
     let focus: HomeFocus
+    /// The backdrop on screen, which changes only once the next one has been decoded, so
+    /// the crossfade goes from image to image rather than through the empty placeholder.
+    @State private var shown: String?
 
     var body: some View {
-        let url = focus.collection == nil && focus.director == nil ? focus.title?.featuredBackground : nil
+        let isHidden = focus.collection != nil || focus.director != nil
+        let url = isHidden ? nil : focus.genre?.still ?? focus.title?.featuredBackground
         ZStack {
             // Each backdrop is its own view, so the crossfade blends two layers on the GPU.
             // Animating one image view's content instead redrew both images on the CPU every frame.
-            Artwork(url: url)
-                .id(url)
+            Artwork(url: shown)
+                .id(shown)
                 .transition(.opacity)
         }
-        .opacity(focus.collection == nil && focus.director == nil ? 1 : 0)
+        .opacity(isHidden ? 0 : 1)
         .ignoresSafeArea()
         .overlay {
             // Darken the left and bottom, where the text and rows sit.
@@ -100,7 +124,15 @@ struct TVHomeBackdrop: View {
                 .ignoresSafeArea()
             BackdropFade().ignoresSafeArea()
         }
-        .animation(.easeInOut(duration: 0.4), value: url)
+        .animation(.easeInOut(duration: 0.4), value: shown)
+        .task(id: url) {
+            if let address = url, let imageURL = URL(string: address) {
+                // A failed image still replaces the old one, as the placeholder.
+                _ = await ArtworkCache.image(for: imageURL)
+                guard !Task.isCancelled else { return }
+            }
+            shown = url
+        }
     }
 }
 
@@ -118,9 +150,12 @@ struct TVHomeHeader: View {
             Color.clear
             if let director = focus.director {
                 HStack(spacing: 32) {
-                    Artwork(url: director.portraitURL)
-                        .frame(width: Metrics.personSize, height: Metrics.personSize * 1.25)
-                        .clipShape(.rect(cornerRadius: Metrics.posterRadius))
+                    // Without a photo the name stands alone, rather than beside an empty frame.
+                    if director.portraitURL != nil {
+                        Artwork(url: director.portraitURL)
+                            .frame(width: Metrics.personSize, height: Metrics.personSize * 1.25)
+                            .clipShape(.rect(cornerRadius: Metrics.posterRadius))
+                    }
                     VStack(alignment: .leading, spacing: 14) {
                         Text(director.name).font(.system(size: 64, weight: .bold))
                         Text("Director").font(.metaLine).foregroundStyle(.secondary)
@@ -138,6 +173,11 @@ struct TVHomeHeader: View {
                             .font(.metaLine)
                             .foregroundStyle(.secondary)
                     }
+                }
+            } else if let genre = focus.genre {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text(genre.name).font(.system(size: 64, weight: .bold))
+                    Text("Popular now and the best of all time").font(.metaLine).foregroundStyle(.secondary)
                 }
             } else if let title = focus.title {
                 details(filled[title.id] ?? title)

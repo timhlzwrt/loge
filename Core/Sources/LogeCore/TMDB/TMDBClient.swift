@@ -30,6 +30,8 @@ public struct TMDBDetails: Sendable, Equatable {
     public var tmdbID: Int?
     /// TMDB's "recommendations", or its "similar" titles when it has none, in TMDB's order.
     public var recommendations: [TMDBCreditTitle]
+    /// The titles are TMDB's "similar" list, which it assembles from genres and keywords.
+    public var recommendationsAreSimilar: Bool
 
     public init(overview: String? = nil, posterURL: String? = nil, backgroundURL: String? = nil,
                 releaseInfo: String? = nil, runtime: String? = nil, genres: [String]? = nil,
@@ -38,7 +40,8 @@ public struct TMDBDetails: Sendable, Equatable {
                 studios: [String]? = nil, releaseDate: String? = nil, lastAirDate: String? = nil,
                 seasonCount: Int? = nil, episodeCount: Int? = nil, rating: Double? = nil,
                 voteCount: Int? = nil, budget: Int? = nil, revenue: Int? = nil,
-                tmdbID: Int? = nil, recommendations: [TMDBCreditTitle] = []) {
+                tmdbID: Int? = nil, recommendations: [TMDBCreditTitle] = [],
+                recommendationsAreSimilar: Bool = false) {
         self.overview = overview
         self.posterURL = posterURL
         self.backgroundURL = backgroundURL
@@ -62,6 +65,7 @@ public struct TMDBDetails: Sendable, Equatable {
         self.revenue = revenue
         self.tmdbID = tmdbID
         self.recommendations = recommendations
+        self.recommendationsAreSimilar = recommendationsAreSimilar
     }
 }
 

@@ -8,7 +8,7 @@ struct AboutSection: View {
     #endif
 
     var body: some View {
-        Section("About") {
+        Section {
             LabeledContent("Version", value: version)
             #if os(macOS)
             Button("Check for Updates…", action: appUpdater.checkForUpdates)
@@ -21,8 +21,7 @@ struct AboutSection: View {
                     LabeledContent("Branch", value: branch)
                 }
                 #if !os(tvOS)
-                // The repository is private, so GitHub answers in the browser where you're signed
-                // in: "identical" when this is main's latest, or the commits it's missing.
+                // GitHub answers "identical" when this is main's latest, or lists the commits it's missing.
                 Link("Compare with main on GitHub",
                      destination: URL(string: "https://github.com/timhlzwrt/loge/compare/\(commit)...main")!)
                 #endif
@@ -30,7 +29,7 @@ struct AboutSection: View {
             LabeledContent("Development", value: "Tim Holzwarth")
             LabeledContent("Testing", value: "Lenja")
             NavigationLink("Data Sources") { DataSourcesView() }
-        }
+        } header: { SettingsHeader("About") }
     }
 
     private var version: String {
@@ -56,10 +55,11 @@ private struct BuildInfo {
         isModified = info["LogeModified"] as? Bool ?? false
     }
 
-    /// "a87f81f · 3 Nov 2026, 16:39", with "· modified" when built with uncommitted changes.
+    /// "a87f81f · Nov 3, 2026, 16:39", with "· modified" when built with uncommitted changes.
     var summary: String {
         [commit.map { String($0.prefix(7)) },
-         date?.formatted(date: .abbreviated, time: .shortened),
+         date.map { "\($0.formatted(.dateTime.day().month(.abbreviated).year().locale(.interface))), "
+             + $0.formatted(date: .omitted, time: .shortened) },
          isModified ? "modified" : nil]
             .compactMap { $0 }
             .joined(separator: " · ")
@@ -72,7 +72,7 @@ struct DataSourcesView: View {
     @State private var editions: [FestivalEdition] = []
     @State private var festivalSourceFailure = false
     var body: some View {
-        List {
+        SettingsPage("Data Sources") {
             Section {
                 VStack(alignment: .leading, spacing: 12) {
                     Image("TMDBLogo")
@@ -95,16 +95,16 @@ struct DataSourcesView: View {
                 .padding(.vertical, 8)
             }
 
-            Section("Titles") {
+            Section {
                 source("Cinemeta", "Catalogs, search, title details, artwork and IMDb ratings.",
                        url: "https://www.stremio.com")
                 source("Letterboxd via Stremboxd", "Popular and all-time lists on Home and in genres.",
                        url: "https://letterboxd.com")
                 source("Wikidata", "Recorded historical festival winners and selected directors’ films. Records may be incomplete.",
                        url: "https://www.wikidata.org")
-            }
+            } header: { SettingsHeader("Titles") }
 
-            Section("2026 Festival Awards") {
+            Section {
                 ForEach(editions, id: \.festival) { edition in
                     ForEach(edition.sources, id: \.absoluteString) { url in
                         source("\(edition.festival.name) · \(url.host() ?? "Source")",
@@ -115,18 +115,18 @@ struct DataSourcesView: View {
                     Text("The bundled festival source list couldn't be read.")
                         .foregroundStyle(.secondary)
                 }
-            }
+            } header: { SettingsHeader("2026 Festival Awards") }
 
-            Section("Playback") {
+            Section {
                 source("TheIntroDB", "Intro, recap and credits timings for the skip buttons.",
                        url: "https://theintrodb.org")
                 source("Trakt", "Watch progress and history, when signed in.",
                        url: "https://trakt.tv")
                 Text("Streams and subtitles come from the addons you install.")
                     .foregroundStyle(.secondary)
-            }
+            } header: { SettingsHeader("Playback") }
 
-            Section("Images") {
+            Section {
                 ForEach(FilmCollection.allCases) { collection in
                     // The licences of the cropped portraits ask for the change to be noted.
                     let credit = collection.isFestival
@@ -134,13 +134,8 @@ struct DataSourcesView: View {
                         : "Photo: \(collection.artworkCredit) · Cropped"
                     source(collection.name, credit, url: collection.artworkCreditURL.absoluteString)
                 }
-            }
+            } header: { SettingsHeader("Images") }
         }
-        #if !os(tvOS)
-        .scrollContentBackground(.hidden)
-        #endif
-        .background(Color.canvas)
-        .pageTitle("Data Sources")
         .task {
             do { editions = try FestivalEdition.all() }
             catch { festivalSourceFailure = true }

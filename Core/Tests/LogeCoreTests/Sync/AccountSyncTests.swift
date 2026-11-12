@@ -590,9 +590,9 @@ struct AccountSyncTests {
         #expect(libraryA.progress["private-a"]?.position == 220)
         try #require(alice.errorMessage == nil && second.errorMessage == nil)
         // Device revocation stops future access without affecting the other person.
-        await alice.refreshDevices()
+        try await alice.refreshDevices()
         let device = try #require(alice.devices.first { $0.name == "Core test second device" })
-        await alice.revokeDevice(id: device.id)
+        try await alice.revokeDevice(id: device.id)
         await second.sync()
         #expect(second.errorMessage != nil)
         await bob.sync()

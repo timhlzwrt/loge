@@ -104,8 +104,8 @@ struct MoreMenu: View {
     let player: MPVPlayer
     let onInteract: () -> Void
     @Binding var isOpen: Bool
+    let onPlaybackInfo: () -> Void
     var onChooseSource: (() -> Void)?
-    @State private var showsPlaybackInfo = false
 
     var body: some View {
         let player = player
@@ -114,7 +114,7 @@ struct MoreMenu: View {
                 ForEach(PlaybackSpeed.all, id: \.self) { Text(PlaybackSpeed.name($0)).tag($0) }
             }
             .pickerStyle(.menu)
-            Button("Playback Info…", systemImage: "info.circle") { showsPlaybackInfo = true }
+            Button("Playback Info…", systemImage: "info.circle", action: onPlaybackInfo)
             if let onChooseSource {
                 Button("Sources…", systemImage: "list.bullet", action: onChooseSource)
             }
@@ -127,11 +127,6 @@ struct MoreMenu: View {
         }
         .menuOrder(.fixed)
         .simultaneousGesture(TapGesture().onEnded(onInteract))
-        .sheet(isPresented: $showsPlaybackInfo) { PlaybackInfoView(player: player) }
-        .onChange(of: showsPlaybackInfo) { _, shown in
-            isOpen = shown
-            onInteract()
-        }
     }
 }
 
@@ -172,7 +167,7 @@ enum PlaybackSpeed {
     static let all = [0.5, 0.75, 1, 1.25, 1.5, 2]
 
     static func name(_ speed: Double) -> String {
-        speed == 1 ? "Normal" : "\(speed.formatted())×"
+        speed == 1 ? "Normal" : "\(speed.formatted(.number.locale(.interface)))×"
     }
 }
 
@@ -229,7 +224,7 @@ struct TimingPanel: View {
 enum TimingFormat {
     /// "+0.3 s".
     static func delay(_ seconds: Double) -> String {
-        seconds.formatted(.number.precision(.fractionLength(1)).sign(strategy: .always(includingZero: false))) + " s"
+        seconds.formatted(.number.precision(.fractionLength(1)).sign(strategy: .always(includingZero: false)).locale(.interface)) + " s"
     }
 
     /// Rounded so repeated steps don't drift to values like 0.30000000000000004.
@@ -262,7 +257,8 @@ struct PlaybackInfoView: View {
             if let format = player.videoFormat {
                 LabeledContent("Video", value: "\(format.width) × \(format.height)")
                 if let rate = format.frameRate {
-                    LabeledContent("Source frame rate", value: "\(rate.formatted(.number.precision(.fractionLength(2)))) fps")
+                    LabeledContent("Source frame rate",
+                                   value: "\(rate.formatted(.number.precision(.fractionLength(2)).locale(.interface))) fps")
                 }
             }
             LabeledContent("Hardware decoder", value: player.playbackInfo.hardwareDecoder ?? "Unavailable")
@@ -271,7 +267,7 @@ struct PlaybackInfoView: View {
             LabeledContent("Decoder drops", value: player.playbackInfo.decoderDrops.map(String.init) ?? "Unavailable")
             LabeledContent("Output drops", value: player.playbackInfo.outputDrops.map(String.init) ?? "Unavailable")
             LabeledContent("Buffered", value: player.playbackInfo.bufferedSeconds.map {
-                "\($0.formatted(.number.precision(.fractionLength(1)))) s"
+                "\($0.formatted(.number.precision(.fractionLength(1)).locale(.interface))) s"
             } ?? "Unavailable")
             LabeledContent("Download speed", value: Self.bitrate(player.playbackInfo.downloadSpeed))
             Text("""
@@ -292,6 +288,6 @@ struct PlaybackInfoView: View {
         guard let value else { return "Unavailable" }
         let megabits = value >= 1_000_000
         let number = value / (megabits ? 1_000_000 : 1_000)
-        return number.formatted(.number.precision(.fractionLength(0...1))) + (megabits ? " Mbps" : " kbps")
+        return number.formatted(.number.precision(.fractionLength(0...1)).locale(.interface)) + (megabits ? " Mbps" : " kbps")
     }
 }

@@ -22,6 +22,8 @@ struct PlayerControls: View {
     let onClose: () -> Void
     /// Opens the list of sources for what's playing; nil when there's no list to go back to.
     let onChooseSource: (() -> Void)?
+    /// Shown by the player screen, which outlives the menu it's chosen from.
+    let onPlaybackInfo: () -> Void
     let onInteract: () -> Void
     /// In full screen the Mac's title bar, and the title in it, is gone.
     let isFullScreen: Bool
@@ -55,8 +57,15 @@ struct PlayerControls: View {
             LinearGradient(colors: [.black.opacity(0.5), .clear], startPoint: .top, endPoint: .bottom)
                 .frame(height: 140)
             Spacer(minLength: 0)
-            LinearGradient(colors: [.clear, .black.opacity(0.7)], startPoint: .top, endPoint: .bottom)
-                .frame(height: 220)
+            // Taller and darker than the phone's even dim would be here: the title and times are
+            // read from across the room over whatever the frame holds, while most of the
+            // picture stays as it is.
+            LinearGradient(stops: [
+                .init(color: .clear, location: 0),
+                .init(color: .black.opacity(0.5), location: 0.5),
+                .init(color: .black.opacity(0.75), location: 1),
+            ], startPoint: .top, endPoint: .bottom)
+                .frame(height: 440)
         }
         .ignoresSafeArea()
         .allowsHitTesting(false)
@@ -101,7 +110,11 @@ struct PlayerControls: View {
             }
             Spacer(minLength: 24)
             if let kind = adjustingTiming {
-                TimingPanel(player: player, kind: kind, onInteract: onInteract) { adjustingTiming = nil }
+                TimingPanel(player: player, kind: kind, onInteract: onInteract) {
+                    adjustingTiming = nil
+                    // Restarts the countdown, which skipped hiding while the panel was open.
+                    onInteract()
+                }
                     .frame(maxWidth: .infinity)
             } else {
                 if isPortraitPhone {
@@ -156,7 +169,8 @@ struct PlayerControls: View {
             }
             Text(item?.title ?? title)
                 .font(.title2.bold())
-                .lineLimit(2)
+                // A landscape phone has no height for a second line under the transport buttons.
+                .lineLimit(verticalSizeClass == .compact ? 1 : 2)
         }
     }
 
@@ -166,7 +180,7 @@ struct PlayerControls: View {
                 .equatable()
             AudioMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen, adjustingTiming: $adjustingTiming)
                 .equatable()
-            MoreMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen)
+            MoreMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen, onPlaybackInfo: onPlaybackInfo)
                 .equatable()
             ZoomButton(player: player, onInteract: onInteract)
                 .modifier(CapsuleIcon())
@@ -227,7 +241,11 @@ struct PlayerControls: View {
             }
             Spacer()
             if let kind = adjustingTiming {
-                TimingPanel(player: player, kind: kind, onInteract: onInteract) { adjustingTiming = nil }
+                TimingPanel(player: player, kind: kind, onInteract: onInteract) {
+                    adjustingTiming = nil
+                    // Restarts the countdown, which skipped hiding while the panel was open.
+                    onInteract()
+                }
             }
             HStack(spacing: 14) {
                 Button("Back 10 seconds", systemImage: "gobackward.10") {
@@ -252,7 +270,8 @@ struct PlayerControls: View {
                     .equatable()
                 AudioMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen, adjustingTiming: $adjustingTiming)
                     .equatable()
-                MoreMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen, onChooseSource: onChooseSource)
+                MoreMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen, onPlaybackInfo: onPlaybackInfo,
+                         onChooseSource: onChooseSource)
                     .equatable()
                 ZoomButton(player: player, onInteract: onInteract)
                 if let pictureInPicture, pictureInPicture.isPossible {
@@ -284,12 +303,7 @@ struct PlayerControls: View {
     private var playPauseButton: some View {
         Button(player.status == .playing ? "Pause" : "Play",
                systemImage: player.status == .playing ? "pause.fill" : "play.fill") {
-            if player.status == .ended {
-                player.seek(to: 0)
-                player.play()
-            } else {
-                player.togglePause()
-            }
+            player.togglePause()
             onInteract()
         }
         .labelStyle(.iconOnly)
@@ -306,7 +320,11 @@ struct PlayerControls: View {
             #if os(tvOS)
             VStack(spacing: 8) {
                 ProgressView(value: min(position, duration), total: duration)
+                    .overlay { segmentGaps(duration: duration) }
+                    .compositingGroup()
                     .overlay { scrubPreviewView(duration: duration, longForm: longForm) }
+                    .accessibilityLabel("Playback position")
+                    .accessibilityValue(spokenPosition(position, of: duration))
                 HStack {
                     // tvOS has no on-screen play button, so this is the only sign playback is paused.
                     if player.status == .paused {
@@ -314,22 +332,37 @@ struct PlayerControls: View {
                             .accessibilityLabel("Paused")
                     }
                     Text(format(position, longForm: longForm))
+                        .accessibilityHidden(true)
                     Spacer()
+                    endTime(remaining: duration - position)
+                        .foregroundStyle(.secondary)
+                        .padding(.trailing, 16)
                     Text("−" + format(duration - position, longForm: longForm))
+                        .accessibilityHidden(true)
                 }
                 .font(timeFont)
             }
             #else
             HStack(spacing: 12) {
+                // The slider carries both times for VoiceOver.
                 Text(format(position, longForm: longForm))
                     #if os(macOS)
                     .foregroundStyle(.secondary)
                     #endif
+                    .accessibilityHidden(true)
                 slider(duration: duration, position: position, longForm: longForm)
                 Text("−" + format(duration - position, longForm: longForm))
                     #if os(macOS)
                     .foregroundStyle(.secondary)
                     #endif
+                    .accessibilityHidden(true)
+                #if os(iOS)
+                // A portrait phone's bar is already short.
+                if !isPortraitPhone {
+                    endTime(remaining: duration - position)
+                        .foregroundStyle(.secondary)
+                }
+                #endif
             }
             #if os(macOS)
             .font(.caption.monospacedDigit())
@@ -342,6 +375,48 @@ struct PlayerControls: View {
             Text(format(player.position, longForm: false))
                 .font(timeFont)
         }
+    }
+
+    #if !os(macOS)
+    /// When playback will finish at the current speed, as the TV app shows it: whether there's
+    /// time to finish tonight, without the arithmetic.
+    private func endTime(remaining: Double) -> some View {
+        // The device locale, unlike other dates (`Locale.interface`): a clock follows its 12- or 24-hour setting.
+        Text("Ends at \(Date.now.addingTimeInterval(remaining / player.speed), format: .dateTime.hour().minute())")
+    }
+
+    /// Thin cuts through the bar where an intro, recap or credits starts or ends: where the
+    /// episode really ends and where a scrub will land, without adding colour.
+    private func segmentGaps(duration: Double) -> some View {
+        GeometryReader { proxy in
+            ForEach(player.segmentBoundaries, id: \.self) { mark in
+                Rectangle()
+                    .frame(width: Self.gapWidth)
+                    .offset(x: proxy.size.width * mark / duration - Self.gapWidth / 2)
+            }
+        }
+        .blendMode(.destinationOut)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private static var gapWidth: CGFloat {
+        #if os(tvOS)
+        4
+        #else
+        2
+        #endif
+    }
+    #endif
+
+    /// "12 minutes, 4 seconds of 1 hour, 40 minutes": read as a clock time, "12:04" sounds
+    /// like the time of day.
+    private func spokenPosition(_ position: Double, of duration: Double) -> String {
+        func spoken(_ seconds: Double) -> String {
+            Duration.seconds(Int(max(seconds, 0)))
+                .formatted(.units(allowed: [.hours, .minutes, .seconds], width: .wide, maximumUnitCount: 2).locale(.interface))
+        }
+        return "\(spoken(position)) of \(spoken(duration))"
     }
 
     /// Times are read at a glance over bright frames, on Apple TV from across the room.
@@ -366,14 +441,19 @@ struct PlayerControls: View {
                         .fill(.white)
                         .frame(width: proxy.size.width * min(max(position / duration, 0), 1))
                 }
+                .overlay { segmentGaps(duration: duration) }
+                .compositingGroup()
                 .clipShape(.capsule)
-                .frame(height: scrubPosition == nil ? 6 : 12)
+                .frame(height: scrubPosition == nil && dragStart == nil ? 6 : 12)
                 .frame(maxHeight: .infinity)
                 .contentShape(.rect)
                 .gesture(DragGesture(minimumDistance: 0)
                     .onChanged { value in
                         let start = dragStart ?? player.position
                         dragStart = start
+                        // Until the finger moves, the touch only thickens the bar: a scrub position
+                        // would start the preview, a second connection to the host, for nothing.
+                        guard abs(value.translation.width) > 2 || scrubPosition != nil else { onInteract(); return }
                         scrubPosition = min(max(start + value.translation.width / proxy.size.width * duration, 0), duration)
                         onInteract()
                     }
@@ -389,14 +469,15 @@ struct PlayerControls: View {
                     })
         }
         .frame(height: 44)
-        .animation(.easeOut(duration: 0.15), value: scrubPosition == nil)
+        .animation(.easeOut(duration: 0.15), value: scrubPosition == nil && dragStart == nil)
         .overlay { scrubPreviewView(duration: duration, longForm: longForm) }
-        .accessibilityElement()
-        .accessibilityLabel("Playback position")
-        .accessibilityValue(format(position, longForm: longForm))
-        .accessibilityAdjustableAction { direction in
-            player.seek(by: direction == .increment ? 10 : -10)
-            onInteract()
+        // Presented as the slider it is: an element with only an adjustable action was reported
+        // as a plain element, which UI automation couldn't adjust. Each step is 10 seconds.
+        .accessibilityRepresentation {
+            Slider(value: Binding(get: { position }, set: { player.seek(to: $0); onInteract() }),
+                   in: 0...duration, step: 10)
+                .accessibilityLabel("Playback position")
+                .accessibilityValue(spokenPosition(position, of: duration))
         }
     }
     #elseif os(macOS)
@@ -415,7 +496,7 @@ struct PlayerControls: View {
         .controlSize(.small)
         .overlay { scrubPreviewView(duration: duration, longForm: longForm) }
         .accessibilityLabel("Playback position")
-        .accessibilityValue(format(position, longForm: longForm))
+        .accessibilityValue(spokenPosition(position, of: duration))
     }
     #endif
 

@@ -15,6 +15,10 @@ struct LogeApp: App {
     @State private var tmdb: TMDBAccount
     @State private var playback: PlaybackSession
     @State private var accountSync: AccountSync
+    /// Here rather than in `RootView`, so the Mac's menu commands can switch tabs.
+    @State private var selectedTab = RootTab.home
+    /// Coming back from Control Center or a system sheet isn't a return to the app.
+    @State private var leftForeground = false
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(Accent.storageKey) private var accent = Accent.white
 
@@ -98,8 +102,12 @@ struct LogeApp: App {
                         || ProcessInfo.processInfo.arguments.contains("--playback-ui-test") { return }
                     #endif
                     trakt.sendPendingOnReconnect()
+                    // Alongside, so an unreachable sync server doesn't hold up the addons; a sync
+                    // that changes them refreshes them itself.
+                    let addons = addonStore
+                    async let manifests: Void = addons.refreshManifests()
                     await accountSync.sync()
-                    await addonStore.refreshManifests()
+                    await manifests
                     // Needs the addons to look up titles started on other devices.
                     await trakt.pullProgress()
                     await library.fillMissingArtwork(from: addonStore)
@@ -108,9 +116,16 @@ struct LogeApp: App {
                     if newPhase == .background {
                         playback.sceneDidEnterBackground()
                         finishSyncingBeforeSuspension()
+                        leftForeground = true
                     }
+                    #if os(macOS)
+                    // The Mac reports another app in front as inactive, and rarely as background.
+                    if newPhase == .inactive { leftForeground = true }
+                    #endif
                     guard newPhase == .active else { return }
                     playback.sceneDidBecomeActive()
+                    guard leftForeground else { return }
+                    leftForeground = false
                     #if DEBUG
                     if ProcessInfo.processInfo.arguments.contains("--sync-ui-test")
                         || ProcessInfo.processInfo.arguments.contains("--discovery-ui-test")
@@ -131,6 +146,16 @@ struct LogeApp: App {
                 Button("Check for Updates…", action: appUpdater.checkForUpdates)
                     .disabled(!appUpdater.canCheckForUpdates)
             }
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings…") { selectedTab = .settings }
+                    .keyboardShortcut(",")
+            }
+            CommandGroup(after: .textEditing) {
+                Button("Search") { selectedTab = .search }
+                    .keyboardShortcut("f")
+            }
+            // Every window would rerun the launch work and react to playback on its own, over shared stores.
+            CommandGroup(replacing: .newItem) {}
         }
         #endif
         #if os(macOS)
@@ -154,6 +179,8 @@ struct LogeApp: App {
         // As a principal window it would otherwise reopen empty at launch.
         .defaultLaunchBehavior(.suppressed)
         .restorationBehavior(.disabled)
+        // Opened from the Window menu with nothing playing, it would be an empty black window.
+        .commandsRemoved()
         #endif
     }
 
@@ -196,10 +223,10 @@ struct LogeApp: App {
                     roles: [.director], tmdbID: id)))
             }
         } else {
-            RootView()
+            RootView(selection: $selectedTab)
         }
         #else
-        RootView()
+        RootView(selection: $selectedTab)
         #endif
     }
 
@@ -227,7 +254,12 @@ private final class BackgroundTime {
 private struct SyncUITestCode: Decodable { let code: String }
 #endif
 
+enum RootTab: Hashable {
+    case home, search, myLists, settings
+}
+
 struct RootView: View {
+    @Binding var selection: RootTab
     @Environment(PlaybackSession.self) private var playback
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -254,18 +286,18 @@ struct RootView: View {
     }
 
     private var tabs: some View {
-        TabView {
-            tab("Home", systemImage: "house") {
+        TabView(selection: $selection) {
+            tab("Home", systemImage: "house", value: .home) {
                 BrowseStack { HomeView() }
             }
-            tab("My Lists", systemImage: "bookmark") {
+            tab("My Lists", systemImage: "bookmark", value: .myLists) {
                 BrowseStack { MyListView() }
             }
             // The search role sets the tab apart from the others, which a phone's one pill has no room for.
-            tab("Search", systemImage: "magnifyingglass", role: Metrics.isPhone ? nil : .search) {
+            tab("Search", systemImage: "magnifyingglass", value: .search, role: Metrics.isPhone ? nil : .search) {
                 BrowseStack { SearchView() }
             }
-            tab("Settings", systemImage: "gearshape") {
+            tab("Settings", systemImage: "gearshape", value: .settings) {
                 NavigationStack { SettingsView() }
             }
         }
@@ -275,9 +307,10 @@ struct RootView: View {
     /// A tab that shows only its icon in the phone's tab bar, where the symbols are
     /// familiar enough, and its name in the pill at the top elsewhere.
     private func tab(
-        _ title: String, systemImage: String, role: TabRole? = nil, @ViewBuilder content: () -> some View
-    ) -> some TabContent<Never> {
-        Tab(role: role) {
+        _ title: String, systemImage: String, value: RootTab, role: TabRole? = nil,
+        @ViewBuilder content: () -> some View
+    ) -> some TabContent<RootTab> {
+        Tab(value: value, role: role) {
             content()
         } label: {
             #if os(iOS)

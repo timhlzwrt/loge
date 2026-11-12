@@ -25,9 +25,9 @@ struct RecommendedRow: View {
                 case .success(let metas) where metas.isEmpty:
                     EmptyView()
                 case .success(let metas):
-                    row { posters(metas) }
+                    row(seeds: seeds) { posters(metas) }
                 case .failure:
-                    row {
+                    row(seeds: seeds) {
                         HStack {
                             Text("Couldn't load recommendations.")
                                 .foregroundStyle(.secondary)
@@ -36,7 +36,7 @@ struct RecommendedRow: View {
                         .padding(.horizontal, Metrics.gutter)
                     }
                 case nil:
-                    row { placeholders }
+                    row(seeds: seeds) { placeholders }
                 }
             }
         }
@@ -58,13 +58,33 @@ struct RecommendedRow: View {
         }
     }
 
-    private func row(@ViewBuilder content: () -> some View) -> some View {
+    private func row(seeds: [Recommendations.Seed], @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: Metrics.headerSpacing) {
-            Text("Recommended")
-                .font(.sectionTitle)
-                .padding(.horizontal, Metrics.gutter)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Recommended")
+                    .font(.sectionTitle)
+                // Says which of the viewer's own titles these come from.
+                if let basis = basis(of: seeds) {
+                    Text(basis)
+                        .font(.metaLine)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            .padding(.horizontal, Metrics.gutter)
             content()
         }
+    }
+
+    /// "Based on Interstellar, Arrival and 3 more"
+    private func basis(of seeds: [Recommendations.Seed]) -> String? {
+        let names = seeds.compactMap { seed in
+            library.progress.values.first { $0.item.metaID == seed.imdbID }?.item.title
+                ?? library.saved.first { $0.id == seed.imdbID }?.name
+        }
+        guard !names.isEmpty else { return nil }
+        let shown = names.count > 3 ? Array(names.prefix(2)) + ["\(names.count - 2) more"] : names
+        return "Based on " + shown.formatted(.list(type: .and).locale(.interface))
     }
 
     private func posters(_ metas: [MetaPreview]) -> some View {

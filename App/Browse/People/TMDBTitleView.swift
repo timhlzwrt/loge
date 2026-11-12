@@ -50,8 +50,18 @@ struct TMDBTitleView: View {
         }
         .background(Color.canvas)
         .hidingPhoneTabBar()
+        #if os(macOS)
+        // The Mac's details pages name themselves in the toolbar. An empty title here could take
+        // the place of the resolved page's own, which leaves the toolbar blank.
+        .navigationTitle(title.name)
+        #else
         // The resolved page names the title in its own hero, like any other details page.
         .navigationTitle(isResolved ? "" : title.name)
+        #endif
+        #if os(iOS)
+        // Inline: the name heads the page beside the poster, and a large title repeated it, cut short.
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
         .task(id: LoadKey(revision: tmdb.revision, attempt: attempt)) {
             state = .loading
             do {

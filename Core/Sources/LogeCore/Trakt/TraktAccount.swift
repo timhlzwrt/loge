@@ -18,6 +18,17 @@ public final class TraktAccount {
 
     public private(set) var state: State = .signedOut
     public private(set) var credentials: TraktCredentials?
+    /// From asking for a code until signed in, cancelled or failed.
+    public private(set) var isSigningIn = false
+    /// Why the last sign-in failed. Kept here rather than in the page, which may have closed meanwhile.
+    public private(set) var signInError: (any Error)?
+    /// The app keys couldn't be written to Keychain, so they last only until the app quits.
+    public private(set) var credentialsNotSaved = false
+    /// Whether the last pull couldn't reach Trakt.
+    public private(set) var pullFailed = false
+    public var isPulling: Bool { pulls > 0 }
+    /// Sign-out drops these, so the confirmation says so.
+    public var hasUnsentChanges: Bool { !pending.isEmpty }
 
     private var token: TraktToken?
     private let library: LibraryStore
@@ -32,6 +43,7 @@ public final class TraktAccount {
     /// The progress Trakt listed at the last pull, to notice what has been removed since.
     private var listed: [String: Date]
     private var sending: Task<Void, Never>?
+    private var pulls = 0
     private var connectionMonitor: NWPathMonitor?
     /// Trakt allows one write a second per user.
     var writeInterval = Duration.seconds(1)
@@ -48,8 +60,19 @@ public final class TraktAccount {
         self.init(library: library, addons: addons, defaults: defaults, session: .shared,
                   credentials: Self.load(TraktCredentials.self, account: "credentials"),
                   token: Self.load(TraktToken.self, account: "token"),
-                  saveToken: { Self.save($0, account: "token") })
+                  // A token that isn't kept only means signing in again; `save` logs the failure.
+                  saveToken: { try? Self.save($0, account: "token") })
     }
+
+    #if DEBUG
+    /// UI checks show a state, such as the sign-in code, without Keychain or network.
+    public convenience init(library: LibraryStore, addons: AddonStore, defaults: UserDefaults, showing state: State) {
+        self.init(library: library, addons: addons, defaults: defaults, session: .shared,
+                  credentials: TraktCredentials(clientID: "ui-fixture", clientSecret: "ui-fixture"),
+                  token: nil, saveToken: { _ in })
+        self.state = state
+    }
+    #endif
 
     init(library: LibraryStore, addons: AddonStore, defaults: UserDefaults,
          session: URLSession, credentials: TraktCredentials?, token: TraktToken?,
@@ -78,20 +101,30 @@ public final class TraktAccount {
     public func setCredentials(_ credentials: TraktCredentials?) {
         guard credentials != self.credentials else { return }
         self.credentials = credentials
-        Self.save(credentials, account: "credentials")
+        do {
+            try Self.save(credentials, account: "credentials")
+            credentialsNotSaved = false
+        } catch {
+            credentialsNotSaved = true
+        }
         signOut()
     }
 
     // MARK: Sign-in
 
     /// Shows a code for the user to enter on Trakt's site, then waits for their approval.
+    /// A second call while one is in progress returns at once.
     public func signIn() async throws {
         guard let client else { throw TraktError.notSignedIn }
+        guard !isSigningIn else { return }
         let connectionID = connectionID
-        let code = try await client.deviceCode()
-        try checkConnection(connectionID)
-        state = .awaitingApproval(code)
+        isSigningIn = true
+        signInError = nil
+        defer { if self.connectionID == connectionID { isSigningIn = false } }
         do {
+            let code = try await client.deviceCode()
+            try checkConnection(connectionID)
+            state = .awaitingApproval(code)
             while Date.now < code.expiresAt {
                 try await Task.sleep(for: .seconds(code.interval))
                 try checkConnection(connectionID)
@@ -108,13 +141,26 @@ public final class TraktAccount {
             }
             throw TraktError.codeExpired
         } catch {
-            if self.connectionID == connectionID, case .awaitingApproval = state { state = .signedOut }
+            if self.connectionID == connectionID {
+                if case .awaitingApproval = state { state = .signedOut }
+                if !(error is CancellationError) { signInError = error }
+            }
             throw error
         }
     }
 
+    /// Ends a sign-in in progress; its polling stops at the next check.
+    public func cancelSignIn() {
+        guard isSigningIn else { return }
+        connectionID = UUID()
+        isSigningIn = false
+        if case .awaitingApproval = state { state = .signedOut }
+    }
+
     public func signOut() {
         connectionID = UUID()
+        isSigningIn = false
+        pullFailed = false
         refreshTask?.cancel()
         refreshTask = nil
         token = nil
@@ -196,6 +242,8 @@ public final class TraktAccount {
     /// through the installed addons for their names, artwork and runtime.
     public func pullProgress() async {
         guard !isPaused, let client else { return }
+        pulls += 1
+        defer { pulls -= 1 }
         // First, so what this device removed or played while offline counts in what comes back.
         await sendPending()
         guard !isPaused else { return }
@@ -224,31 +272,41 @@ public final class TraktAccount {
             return
         } catch {
             log.error("Couldn't load playback progress: \(error)")
+            if self.connectionID == connectionID { pullFailed = true }
             signOutIfRejected(error, connectionID: connectionID)
             return
         }
         guard !isPaused, self.connectionID == connectionID, !Task.isCancelled else { return }
+        pullFailed = false
         var metas: [String: Meta] = [:]
         var attemptedIDs: Set<String> = []
+        // Titles already in the library merge together, with one save.
+        var known: [LibraryStore.RemoteProgress] = []
         // A completed play disappears from Trakt's paused playback feed. Merge its
         // actual timestamp so it clears stale progress without undoing a newer rewatch.
         for entry in watched {
             guard let saved = library.progress.values.first(where: {
                 $0.item.metaID == entry.imdbID && $0.item.season == entry.season && $0.item.episode == entry.episode
             }) else { continue }
-            library.mergeRemote(saved.item, fraction: 1, estimatedDuration: max(saved.duration, 1), at: entry.pausedAt)
+            known.append(.init(item: saved.item, fraction: 1, estimatedDuration: max(saved.duration, 1), date: entry.pausedAt))
         }
+        var unknown: [TraktPlayback] = []
         for entry in entries {
             let type = entry.season == nil ? MediaType.movie : MediaType.series
             if let saved = library.progress.values.first(where: {
                 $0.item.metaID == entry.imdbID && $0.item.season == entry.season && $0.item.episode == entry.episode
             }) {
                 // Marking something watched without playing it stores a placeholder duration of 1.
-                library.mergeRemote(saved.item, fraction: entry.progress / 100,
-                                    estimatedDuration: saved.duration > 1 ? saved.duration : (type == MediaType.movie ? 6_600 : 2_700),
-                                    at: entry.pausedAt)
-                continue
+                known.append(.init(item: saved.item, fraction: entry.progress / 100,
+                                   estimatedDuration: saved.duration > 1 ? saved.duration : (type == MediaType.movie ? 6_600 : 2_700),
+                                   date: entry.pausedAt))
+            } else {
+                unknown.append(entry)
             }
+        }
+        library.mergeRemote(known)
+        for entry in unknown {
+            let type = entry.season == nil ? MediaType.movie : MediaType.series
             // Several paused episodes can share a show; unavailable metadata should only be requested once per sync.
             if attemptedIDs.insert(entry.imdbID).inserted,
                let provider = addons.addons.metaClient(type: type, id: entry.imdbID),
@@ -506,8 +564,8 @@ public final class TraktAccount {
         return total > 0 ? total : nil
     }
 
-    // Trakt has no screen for storage failures: a token that can't be read means signing in
-    // again, so failures are logged rather than shown.
+    // A token or keys that can't be read mean signing in again, so read failures are logged
+    // rather than shown. Saving the app keys reports failure through `credentialsNotSaved`.
     private static func load<T: Decodable>(_ type: T.Type, account: String) -> T? {
         do {
             guard let data = try Keychain.read(service: service, account: account) else { return nil }
@@ -518,12 +576,13 @@ public final class TraktAccount {
         }
     }
 
-    private static func save<T: Encodable>(_ value: T?, account: String) {
+    private static func save<T: Encodable>(_ value: T?, account: String) throws {
         do {
             if let value { try Keychain.save(JSONEncoder().encode(value), service: service, account: account) }
             else { try Keychain.remove(service: service, account: account) }
         } catch {
             log.error("Couldn't save Trakt \(account, privacy: .public) to the keychain: \(error)")
+            throw error
         }
     }
 }

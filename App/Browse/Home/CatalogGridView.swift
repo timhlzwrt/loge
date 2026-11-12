@@ -14,6 +14,8 @@ struct CatalogGridView: View {
     @State private var phase = Phase.loading
     @State private var reachedEnd = false
     @State private var loadGeneration = UUID()
+    /// The filter the grid holds pages for, so returning from a title keeps them and the place.
+    @State private var loadedFilter: Filter?
     #if os(tvOS)
     /// Only the first poster is bound to focus, as in `CatalogRow`. The grid opens empty, so
     /// focus starts on the Sort and Genre buttons and has to be brought down once titles arrive.
@@ -72,11 +74,17 @@ struct CatalogGridView: View {
             #endif
             .task { await loadSortOptions() }
             .task(id: Filter(sortID: sortID, genre: genre)) {
-                loadGeneration = UUID()
-                items = []
-                reachedEnd = false
-                phase = .idle
-                await loadNextPage()
+                // This also runs on returning from a title, which mustn't start the grid over.
+                let filter = Filter(sortID: sortID, genre: genre)
+                if loadedFilter != filter {
+                    loadedFilter = filter
+                    loadGeneration = UUID()
+                    items = []
+                    reachedEnd = false
+                    phase = .idle
+                }
+                // A first page cancelled by leaving loads on return.
+                if items.isEmpty { await loadNextPage() }
             }
     }
 
@@ -107,8 +115,7 @@ struct CatalogGridView: View {
 
     private var grid: some View {
         ScrollView {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: Metrics.posterWidth), spacing: Metrics.rowSpacing)],
-                      spacing: Metrics.rowSpacing) {
+            LazyVGrid(columns: Metrics.posterGridColumns, spacing: Metrics.rowSpacing) {
                 ForEach(items) { meta in
                     #if os(tvOS)
                     if meta.id == items.first?.id {
@@ -203,7 +210,7 @@ struct CatalogGridView: View {
                 .frame(maxWidth: .infinity)
         case .failed:
             VStack(spacing: 8) {
-                Text("Couldn't load more of \(source.title).")
+                Text(items.isEmpty ? "Couldn't load \(source.title)." : "Couldn't load more of \(source.title).")
                     .foregroundStyle(.secondary)
                 Button("Retry") { Task { await loadNextPage() } }
             }

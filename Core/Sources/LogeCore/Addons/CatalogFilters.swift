@@ -62,7 +62,8 @@ extension CatalogSource {
         details: @escaping @Sendable (MetaPreview) async throws -> Meta
     ) async throws -> [MetaPreview] {
         let (matches, failure) = await withTaskGroup(of: (Int, Result<Bool, Error>).self) { group in
-            for (index, preview) in results.enumerated() {
+            var remaining = results.enumerated().makeIterator()
+            func enqueue(_ index: Int, _ preview: MetaPreview) {
                 group.addTask {
                     if let genres = preview.genres, !genres.isEmpty {
                         return (index, .success(Self.genres(genres, contain: genre)))
@@ -76,6 +77,11 @@ extension CatalogSource {
                     }
                 }
             }
+            // Every pause in typing starts another search, so lookups go a few at a time
+            // rather than one request per result at once.
+            for _ in 0..<Self.concurrentLookups {
+                if let next = remaining.next() { enqueue(next.offset, next.element) }
+            }
             var matches = [Bool?](repeating: nil, count: results.count)
             var failure: Error?
             for await (index, result) in group {
@@ -83,12 +89,15 @@ extension CatalogSource {
                 case .success(let match): matches[index] = match
                 case .failure(let error): failure = error
                 }
+                if let next = remaining.next() { enqueue(next.offset, next.element) }
             }
             return (matches, failure)
         }
         if let failure, matches.allSatisfy({ $0 == nil }) { throw failure }
         return zip(results, matches).filter { $0.1 == true }.map(\.0)
     }
+
+    private static let concurrentLookups = 6
 
     private static func genres(_ genres: [String], contain genre: String) -> Bool {
         genres.contains { $0.caseInsensitiveCompare(genre) == .orderedSame }

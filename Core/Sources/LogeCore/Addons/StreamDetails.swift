@@ -211,7 +211,7 @@ public struct StreamDetails: Sendable, Equatable {
 
     /// "58.2 GB".
     public var sizeLabel: String? {
-        size.map { $0.formatted(.byteCount(style: .file)) + (isPackageSize ? " pack" : "") }
+        size.map { $0.formatted(.byteCount(style: .file).locale(.interface)) + (isPackageSize ? " pack" : "") }
     }
 
     /// The reported bitrate, else the estimate: what the list sorts and caps by.
@@ -220,7 +220,7 @@ public struct StreamDetails: Sendable, Equatable {
     /// "18 Mbps" as reported, or "≈18 Mbps" estimated from the size.
     public var bitrateLabel: String? {
         guard let rate = listedBitrate else { return nil }
-        let mbps = (rate / 1_000_000).formatted(.number.precision(.fractionLength(bitrate == nil ? 0...0 : 0...1)))
+        let mbps = (rate / 1_000_000).formatted(.number.precision(.fractionLength(bitrate == nil ? 0...0 : 0...1)).locale(.interface))
         return (bitrate == nil ? "≈" : "") + mbps + " Mbps"
     }
 

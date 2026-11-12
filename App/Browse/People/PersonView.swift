@@ -4,7 +4,7 @@ import SwiftUI
 /// A person picked on a title's details or a discovery shelf.
 struct PersonRoute: Hashable {
     let person: Person
-    /// Retained when catalog search misses the title the person was found on.
+    /// The title the person was found on, shown when there's no TMDB filmography.
     let title: MetaPreview?
 
     init(person: Person, title: MetaPreview? = nil) {
@@ -22,11 +22,13 @@ struct PersonView: View {
     @State private var role: TMDBCreditRole?
     @State private var sort = CreditSort.newest
     @State private var biographyExpanded = false
+    @State private var biographyFullHeight: CGFloat = 0
+    @State private var biographyShownHeight: CGFloat = 0
 
     private enum LoadState {
         case loading
         case filmography(TMDBPersonDetails)
-        case catalog([MetaPreview])
+        case unlinked
         case failed(String)
     }
 
@@ -61,28 +63,19 @@ struct PersonView: View {
                     filmography(person.titles)
                 }
                 .padding(.vertical, 24)
-            case .catalog(let titles):
-                VStack(alignment: .leading, spacing: 32) {
-                    Text(tmdb.isConfigured
-                         ? "This credit has no TMDB person ID. Catalog matches may be incomplete."
-                         : "Connect TMDB in Settings for the full filmography. Catalog matches below may be incomplete.")
-                        .font(.metaLine)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, Metrics.gutter)
-                    catalogSection("Movies", titles.filter { $0.type == MediaType.movie })
-                    catalogSection("Series", titles.filter { $0.type == MediaType.series })
-                    if titles.isEmpty {
-                        ContentUnavailableView("No catalog matches", systemImage: "person",
-                                               description: Text("No titles crediting this name were found."))
-                    }
-                }
-                .padding(.vertical, 24)
+            case .unlinked:
+                unlinked
             }
         }
         .scrollClipDisabled()
         .background(Color.canvas)
         .hidingPhoneTabBar()
+        // The name heads the page beside the portrait, so iOS leaves the bar untitled, as on details.
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #else
         .pageTitle(route.person.name)
+        #endif
         .task(id: LoadKey(revision: tmdb.revision, attempt: attempt)) {
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--person-role-ui-test") {
@@ -104,9 +97,9 @@ struct PersonView: View {
                     try Task.checkCancellation()
                     state = .filmography(person)
                 } else {
-                    let titles = try await catalogTitles()
-                    try Task.checkCancellation()
-                    state = .catalog(titles)
+                    // Cinemeta's name search no longer carries cast or directors, so it can't
+                    // tell which results a person worked on.
+                    state = .unlinked
                 }
             } catch {
                 guard !Task.isCancelled else { return }
@@ -155,7 +148,8 @@ struct PersonView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(person.name).font(.sectionTitle)
                     if let department = person.knownFor {
-                        Text(department).font(.metaLine).foregroundStyle(.secondary)
+                        // TMDB names the department: "Directing", "Acting".
+                        Text("Known for \(department.lowercased())").font(.metaLine).foregroundStyle(.secondary)
                     }
                     if let birthday = person.birthday.flatMap(Self.formattedBirthday) {
                         Text("Born \(birthday)").font(.metaLine).foregroundStyle(.secondary)
@@ -177,11 +171,33 @@ struct PersonView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(biographyExpanded ? nil : 5)
                         .readingWidth()
-                    Button(biographyExpanded ? "Show Less" : "Read Biography") {
-                        biographyExpanded.toggle()
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { biographyShownHeight = $0 }
+                        .background(alignment: .top) {
+                            // The unclamped text, measured so the button shows only when five lines cut it short.
+                            Text(biography)
+                                .font(.synopsis)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .readingWidth()
+                                .hidden()
+                                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { biographyFullHeight = $0 }
+                        }
+                    if biographyExpanded || biographyFullHeight > biographyShownHeight + 1 {
+                        Button {
+                            biographyExpanded.toggle()
+                        } label: {
+                            Text(biographyExpanded ? "Show Less" : "Read Biography")
+                                #if !os(tvOS)
+                                .frame(minHeight: 44)
+                                .contentShape(.rect)
+                                #endif
+                        }
+                        .font(.metaLine)
                     }
-                    .font(.metaLine)
                 }
+                #if os(tvOS)
+                // Across the whole screen a line ran past 250 characters, too long to follow.
+                .frame(maxWidth: 1100, alignment: .leading)
+                #endif
             }
         }
         .padding(.horizontal, Metrics.gutter)
@@ -238,7 +254,10 @@ struct PersonView: View {
                 } label: {
                     Label(sort.rawValue, systemImage: "arrow.up.arrow.down")
                         .font(.metaLine)
+                        .frame(minHeight: 44)
                 }
+                .accessibilityLabel("Sort")
+                .accessibilityValue(sort.rawValue)
             }
             if visible.isEmpty {
                 Text("No credits in this category.").foregroundStyle(.secondary)
@@ -246,9 +265,9 @@ struct PersonView: View {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: Metrics.posterWidth), spacing: Metrics.rowSpacing, alignment: .top)],
                           alignment: .leading, spacing: Metrics.rowSpacing) {
                     ForEach(visible) { title in
-                        NavigationLink {
-                            TMDBTitleView(title: title)
-                        } label: {
+                        // By value, as festival and genre tiles: a view-built destination left
+                        // the links inside the resolved details dead.
+                        NavigationLink(value: title) {
                             TMDBCreditTile(title: title)
                         }
                         #if os(tvOS)
@@ -275,8 +294,8 @@ struct PersonView: View {
         formatter.dateFormat = "yyyy-MM-dd"
         formatter.isLenient = false
         guard let date = formatter.date(from: value), formatter.string(from: date) == value else { return nil }
-        formatter.locale = Locale(identifier: "en_GB")
-        formatter.dateFormat = "d MMMM yyyy"
+        formatter.locale = .interface
+        formatter.setLocalizedDateFormatFromTemplate("MMMMdyyyy")
         return formatter.string(from: date)
     }
 
@@ -297,39 +316,43 @@ struct PersonView: View {
         }
     }
 
-    private func catalogTitles() async throws -> [MetaPreview] {
-        let name = route.person.name
-        let results = try await withThrowingTaskGroup(of: [MetaPreview].self) { group in
-            for source in DiscoveryCatalogs.search {
-                group.addTask { try await source.items(search: name) }
+    private var unlinked: some View {
+        VStack(alignment: .leading, spacing: 28) {
+            HStack(alignment: .top, spacing: 20) {
+                if let portrait = route.person.portraitURL {
+                    Artwork(url: portrait)
+                        .frame(width: Metrics.personSize * 1.4, height: Metrics.personSize * 2.1)
+                        .clipShape(.rect(cornerRadius: Metrics.posterRadius))
+                        .accessibilityHidden(true)
+                }
+                Text(route.person.name).font(.sectionTitle)
             }
-            var results: [MetaPreview] = []
-            for try await titles in group { results += titles }
-            return results
-        }
-        if let title = route.title { return route.person.titles(in: results, foundOn: title) }
-        return results.filter { $0.credits(name) }.sorted { ($0.releaseInfo ?? "") > ($1.releaseInfo ?? "") }
-    }
-
-    @ViewBuilder
-    private func catalogSection(_ title: String, _ titles: [MetaPreview]) -> some View {
-        if !titles.isEmpty {
-            VStack(alignment: .leading, spacing: Metrics.headerSpacing) {
-                Text(title).font(.sectionTitle)
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: Metrics.posterWidth), spacing: Metrics.rowSpacing, alignment: .top)],
-                          spacing: Metrics.rowSpacing) {
-                    ForEach(titles) { meta in
-                        NavigationLink(value: meta) {
-                            PosterTile(meta: meta, width: nil)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(tmdb.isConfigured ? "No filmography" : "Filmography needs TMDB").font(.sectionTitle)
+                Text(tmdb.isConfigured
+                     ? "TMDB doesn't link this credit to a person."
+                     : "Connect TMDB in Settings to list \(route.person.name)'s films and series.")
+                    .font(.synopsis)
+                    .foregroundStyle(.secondary)
+                    .readingWidth()
+            }
+            if let title = route.title {
+                VStack(alignment: .leading, spacing: Metrics.headerSpacing) {
+                    Text("Credited on").font(.sectionTitle)
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: Metrics.posterWidth), spacing: Metrics.rowSpacing, alignment: .top)],
+                              spacing: Metrics.rowSpacing) {
+                        NavigationLink(value: title) {
+                            PosterTile(meta: title, width: nil)
                         }
                         .tileButtonStyle()
                     }
+                    #if os(tvOS)
+                    .padding(.top, 20)
+                    #endif
                 }
-                #if os(tvOS)
-                .padding(.top, 20)
-                #endif
             }
-            .padding(.horizontal, Metrics.gutter)
         }
+        .padding(.horizontal, Metrics.gutter)
+        .padding(.vertical, 24)
     }
 }

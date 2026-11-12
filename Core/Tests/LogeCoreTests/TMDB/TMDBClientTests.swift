@@ -34,11 +34,26 @@ struct TMDBClientTests {
         #expect(details.people[2].roles == [.writer])
     }
 
+    @Test func directorsLeadTheTopBilledCastAndWritersFollow() throws {
+        let cast = (1...25).map { #"{"id":\#($0),"name":"Actor \#($0)","character":"Part"}"# }
+        let json = #"""
+            {"cast":[\#(cast.joined(separator: ","))],
+             "crew":[{"id":30,"name":"Writer","job":"Screenplay","department":"Writing"},
+                     {"id":24,"name":"Actor 24","job":"Story","department":"Writing"},
+                     {"id":31,"name":"Director","job":"Director","department":"Directing"}]}
+            """#
+        let people = try JSONDecoder().decode(CreditsResponse.self, from: Data(json.utf8)).people
+        // The extras past the top-billed cast drop out, unless they also wrote it.
+        #expect(people.map(\.id) == [31] + Array(1...CreditsResponse.castLimit) + [24, 30])
+        #expect(people.first { $0.id == 24 }?.roles == [.actor, .writer])
+    }
+
     @Test func recommendationsKeepTMDBOrderAndTheirOwnKind() async throws {
         let movie = try await client().details(imdbID: "tt0000042", type: "movie")
         #expect(movie.tmdbID == 42)
         // The title itself, repeats and entries without an ID or name are dropped.
         #expect(movie.recommendations.map(\.id) == ["movie:51", "movie:53"])
+        #expect(!movie.recommendationsAreSimilar)
         let first = try #require(movie.recommendations.first)
         #expect(first.name == "First pick")
         #expect(first.posterURL == "https://image.tmdb.org/t/p/w500/first.jpg")
@@ -57,6 +72,7 @@ struct TMDBClientTests {
     @Test func similarTitlesStandInOnlyWhenThereAreNoRecommendations() async throws {
         let details = try await client("onlySimilar").details(imdbID: "tt0000042", type: "movie")
         #expect(details.recommendations.map(\.name) == ["Similar"])
+        #expect(details.recommendationsAreSimilar)
         let sparse = try await client("unrated").details(imdbID: "tt0000042", type: "movie")
         #expect(sparse.recommendations.isEmpty)
     }

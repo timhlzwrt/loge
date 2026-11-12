@@ -9,8 +9,18 @@ struct SearchView: View {
     /// "movie" or "series"; nil shows both.
     @State private var type: String?
     @State private var genre: String?
+    /// The term Return was pressed on, saved to Recent Searches once a catalog finds it.
+    @State private var returnedQuery: String?
     /// Newest first, one per line.
     @AppStorage("recentSearches") private var recentSearches = ""
+    #if os(tvOS)
+    /// The genre just removed, whose tile takes focus back rather than the type picker.
+    @State private var removedGenre: String?
+    @FocusState private var focusedGenre: String?
+    /// A genre tile was just picked; the rows that replace it take focus. Not after a type change,
+    /// which happens as focus moves across the picker.
+    @State private var focusesFirstResult = false
+    #endif
 
     init(query: String = "") {
         _query = State(initialValue: query)
@@ -18,15 +28,19 @@ struct SearchView: View {
 
     var body: some View {
         let sources = DiscoveryCatalogs.search.filtered(type: type, genre: genre)
+        // Spaces alone search nothing, so they show what an empty field does.
+        let isEmpty = trimmedQuery.isEmpty
         ScrollView {
             filters
-            if query.isEmpty && genre == nil {
+            if isEmpty && genre == nil {
                 recent
                 genreList
-            } else if query.isEmpty {
+            } else if isEmpty {
                 // Browsing a genre: each row's See All opens the whole genre.
                 LazyVStack(alignment: .leading, spacing: 32) {
-                    ForEach(sources) { CatalogRow(source: $0) }
+                    ForEach(sources) { source in
+                        CatalogRow(source: source, takesFocusWhenLoaded: takesFocus && source.id == sources.first?.id)
+                    }
                 }
                 .padding(.vertical, 24)
             } else if !submittedQuery.isEmpty {
@@ -40,6 +54,7 @@ struct SearchView: View {
                     ForEach(sources) { source in
                         CatalogRow(source: source, search: submittedQuery, onLoaded: { count in
                             resultCounts[source.id] = count
+                            if count > 0, returnedQuery == submittedQuery { remember(submittedQuery) }
                         })
                     }
                 }
@@ -57,7 +72,12 @@ struct SearchView: View {
         #else
         .searchable(text: $query, prompt: "Movies and series")
         #endif
-        .onSubmit(of: .search) { remember(query) }
+        .onSubmit(of: .search) {
+            // Return searches at once rather than after the typing pause.
+            submit(trimmedQuery)
+            returnedQuery = trimmedQuery
+            remember(trimmedQuery)
+        }
         // Opening a result also leaves this screen, which is when a search proved useful.
         .onDisappear { remember(submittedQuery) }
         .task(id: query) {
@@ -67,10 +87,26 @@ struct SearchView: View {
             } catch {
                 return
             }
-            let trimmed = query.trimmingCharacters(in: .whitespaces)
-            if trimmed != submittedQuery { resultCounts = [:] }
-            submittedQuery = trimmed
+            submit(trimmedQuery)
         }
+    }
+
+    private var takesFocus: Bool {
+        #if os(tvOS)
+        focusesFirstResult
+        #else
+        false
+        #endif
+    }
+
+    private var trimmedQuery: String {
+        query.trimmingCharacters(in: .whitespaces)
+    }
+
+    private func submit(_ term: String) {
+        guard term != submittedQuery else { return }
+        resultCounts = [:]
+        submittedQuery = term
     }
 
     /// Genres of the types shown; a series-only genre such as Reality-TV hides Movies.
@@ -90,6 +126,9 @@ struct SearchView: View {
             // shows here, as something to remove; while searching, a menu narrows the results.
             if let genre {
                 Button {
+                    #if os(tvOS)
+                    removedGenre = genre
+                    #endif
                     self.genre = nil
                 } label: {
                     HStack(spacing: 6) {
@@ -108,7 +147,7 @@ struct SearchView: View {
                 #endif
                 .accessibilityLabel("\(genre), remove genre")
                 .fixedSize()
-            } else if !query.isEmpty {
+            } else if !trimmedQuery.isEmpty {
                 Menu {
                     Picker("Genre", selection: $genre) {
                         Text("Any Genre").tag(String?.none)
@@ -126,6 +165,9 @@ struct SearchView: View {
         .padding(.top, 12)
         .onChange(of: type) {
             if let genre, !genres.contains(genre) { self.genre = nil }
+            #if os(tvOS)
+            focusesFirstResult = false
+            #endif
         }
     }
 
@@ -136,10 +178,25 @@ struct SearchView: View {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: Metrics.posterWidth * 1.4), spacing: Metrics.rowSpacing)],
                       spacing: Metrics.rowSpacing) {
                 ForEach(genres.compactMap(DiscoveryCatalogs.genre(named:))) { genre in
-                    Button { self.genre = genre.name } label: {
+                    Button {
+                        #if os(tvOS)
+                        removedGenre = nil
+                        focusesFirstResult = true
+                        #endif
+                        self.genre = genre.name
+                    } label: {
                         GenreTile(genre: genre, width: nil)
                     }
                     .tileButtonStyle()
+                    #if os(tvOS)
+                    .focused($focusedGenre, equals: genre.name)
+                    // Once the list is back on screen; asked for before, the request was dropped.
+                    .task {
+                        guard genre.name == removedGenre else { return }
+                        removedGenre = nil
+                        focusedGenre = genre.name
+                    }
+                    #endif
                 }
             }
             #if os(tvOS)
@@ -163,28 +220,57 @@ struct SearchView: View {
                     Text("Recent Searches")
                         .font(.headline)
                     Spacer()
-                    Button("Clear") { recentSearches = "" }
-                        #if !os(tvOS)
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
-                        #endif
-                }
-                ForEach(recents, id: \.self) { term in
                     Button {
-                        query = term
+                        recentSearches = ""
                     } label: {
-                        Label(term, systemImage: "clock.arrow.circlepath")
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Text("Clear")
+                            #if !os(tvOS)
+                            .frame(minHeight: 44)
                             .contentShape(.rect)
+                            #endif
                     }
                     #if !os(tvOS)
                     .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
                     #endif
+                }
+                VStack(alignment: .leading, spacing: Self.recentSpacing) {
+                    ForEach(recents, id: \.self) { term in
+                        Button {
+                            query = term
+                        } label: {
+                            Label(term, systemImage: "clock.arrow.circlepath")
+                                #if os(tvOS)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                #else
+                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                                #endif
+                                .contentShape(.rect)
+                        }
+                        #if !os(tvOS)
+                        .buttonStyle(.plain)
+                        #endif
+                        // One-off titles, such as a festival winner's "Find title", needn't cost the whole list.
+                        .contextMenu {
+                            Button("Remove", systemImage: "trash", role: .destructive) { forget(term) }
+                        }
+                    }
                 }
             }
             .padding(.horizontal, Metrics.gutter)
             .padding(.vertical, 24)
         }
+    }
+
+    /// The 44 pt rows already space themselves out on iPhone, iPad and Mac.
+    #if os(tvOS)
+    private static let recentSpacing: CGFloat = 12
+    #else
+    private static let recentSpacing: CGFloat = 0
+    #endif
+
+    private func forget(_ term: String) {
+        recentSearches = recents.filter { $0 != term }.joined(separator: "\n")
     }
 
     /// Saves a search that found something; ones that didn't aren't worth repeating.

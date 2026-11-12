@@ -27,6 +27,8 @@ enum Metrics {
     static let personSize: CGFloat = 150
     /// The narrowest column of the details' Information grid.
     static let infoColumnWidth: CGFloat = 300
+    /// Under portrait artwork that lifts on focus: at 8 the lifted image covered the name's first line.
+    static let liftedCaptionSpacing: CGFloat = 16
     #elseif os(macOS)
     static let isPhone = false
     static let posterWidth: CGFloat = 132
@@ -40,6 +42,7 @@ enum Metrics {
     static let posterRadius: CGFloat = 10
     static let personSize: CGFloat = 76
     static let infoColumnWidth: CGFloat = 180
+    static let liftedCaptionSpacing: CGFloat = 8
     #else
     // The idiom never changes while running, so these can stay constants.
     private static let isPad = UIDevice.current.userInterfaceIdiom == .pad
@@ -56,7 +59,16 @@ enum Metrics {
     static let posterRadius: CGFloat = 12
     static let personSize: CGFloat = isPad ? 96 : 76
     static let infoColumnWidth: CGFloat = isPad ? 200 : 150
+    static let liftedCaptionSpacing: CGFloat = 8
     #endif
+
+    /// See All and My Lists. Three posters across any phone: columns of at least `posterWidth`
+    /// fit only two on a 393 pt one, each far larger than in the rows.
+    static var posterGridColumns: [GridItem] {
+        isPhone
+            ? Array(repeating: GridItem(.flexible(), spacing: rowSpacing), count: 3)
+            : [GridItem(.adaptive(minimum: posterWidth), spacing: rowSpacing)]
+    }
 }
 
 extension View {
@@ -197,7 +209,7 @@ struct TitleLogo: View {
         RemoteImage(url: logo) { phase in
             switch phase {
             case .success(let image):
-                Image(image, scale: 1, label: Text(name))
+                Image(LogoTrim.trimmed(image, url: logo), scale: 1, label: Text(name))
                     .renderingMode(LogoTone.isDark(image, url: logo) ? .template : .original)
                     .resizable().scaledToFit()
                     .foregroundStyle(.white)
@@ -259,6 +271,58 @@ private enum LogoTone {
     }
 }
 
+/// Logos often come with transparent margins, which set the wordmark in from the text
+/// under it; drawn without them, the logo lines up with the info line.
+@MainActor
+private enum LogoTrim {
+    /// A crop keeps the whole original alive, so these are let go like the artwork they came from.
+    private static let results: NSCache<NSString, CGImage> = {
+        let cache = NSCache<NSString, CGImage>()
+        cache.countLimit = 100
+        return cache
+    }()
+
+    static func trimmed(_ image: CGImage, url: String?) -> CGImage {
+        if let url, let known = results.object(forKey: url as NSString) { return known }
+        let trimmed = crop(image) ?? image
+        if let url { results.setObject(trimmed, forKey: url as NSString) }
+        return trimmed
+    }
+
+    /// Finds the visible part on a small copy, then crops the full image to it, a little wider
+    /// so antialiased edges aren't cut.
+    private static func crop(_ image: CGImage) -> CGImage? {
+        let width = 96
+        let height = Int((Double(image.height) / Double(image.width) * Double(width)).rounded())
+        guard image.width > 0, (1...1_000).contains(height) else { return nil }
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(
+                data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ) else { return false }
+            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        guard drawn else { return nil }
+        var minX = width, maxX = -1, minY = height, maxY = -1
+        for y in 0..<height {
+            for x in 0..<width where pixels[(y * width + x) * 4 + 3] > 8 {
+                minX = min(minX, x); maxX = max(maxX, x)
+                minY = min(minY, y); maxY = max(maxY, y)
+            }
+        }
+        // Nothing visible, or already tight: nothing to gain.
+        guard maxX >= 0, minX > 1 || maxX < width - 2 || minY > 1 || maxY < height - 2 else { return nil }
+        let scale = Double(image.width) / Double(width)
+        let rect = CGRect(
+            x: Double(minX - 1) * scale, y: Double(minY - 1) * scale,
+            width: Double(maxX - minX + 3) * scale, height: Double(maxY - minY + 3) * scale
+        ).integral.intersection(CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        return image.cropping(to: rect)
+    }
+}
+
 /// "Crime · 2008–2013 · 49 min · IMDb 9.5/10"
 struct InfoLine: View {
     let releaseInfo: String?
@@ -281,9 +345,12 @@ struct InfoLine: View {
             line = Text(details)
         }
         // Wraps rather than truncates at large text sizes.
+        // Always over artwork: brighter than secondary text, with a soft shadow, so it reads
+        // over busy backdrops too.
         return line
             .font(.metaLine)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.white.opacity(0.78))
+            .shadow(color: .black.opacity(0.5), radius: 6)
             .lineLimit(2)
     }
 

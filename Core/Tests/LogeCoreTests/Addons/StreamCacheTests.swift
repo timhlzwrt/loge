@@ -31,6 +31,14 @@ struct StreamCacheTests {
         #expect(streams.count == 1)
     }
 
+    @Test func asksAgainAfterAnEmptyList() async throws {
+        let cache = StreamCache()
+        let empty = try await cache.streams(manifestURL: "a", type: "movie", id: "tt1") { [] }
+        #expect(empty.isEmpty)
+        let streams = try await cache.streams(manifestURL: "a", type: "movie", id: "tt1") { [stream] in [stream] }
+        #expect(streams.count == 1)
+    }
+
     @Test func asksAgainOnceExpired() async throws {
         let cache = StreamCache(lifetime: 0)
         _ = try await cache.streams(manifestURL: "a", type: "movie", id: "tt1") { [] }

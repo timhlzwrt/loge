@@ -1,3 +1,4 @@
+import Accessibility
 import LogeCore
 import SwiftUI
 
@@ -31,9 +32,17 @@ struct PlayerView: View {
     @State private var scrubPreview: ScrubPreview?
     @State private var isMenuOpen = false
     @State private var adjustingTiming: MPVPlayer.Track.Kind?
+    @State private var showsPlaybackInfo = false
     @State private var seekFlash: SeekFlash?
+    /// The next episode the viewer cancelled; it isn't offered again for this episode.
+    @State private var cancelledNext: PlaybackRequest?
     /// Only the Mac goes full screen from here; everywhere else the player already is.
     @State private var isFullScreen = false
+    #if !os(tvOS)
+    /// Space and the arrow keys reach the player only while it has focus, which `.focusable()`
+    /// alone doesn't give it: the keys did nothing until the picture was clicked.
+    @FocusState private var hasKeyFocus: Bool
+    #endif
 
     @Environment(PlaybackSession.self) private var session
     #if os(tvOS)
@@ -53,6 +62,8 @@ struct PlayerView: View {
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    /// A portrait phone's title and episode lines, which the skip offer clears; they grow with the text size.
+    @ScaledMetric(relativeTo: .title2) private var portraitTitleHeight: CGFloat = 78
     #endif
     @Environment(\.dismiss) private var dismiss
 
@@ -85,16 +96,14 @@ struct PlayerView: View {
                 if player.isWaiting && !transportVisible {
                     ProgressView().controlSize(.large)
                 }
-                if session.isTryingAnotherSource && player.isWaiting {
-                    Text("Trying another source…")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .offset(y: 56)
-                } else if player.status == .buffering, let speed = player.playbackInfo.downloadSpeed {
-                    // Tells a slow connection apart from a stalled source.
-                    Text("Downloading at \(PlaybackInfoView.bitrate(speed))")
+                if let message = statusMessage(player) {
+                    Text(message)
                         .font(.subheadline.monospacedDigit())
                         .foregroundStyle(.secondary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        // Shown while the controls and their dim may be hidden, over any frame.
+                        .background(.black.opacity(0.5), in: .capsule)
                         .offset(y: 56)
                 }
                 if case .failed(let message) = player.status {
@@ -112,14 +121,17 @@ struct PlayerView: View {
                             adjustingTiming: $adjustingTiming,
                             onClose: closePlayback,
                             onChooseSource: chooseSource,
+                            onPlaybackInfo: { showsPlaybackInfo = true },
                             onInteract: showControls,
                             isFullScreen: isFullScreen,
                             onToggleFullScreen: toggleFullScreen
                         )
                         .transition(.opacity)
                     }
-                    if let skip = player.availableSkip, player.status != .ended {
-                        skipOffer(skip, player: player)
+                    PositionDependent {
+                        if let skip = player.availableSkip, player.status != .ended {
+                            skipOffer(skip, player: player)
+                        }
                     }
                     #if os(tvOS)
                     if isPanelShown {
@@ -128,13 +140,25 @@ struct PlayerView: View {
                             .transition(.opacity)
                     }
                     #endif
-                    if let next = session.next, showsNextEpisode(player) {
-                        #if os(tvOS)
-                        NextEpisodeOverlay(next: next, hasEnded: player.status == .ended, play: playNext,
-                                           focus: $nextFocus, onCancel: focusSurface)
-                        #else
-                        NextEpisodeOverlay(next: next, hasEnded: player.status == .ended, play: playNext)
-                        #endif
+                    PositionDependent {
+                        if let next = offeredNext(player) {
+                            #if os(tvOS)
+                            NextEpisodeOverlay(next: next, hasEnded: player.status == .ended, play: playNext,
+                                               cancel: { cancelNext(next) }, focus: $nextFocus)
+                            #else
+                            NextEpisodeOverlay(next: next, hasEnded: player.status == .ended, play: playNext,
+                                               cancel: { cancelNext(next) })
+                                .padding(.bottom, endCardTimingClearance)
+                            #endif
+                        } else if isFinished(player) {
+                            #if os(tvOS)
+                            FinishedOverlay(request: current, startOver: { startOver(player) },
+                                            close: closePlayback, focus: $nextFocus)
+                            #else
+                            FinishedOverlay(request: current, startOver: { startOver(player) })
+                                .padding(.bottom, endCardTimingClearance)
+                            #endif
+                        }
                     }
                 }
             }
@@ -194,7 +218,13 @@ struct PlayerView: View {
             Text(player?.trackError ?? session.pictureInPicture?.failureMessage ?? "")
         }
         .sheet(item: $session.choosingSource) { SourcesView(route: $0, isChoosing: true) }
-        .onChange(of: session.choosingSource == nil) { _, closed in isMenuOpen = !closed || panelIsShown }
+        // Here rather than on the More menu, which goes when the controls hide.
+        .sheet(isPresented: $showsPlaybackInfo) {
+            if let player { PlaybackInfoView(player: player) }
+        }
+        .onChange(of: session.choosingSource != nil || showsPlaybackInfo) { _, shown in
+            isMenuOpen = shown || panelIsShown
+        }
         .task(id: AutoHide(lastInteraction: lastInteraction, isPlaying: player?.status == .playing)) {
             // Restarts on each interaction and when playback starts, so controls shown
             // during a slow load still hide once the video is running. Cancellation
@@ -215,12 +245,17 @@ struct PlayerView: View {
             // An offer holds focus for as long as it shows, which shouldn't stop these working.
             case .left where surfaceFocused || skipFocused: player?.seek(by: -10)
             case .right where surfaceFocused || skipFocused: player?.seek(by: 10)
+            // During the credits Up Next sits below Skip Credits, and Play Now was otherwise out of
+            // reach until the episode had ended.
+            case .down where skipFocused && !isPanelShown && player.flatMap(offeredNext) != nil:
+                nextFocus = .play
             case .down where (surfaceFocused || skipFocused) && !isPanelShown: isPanelShown = true
             // The offers sit on top of the surface, so the focus engine can't move to them by itself.
             case .up where surfaceFocused && !isPanelShown:
-                if player?.availableSkip != nil {
+                guard let player else { break }
+                if player.availableSkip != nil {
                     skipFocused = true
-                } else if let player, session.next != nil, showsNextEpisode(player) {
+                } else if offeredNext(player) != nil || isFinished(player) {
                     nextFocus = .play
                 }
             case .down where nextFocus != nil: focusSurface()
@@ -243,8 +278,16 @@ struct PlayerView: View {
             if !shown { surfaceFocused = true }
         }
         // The countdown leaves ten seconds to act in, and Select has nothing else to do at the end.
-        .onChange(of: player?.status == .ended && session.next != nil) { _, waiting in
-            if waiting && !isPanelShown { nextFocus = .play }
+        // A lookup that lands after the end swaps the end card for Up Next, whose Play Now takes
+        // over the focus value Start Over had: set again, the unchanged value moved nothing.
+        .onChange(of: player.map { $0.status == .ended && offeredNext($0) != nil } ?? false) { _, waiting in
+            guard waiting && !isPanelShown else { return }
+            nextFocus = nil
+            Task { nextFocus = .play }
+        }
+        // The end card's Start Over, for the same reason.
+        .onChange(of: player.map(isFinished) ?? false) { _, finished in
+            if finished && !isPanelShown { nextFocus = .play }
         }
         .onChange(of: player?.status == .ended) { _, ended in
             if ended, session.current?.item?.type == MediaType.movie, session.next == nil {
@@ -253,11 +296,8 @@ struct PlayerView: View {
         }
         .animation(.easeInOut(duration: 0.2), value: isPanelShown)
         #elseif os(macOS)
-        .focusable()
-        .focusEffectDisabled()
-        .onKeyPress(.space) { player?.togglePause(); showControls(); return .handled }
-        .onKeyPress(.leftArrow) { player?.seek(by: -10); showControls(); return .handled }
-        .onKeyPress(.rightArrow) { player?.seek(by: 10); showControls(); return .handled }
+        // Lets the Playback menu's arrow shortcuts apply here and not in other windows' text fields.
+        .focusedSceneValue(\.isPlayerWindow, true)
         .onContinuousHover { phase in
             switch phase {
             case .active(let location):
@@ -265,7 +305,9 @@ struct PlayerView: View {
                 // keep the controls from ever hiding.
                 guard location != pointerLocation else { return }
                 pointerLocation = location
-                showControls()
+                // At the pointer's event rate, each move would restart the hide countdown and
+                // redraw the player; a few times a second keeps the controls up just the same.
+                if !controlsVisible || lastInteraction.timeIntervalSinceNow < -0.5 { showControls() }
             case .ended:
                 pointerLocation = nil
             }
@@ -278,7 +320,7 @@ struct PlayerView: View {
             }
         }
         .onChange(of: windowIsActive) { _, active in
-            if !active { NSCursor.setHiddenUntilMouseMoves(false) }
+            if active { hasKeyFocus = true } else { NSCursor.setHiddenUntilMouseMoves(false) }
         }
         .background {
             WindowReader { window in
@@ -295,6 +337,19 @@ struct PlayerView: View {
         #else
         .statusBarHidden(!controlsVisible)
         .persistentSystemOverlays(.hidden)
+        // As the TV app does: at the largest sizes the controls would cover the picture they
+        // control, and the landscape title would run into the transport buttons.
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+        #endif
+        #if !os(tvOS)
+        // A Mac keyboard, and an iPad's hardware keyboard.
+        .focusable()
+        .focusEffectDisabled()
+        .focused($hasKeyFocus)
+        .onAppear { hasKeyFocus = true }
+        .onKeyPress(.space) { player?.togglePause(); showControls(); return .handled }
+        .onKeyPress(.leftArrow) { player?.seek(by: -10); showControls(); return .handled }
+        .onKeyPress(.rightArrow) { player?.seek(by: 10); showControls(); return .handled }
         #endif
     }
 
@@ -466,34 +521,51 @@ struct PlayerView: View {
         .frame(minHeight: 44)
         .buttonStyle(.glass)
         .buttonBorderShape(.capsule)
+        #if !os(tvOS)
+        // On Apple TV the offer takes focus, which reads it out.
+        .task(id: skip.kind) { AccessibilityNotification.Announcement("\(skip.kind.rawValue) available").post() }
+        #endif
         #if os(tvOS)
         .focused($skipFocused)
         .onChange(of: skipFocused) { _, focused in if focused { showControls() } }
         // Select skips rather than pauses while an offer shows, which is the point of offering it.
-        .onAppear { if !isPanelShown { skipFocused = true } }
-        .onDisappear { if !isPanelShown { surfaceFocused = true } }
+        // Asked again for each offer, a moment after it shows: when one offer follows another the
+        // button stays, and skipping had handed focus to the picture meanwhile, so the next offer
+        // looked focused while the remote's presses went to the picture. The moment lets a
+        // request for the picture made at the same time, as Start Over's, go first.
+        .task(id: skip.kind) {
+            do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
+            if !isPanelShown { skipFocused = true }
+        }
+        // Cleared, so the next offer's request is a change: left set, it moved focus nowhere.
+        .onDisappear {
+            skipFocused = false
+            if !isPanelShown { surfaceFocused = true }
+        }
         #endif
         // Keep the offer visible while transport controls hide, clear of their bars and Up Next.
+        // Bottom trailing everywhere: the title holds the leading corner, and the offer joins
+        // Up Next in the corner where what comes next is offered. On iOS that's above the
+        // menus, in line with their trailing edge.
         #if os(iOS)
-        // Above the menus, in line with their trailing edge; the title holds the leading corner.
         .padding(.horizontal, 20)
-        .padding(.bottom, skipBottomPadding(player))
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
         #else
         .padding(.horizontal, 24)
-        .padding(.bottom, skipBottomPadding(player))
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
         #endif
+        .padding(.bottom, skipBottomPadding(player))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
     }
 
     private func skipBottomPadding(_ player: MPVPlayer) -> CGFloat {
         #if !os(iOS)
-        let hasNextOffer = session.next != nil && showsNextEpisode(player)
+        let hasNextOffer = offeredNext(player) != nil
         #endif
         #if os(tvOS)
         return hasNextOffer ? 320 : (controlsVisible ? 200 : 48)
         #elseif os(macOS)
-        return hasNextOffer || adjustingTiming != nil ? 240 : (controlsVisible ? 100 : 32)
+        // Up Next rises above the timing panel while it shows.
+        if hasNextOffer { return adjustingTiming != nil ? 240 + endCardTimingClearance : 240 }
+        return adjustingTiming != nil ? 240 : (controlsVisible ? 100 : 32)
         #else
         // 12 above the menus: their top is the padding (12), the timeline (44), the gap (10)
         // and the menus (44) up from the bottom. A portrait phone has the title on a row of
@@ -501,7 +573,7 @@ struct PlayerView: View {
         // Up Next is in the top corner on iOS.
         if adjustingTiming != nil { return 140 }
         let isPortraitPhone = horizontalSizeClass == .compact && verticalSizeClass == .regular
-        return controlsVisible ? (isPortraitPhone ? 200 : 122) : 32
+        return controlsVisible ? (isPortraitPhone ? 122 + portraitTitleHeight : 122) : 32
         #endif
     }
 
@@ -522,11 +594,58 @@ struct PlayerView: View {
         showControls()
     }
 
+    private func startOver(_ player: MPVPlayer) {
+        player.seek(to: 0)
+        player.play()
+        #if os(tvOS)
+        focusSurface()
+        #endif
+        showControls()
+    }
+
+    /// The Mac's timing panel sits centred above the controls, where a medium-width window's
+    /// corner card would overlap it.
+    private var endCardTimingClearance: CGFloat {
+        #if os(macOS)
+        adjustingTiming != nil ? 130 : 0
+        #else
+        0
+        #endif
+    }
+
+    private func statusMessage(_ player: MPVPlayer) -> String? {
+        if session.isTryingAnotherSource && player.isWaiting { return "Trying another source…" }
+        // Tells a slow connection apart from a stalled source.
+        if player.status == .buffering, let speed = player.playbackInfo.downloadSpeed {
+            return "Downloading at \(PlaybackInfoView.bitrate(speed))"
+        }
+        return nil
+    }
+
     // MARK: Next episode
 
     private func showsNextEpisode(_ player: MPVPlayer) -> Bool {
         guard let duration = player.duration else { return false }
         return player.status == .ended || player.position >= NextEpisode.offerTime(duration: duration)
+    }
+
+    /// Up Next while it's on screen: its time has come and it wasn't cancelled.
+    private func offeredNext(_ player: MPVPlayer) -> PlaybackRequest? {
+        guard let next = session.next, next != cancelledNext, showsNextEpisode(player) else { return nil }
+        return next
+    }
+
+    /// The end card's turn: the file ended with nothing after it. A cancelled Up Next leaves the
+    /// last frame as it was, with nothing to focus.
+    private func isFinished(_ player: MPVPlayer) -> Bool {
+        player.status == .ended && session.next == nil
+    }
+
+    private func cancelNext(_ next: PlaybackRequest) {
+        cancelledNext = next
+        #if os(tvOS)
+        focusSurface()
+        #endif
     }
 
     private func failure(_ message: String) -> some View {
@@ -550,6 +669,9 @@ struct PlayerView: View {
         }
         .multilineTextAlignment(.center)
         .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // A failure mid-film leaves its last frame behind the message.
+        .background(Color.black.opacity(0.6).ignoresSafeArea())
     }
 
     /// mpv's messages are lower-case fragments that say little to a viewer.
@@ -561,6 +683,9 @@ struct PlayerView: View {
             "This file is in a format the player can't read."
         case "no audio or video data played":
             "The file opened, but there was nothing in it to play."
+        // Set by the session when a link doesn't open within its time limit.
+        case "timed out":
+            "The server hasn't started sending the video. A link that's still being prepared can take a few minutes."
         default:
             message.prefix(1).uppercased() + message.dropFirst() + "."
         }
@@ -590,6 +715,14 @@ private struct WindowReader: NSViewRepresentable {
     }
 }
 #endif
+
+/// Builds its content in its own body, so what the content reads, the playback position for
+/// the offers, redraws only this every second rather than the whole player screen.
+private struct PositionDependent<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    var body: some View { content() }
+}
 
 /// Feedback for a double-tap skip: "+10" or "−10" on the side that was tapped.
 private struct SeekFlash: Equatable {

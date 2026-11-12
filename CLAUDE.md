@@ -87,7 +87,11 @@ TEST_RUNNER_UI_FLOWS=1 TEST_RUNNER_SCREENSHOT_DIR=/tmp/shots xcodebuild test -pr
 main thread 60–100 ms, so for timing send arrow keys straight to the simulator and sample the
 app with macOS `sample <pid>`. The Apple TV is paired with Xcode for `devicectl` and crash
 logs; Instruments over the network to it drops after about a second.
-`--discovery-ui-test` with `-DISCOVERY_SCREEN recommended|details` shows recommendations offline.
+`--discovery-ui-test` with `-DISCOVERY_SCREEN <name>` opens a DEBUG fixture screen offline:
+`recommended`, `details`, `series`, `details-unmatched`, `details-busy`, `sources-folded|autoplay`
+(need `Tools/test-addon.py --port 8769 --many --delay 5`), `sources-empty(-sheet)`,
+`settings-review|failed`, `trakt-signin|keys`, `carousel-resume`. The playback fixture also takes
+`PLAYBACK_FIXTURE_NEXT=late`, `PLAYBACK_FIXTURE_SHORT_URL` and `?hang=`.
 
 ## Conventions
 
@@ -124,7 +128,14 @@ video output. Addons are added as manifest URLs. Cross-device sync is Trakt (use
 keys) or the optional self-hosted account sync, never iCloud or a default hosted server; Trakt
 pauses while an account is connected. iPhone/iPad and Apple TV are equal main devices.
 Picture in Picture is required; downloads are out of scope; UI is English only for now.
-iPhone browsing is portrait-only (`AppDelegate`); the player turns.
+iPhone browsing is portrait-only (`AppDelegate`); the player turns. iPad has one window
+(`UIApplicationSupportsMultipleScenes` NO): every window would share the one `PlaybackSession`
+and present its player; the Mac has no New Window either. Destructive settings and library
+actions (addon removal, TMDB token, Trakt sign-out and keys, Sync disconnect, device revoke,
+leaving a shared setup, deleting a list, marking a season unwatched) ask first. Dates and
+numbers use `Locale.interface` (en_US) to match the English UI; clock times follow the device.
+Person filmographies need TMDB: Cinemeta's search no longer names cast or directors, so
+without TMDB the page says so and shows the title it came from.
 
 ## Things that aren't obvious from the code
 
@@ -148,6 +159,10 @@ iPhone browsing is portrait-only (`AppDelegate`); the player turns.
 - The phone hero shows the portrait poster: a title near the top of a poster reads twice with
   the logo, and that can't be detected.
 - The Mac player window is a principal window, since an associated one can't go full screen.
+- The iOS timeline is a `Slider` to accessibility (10 s steps, spoken position), so FlowTests
+  drag it rather than tap it.
+- Resuming past a shorter source's end seeks to 30 s before it instead of finishing; opening
+  a stream fails with Try Again after 20 s.
 - Navigation is the four tabs (Home, My Lists, Search, Settings) with `.tabBarOnly`, no sidebar
   anywhere. Search has the search role except on iPhone, where the role would detach it from
   the one pill; iPad and Mac draw it as the magnifier at the pill's trailing end.
@@ -162,6 +177,8 @@ iPhone browsing is portrait-only (`AppDelegate`); the player turns.
 - iPhone simulators lack Picture in Picture; use iPad for that path.
 - `Test Streams` surviving uninstall on the iPhone 18 Pro simulator is a stale
   `data/Library/Preferences/li.tjh.MediaApp.plist` outside the app container.
+- Skipped without setup: PiP tests on iPhone simulators, account sharing without a code
+  file, TMDB filmography tests without a token file.
 - Background-recovery tests check the picture's pixels; an older check couldn't see black video.
 
 ## Open

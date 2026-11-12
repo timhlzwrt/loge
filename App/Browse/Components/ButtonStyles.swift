@@ -174,12 +174,45 @@ struct IconCaption: View {
 #endif
 
 extension View {
-    /// Artwork tiles that open something: tvOS lifts them as focus cards, elsewhere they stay unstyled.
+    /// Artwork tiles that open something: tvOS lifts them as focus cards, elsewhere they respond
+    /// to a pointer.
     func tileButtonStyle() -> some View {
         #if os(tvOS)
         buttonStyle(.card)
         #else
-        buttonStyle(.plain)
+        buttonStyle(.plain).modifier(PointerHighlight())
+        #endif
+    }
+
+    /// A 44 pt touch target for a one-line title that opens something ("Popular Movies ›",
+    /// "Season 1 ⌄"), without moving what's around it.
+    func titleTapTarget() -> some View {
+        #if os(iOS)
+        padding(.vertical, 8).contentShape(.rect).padding(.vertical, -8)
+        #else
+        self
+        #endif
+    }
+}
+
+/// Pointer feedback on artwork that opens something, which otherwise gives no sign in dense
+/// rows of what can be clicked: the iPad pointer's highlight, a slight brightening on the Mac.
+/// Apple TV has its focus effects instead.
+struct PointerHighlight: ViewModifier {
+    #if os(macOS)
+    @State private var isHovered = false
+    #endif
+
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        content.hoverEffect(.highlight)
+        #elseif os(macOS)
+        content
+            .brightness(isHovered ? 0.08 : 0)
+            .animation(.easeOut(duration: 0.12), value: isHovered)
+            .onHover { isHovered = $0 }
+        #else
+        content
         #endif
     }
 }

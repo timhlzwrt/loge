@@ -57,13 +57,27 @@ struct PlaybackFixtureView: View {
                 PlaybackSegment(kind: .recap, start: 20, end: 40),
                 PlaybackSegment(kind: .credits, start: 40, end: duration),
             ])
-            if ProcessInfo.processInfo.environment["PLAYBACK_FIXTURE_NEXT"] != nil,
-               var next = session.current, next.url.query() == nil {
-                next.title = "Next fixture"
-                next.url.append(queryItems: [.init(name: "source", value: "next")])
-                session.offerNextForTesting(next)
+            if let mode = ProcessInfo.processInfo.environment["PLAYBACK_FIXTURE_NEXT"], mode != "late" {
+                offerNext()
             }
         }
+        // "late": the lookup lands only after the end, once the end card shows.
+        .onChange(of: session.player?.status == .ended) { _, ended in
+            guard ended, ProcessInfo.processInfo.environment["PLAYBACK_FIXTURE_NEXT"] == "late" else { return }
+            Task {
+                try? await Task.sleep(for: .seconds(3))
+                offerNext()
+            }
+        }
+    }
+}
+
+extension PlaybackFixtureView {
+    private func offerNext() {
+        guard var next = session.current, next.url.query() == nil else { return }
+        next.title = "Next fixture"
+        next.url.append(queryItems: [.init(name: "source", value: "next")])
+        session.offerNextForTesting(next)
     }
 }
 
@@ -109,6 +123,13 @@ struct PlaybackFixtureDiagnostics: View {
                 guard var request = session.current else { return }
                 request.url.append(queryItems: [.init(name: "source", value: "second")])
                 session.start(request)
+            }
+            if let shorter = ProcessInfo.processInfo.environment["PLAYBACK_FIXTURE_SHORT_URL"].flatMap(URL.init(string:)) {
+                Button("Replace with shorter source") {
+                    guard var request = session.current else { return }
+                    request.url = shorter
+                    session.start(request)
+                }
             }
             #endif
         }

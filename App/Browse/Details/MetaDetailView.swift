@@ -12,9 +12,15 @@ struct MetaDetailView: View {
     @State private var tmdbState = TMDBLoadState.disconnected
     @State private var loadAttempt = 0
     @State private var tmdbAttempt = 0
+    /// Every Retry on the page, which reviews follow to reload if they failed too.
+    @State private var retries = 0
+    /// What the TMDB details on screen were loaded for, so returning to the page keeps them.
+    @State private var tmdbLoadedKey: TMDBLoadKey?
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    #endif
+    #if !os(tvOS)
     /// The page's own shape rather than the screen's: window resizing narrows it.
     @State private var hasRoomForColumns = false
     #endif
@@ -29,7 +35,8 @@ struct MetaDetailView: View {
     }
 
     private enum TMDBLoadState {
-        case disconnected, loading, loaded(TMDBDetails), failed(String)
+        /// Retrying doesn't help a title TMDB doesn't have.
+        case disconnected, loading, loaded(TMDBDetails), failed(String, canRetry: Bool)
     }
 
     private struct TMDBLoadKey: Hashable {
@@ -38,10 +45,13 @@ struct MetaDetailView: View {
     }
 
     var body: some View {
+        // Each merges the details and scans the library, so they're worked out once per update.
+        let meta = loaded
+        let play = PlayAction(preview: preview, meta: meta, library: library)
         ScrollView {
             pageLayout {
-                hero
-                if let meta = loaded {
+                hero(meta: meta, play: play)
+                if let meta {
                     if preview.type == MediaType.series, case .loading = state {
                         ProgressView("Loading episodes…")
                             .frame(maxWidth: .infinity)
@@ -50,6 +60,7 @@ struct MetaDetailView: View {
                         EpisodesSection(
                             videos: videos,
                             upNextID: library.upNext(metaID: preview.id, videos: videos)?.video.id,
+                            backdrop: meta.background ?? preview.background,
                             route: route(for:),
                             choose: { choosingSource = route(for: $0) },
                             staysInColumn: usesColumns
@@ -70,9 +81,10 @@ struct MetaDetailView: View {
                         PeopleRow(people: people, title: preview, staysInColumn: usesColumns)
                             .detailColumn(.side)
                     }
-                    MoreLikeThisRow(titles: tmdbDetails?.recommendations ?? [])
+                    MoreLikeThisRow(titles: tmdbDetails?.recommendations ?? [],
+                                    areSimilar: tmdbDetails?.recommendationsAreSimilar ?? false)
                         .detailColumn(.full)
-                    ReviewsSection(preview: preview)
+                    ReviewsSection(preview: preview, pageRetries: retries, pageOffersRetry: offersRetry)
                     InformationSection(meta: meta, details: tmdbDetails)
                         .detailColumn(.side)
                 } else if case .failed(let message) = state {
@@ -85,28 +97,33 @@ struct MetaDetailView: View {
                 } else {
                     detailsPlaceholder
                 }
-                tmdbStatus
+                tmdbStatus(hasDetails: meta != nil)
                     .detailColumn(.full)
             }
             .padding(.bottom, 40)
         }
         .scrollClipDisabled()
-        #if os(iOS)
+        #if !os(tvOS)
         .onGeometryChange(for: Bool.self) { proxy in
             proxy.size.width >= 880 && proxy.size.width > proxy.size.height
         } action: { hasRoomForColumns = $0 && !Metrics.isPhone }
         #endif
         // The backdrop stays put behind the page, so it fades as the hero scrolls away
-        // instead of showing behind episodes and cast.
+        // instead of showing behind episodes and cast. On Apple TV a bright backdrop
+        // otherwise stays behind the rows' captions.
         .onScrollGeometryChange(for: Double.self) { geometry in
             min(max((geometry.contentOffset.y + geometry.contentInsets.top) / heroHeight, 0), 1)
         } action: { _, progress in
             heroScroll.progress = progress
         }
-        .background(alignment: .top) {
-            HeroScroll.Fading(scroll: heroScroll) { backdrop }
+        // One background with the canvas underneath: as two, the canvas was drawn only as far
+        // down as the backdrop on a wide iPad page, leaving the rest of the page black.
+        .background {
+            ZStack(alignment: .top) {
+                Color.canvas.ignoresSafeArea()
+                HeroScroll.Fading(scroll: heroScroll) { backdrop(url: meta?.background ?? preview.background) }
+            }
         }
-        .background(Color.canvas)
         .hidingPhoneTabBar()
         #if os(iOS)
         .toolbarBackground(.hidden, for: .navigationBar)
@@ -122,6 +139,9 @@ struct MetaDetailView: View {
         .sheet(item: $choosingSource) { SourcesView(route: $0, isChoosing: true) }
         #endif
         .task(id: loadAttempt) {
+            // This also runs on returning from Sources or the player. Loading again would
+            // flicker the page, and a failure would replace the episodes being used.
+            if case .loaded = state { return }
             guard let client = store.addons.metaClient(type: preview.type, id: preview.id) else {
                 state = .failed("None of your addons provides details for this title.")
                 return
@@ -144,20 +164,28 @@ struct MetaDetailView: View {
                 tmdbState = .disconnected
                 return
             }
-            tmdbState = .loading
+            let key = TMDBLoadKey(revision: tmdb.revision, attempt: tmdbAttempt)
+            // Details already on screen stay while a changed token loads them again.
+            if case .loaded = tmdbState {
+                if tmdbLoadedKey == key { return }
+            } else {
+                tmdbState = .loading
+            }
             do {
                 let details = try await tmdb.details(imdbID: preview.id, type: preview.type)
                 try Task.checkCancellation()
                 tmdbState = .loaded(details)
+                tmdbLoadedKey = key
             } catch {
                 guard !Task.isCancelled else { return }
+                if case .loaded = tmdbState { return }
                 let message = switch error as? TMDBError {
                 case .unauthorized: "TMDB didn't accept the saved token. Check TMDB in Settings."
                 case .rateLimited: "TMDB is busy. Try again in a few minutes."
                 case .notFound: "This title wasn't found on TMDB."
                 default: "Couldn't load TMDB details."
                 }
-                tmdbState = .failed(message)
+                tmdbState = .failed(message, canRetry: error as? TMDBError != .notFound)
             }
         }
         .task(id: "\(tmdb.revision):\(tmdbDetails?.people.map { String($0.id) }.joined(separator: ",") ?? "")") {
@@ -172,8 +200,8 @@ struct MetaDetailView: View {
         }
         // Stream addons such as AIOStreams take seconds to answer, so ask while the page is
         // being read; the sources screen picks up the same request.
-        .task(id: playAction?.route.id) {
-            guard let route = playAction?.route else { return }
+        .task(id: play?.route.id) {
+            guard let route = play?.route else { return }
             for provider in store.addons.streamProviders(type: route.type, id: route.id) {
                 provider.prefetchStreams(type: route.type, id: route.id)
             }
@@ -181,10 +209,10 @@ struct MetaDetailView: View {
     }
 
     private var usesColumns: Bool {
-        #if os(iOS)
-        hasRoomForColumns
-        #else
+        #if os(tvOS)
         false
+        #else
+        hasRoomForColumns
         #endif
     }
 
@@ -195,10 +223,23 @@ struct MetaDetailView: View {
             : AnyLayout(VStackLayout(alignment: .leading, spacing: spacing))
     }
 
+    /// One Retry for everything that failed: addon details, TMDB details and reviews load
+    /// separately, but a button for each read as several problems.
     private func retry() {
-        state = .loading
-        loadAttempt += 1
-        tmdbAttempt += 1
+        retries += 1
+        // Whatever loaded stays on the page while the rest is asked again.
+        if isAddonFailed {
+            state = .loading
+            loadAttempt += 1
+        }
+        if case .failed = tmdbState { tmdbAttempt += 1 }
+    }
+
+    /// Whether the page shows a Retry of its own, for the addon or TMDB details.
+    private var offersRetry: Bool {
+        if isAddonFailed { return true }
+        if case .failed(_, canRetry: true) = tmdbState { return true }
+        return false
     }
 
     /// Full details once loaded; until then the catalog entry already has enough to draw the page.
@@ -208,6 +249,10 @@ struct MetaDetailView: View {
             return base.map { details.applying(to: $0) } ?? details.meta(for: preview)
         }
         return base
+    }
+
+    private var isAddonFailed: Bool {
+        if case .failed = state { true } else { false }
     }
 
     private var tmdbDetails: TMDBDetails? {
@@ -247,18 +292,21 @@ struct MetaDetailView: View {
     }
 
     @ViewBuilder
-    private var tmdbStatus: some View {
+    private func tmdbStatus(hasDetails: Bool) -> some View {
         Group {
             switch tmdbState {
-            case .failed(let message):
+            case .failed(let message, let canRetry):
                 HStack {
-                    Text(message + (loaded == nil ? "" : " Showing available addon details."))
-                    Button("Retry TMDB") { tmdbAttempt += 1 }
+                    Text(message + (hasDetails ? " Showing available addon details." : ""))
+                    // The addon's failure note has the page's Retry already.
+                    if canRetry, !isAddonFailed {
+                        Button("Retry TMDB", action: retry)
+                    }
                 }
             case .loading:
                 Text("Loading TMDB details…")
             case .disconnected:
-                if !tmdb.isConfigured, isOnTMDB, loaded != nil {
+                if !tmdb.isConfigured, isOnTMDB, hasDetails {
                     Text("Connect TMDB in Settings for cast photos, reviews and recommendations.")
                 }
             case .loaded:
@@ -272,20 +320,16 @@ struct MetaDetailView: View {
 
     /// What My List and the user's lists keep: the catalog entry, with artwork it lacked
     /// filled in from the full details, so the title has a poster wherever it's listed.
-    private var savedPreview: MetaPreview {
-        loaded.map(preview.fillingArtwork(from:)) ?? preview
-    }
-
-    private var playAction: PlayAction? {
-        PlayAction(preview: preview, meta: loaded, library: library)
+    private func savedPreview(_ meta: Meta?) -> MetaPreview {
+        meta.map(preview.fillingArtwork(from:)) ?? preview
     }
 
     private func route(for video: Video?) -> SourcesRoute {
         PlayAction.route(for: video, preview: preview, meta: loaded)
     }
 
-    private var backdrop: some View {
-        Artwork(url: loaded?.background ?? preview.background)
+    private func backdrop(url: String?) -> some View {
+        Artwork(url: url)
             .overlay { BackdropFade() }
             #if !os(iOS)
             .overlay {
@@ -307,15 +351,12 @@ struct MetaDetailView: View {
             .accessibilityHidden(true)
     }
 
-    private var description: String? {
-        loaded?.description ?? preview.description
-    }
-
-    private var hero: some View {
-        VStack(alignment: heroAlignment, spacing: 12) {
-            TitleLogo(logo: loaded?.logo ?? preview.logo, name: preview.name, maxHeight: logoHeight)
+    private func hero(meta: Meta?, play: PlayAction?) -> some View {
+        let description = meta?.description ?? preview.description
+        return VStack(alignment: heroAlignment, spacing: 12) {
+            TitleLogo(logo: meta?.logo ?? preview.logo, name: preview.name, maxHeight: logoHeight)
                 .frame(maxWidth: logoWidth, alignment: Alignment(horizontal: heroAlignment, vertical: .center))
-            (loaded?.infoLine ?? preview.infoLine)
+            (meta?.infoLine ?? preview.infoLine)
                 .multilineTextAlignment(heroAlignment == .center ? .center : .leading)
             if !synopsisUnderButtons, let description {
                 Text(description)
@@ -324,7 +365,7 @@ struct MetaDetailView: View {
                     .lineLimit(synopsisLines)
                     .frame(maxWidth: synopsisWidth, alignment: .leading)
             }
-            buttons
+            buttons(play: play, saved: savedPreview(meta))
                 .padding(.top, 6)
             if synopsisUnderButtons, let description {
                 ExpandableText(text: description)
@@ -339,30 +380,30 @@ struct MetaDetailView: View {
     /// On a phone Play takes the full width and the other actions sit in a row beneath it;
     /// wider screens keep them on one line.
     @ViewBuilder
-    private var buttons: some View {
+    private func buttons(play: PlayAction?, saved: MetaPreview) -> some View {
         if synopsisUnderButtons {
             VStack(spacing: 20) {
-                playButton
+                playButton(play)
                 // Icons differ in height, which large text makes visible; the captions stay level.
                 HStack(alignment: .lastTextBaseline, spacing: 0) {
-                    secondaryButtons(isBare: true)
+                    secondaryButtons(isBare: true, play: play, saved: saved)
                         .frame(maxWidth: .infinity)
                 }
             }
         } else {
             HStack(alignment: .top, spacing: 16) {
-                playButton
+                playButton(play)
                 // No merging distance: the circles stay apart, as separate buttons.
                 GlassEffectContainer(spacing: 0) {
-                    HStack(alignment: .top, spacing: 16) { secondaryButtons(isBare: false) }
+                    HStack(alignment: .top, spacing: 16) { secondaryButtons(isBare: false, play: play, saved: saved) }
                 }
             }
         }
     }
 
     @ViewBuilder
-    private var playButton: some View {
-        if let play = playAction {
+    private func playButton(_ play: PlayAction?) -> some View {
+        if let play {
             NavigationLink(value: play.route) {
                 Label(play.label, systemImage: "play.fill")
                     .frame(maxWidth: synopsisUnderButtons ? .infinity : nil)
@@ -373,13 +414,13 @@ struct MetaDetailView: View {
     }
 
     @ViewBuilder
-    private func secondaryButtons(isBare: Bool) -> some View {
+    private func secondaryButtons(isBare: Bool, play: PlayAction?, saved: MetaPreview) -> some View {
         MyListButton(isSaved: library.isSaved(preview.id), isBare: isBare) {
-            library.toggleSaved(savedPreview)
+            library.toggleSaved(saved)
         }
-        .contextMenu { SaveToMenu(title: savedPreview) }
-        ListsMenu(title: savedPreview, isBare: isBare)
-        if let play = playAction {
+        .contextMenu { SaveToMenu(title: saved) }
+        ListsMenu(title: saved, isBare: isBare)
+        if let play {
             Button("Choose a Source", systemImage: "list.bullet") {
                 var route = play.route
                 route.autoplay = false
@@ -387,6 +428,8 @@ struct MetaDetailView: View {
             }
             .buttonStyle(GlassIconButtonStyle(caption: "Sources", isBare: isBare))
             .help("Choose a Source")
+            // Voice Control users say what the caption shows.
+            .accessibilityInputLabels(["Sources", "Choose a Source"])
         }
     }
 
@@ -453,11 +496,14 @@ private struct MyListButton: View {
             Label(title, systemImage: isSaved ? "checkmark" : "plus")
                 .contentTransition(.symbolEffect(.replace))
         }
-        .buttonStyle(GlassIconButtonStyle(caption: isSaved ? "Saved" : "Watch Later", isBare: isBare))
+        .buttonStyle(GlassIconButtonStyle(caption: caption, isBare: isBare))
         .help(title)
+        // Voice Control users say what the caption shows.
+        .accessibilityInputLabels([caption, title])
     }
 
     private var title: String { isSaved ? "Remove from Watch Later" : "Add to Watch Later" }
+    private var caption: String { isSaved ? "Saved" : "Watch Later" }
 }
 
 /// viewer left off: the unfinished episode, else the one after the last finished, else the first.

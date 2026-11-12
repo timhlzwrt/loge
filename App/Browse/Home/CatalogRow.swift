@@ -8,17 +8,26 @@ struct CatalogRow: View {
     var search: String?
     /// The page's rows, on Home, whose leads this row's should differ from.
     var page: [CatalogSource] = []
-    /// Fills the tvOS home header with its first item before anything has focus.
+    /// Takes the page's default focus on tvOS.
     var isPrimary = false
+    /// Moves focus to the first poster once loaded, on tvOS: Search's genre rows replace the
+    /// tile that had focus, and the engine otherwise picked whatever was nearest.
+    var takesFocusWhenLoaded = false
     /// Called with whichever poster has focus; drives the tvOS home header.
     var onFocus: (MetaPreview) -> Void = { _ in }
-    /// Called with the number of results once loading finishes, or 0 on failure.
+    /// Called with the first item once loaded, for the tvOS home header before anything has focus.
+    var onFirstLoaded: (MetaPreview) -> Void = { _ in }
+    /// Called with the number of results once loading finishes, or -1 on failure.
     var onLoaded: (Int) -> Void = { _ in }
 
     @State private var items: Result<[MetaPreview], Error>?
     /// Only the first poster is bound to focus state, for Home's default focus: binding every
     /// poster to one value made each focus move update the whole row.
     @FocusState private var isFirstFocused: Bool
+    #if os(tvOS)
+    /// Once per row, so coming back from a title doesn't move focus off the poster it was opened from.
+    @State private var hasTakenFocus = false
+    #endif
 
     var body: some View {
         Group {
@@ -52,15 +61,15 @@ struct CatalogRow: View {
                 try Task.checkCancellation()
                 items = .success(metas)
                 onLoaded(metas.count)
-                if isPrimary, let first = metas.first {
-                    onFocus(first)
+                if let first = metas.first {
+                    onFirstLoaded(first)
                 }
             } catch is CancellationError {
                 // Scrolled away or the query changed; the next task reloads.
             } catch {
                 guard !Task.isCancelled else { return }
                 items = .failure(error)
-                onLoaded(0)
+                onLoaded(-1)
             }
         }
         .onChange(of: search) { items = nil }
@@ -86,7 +95,9 @@ struct CatalogRow: View {
                             Image(systemName: "chevron.right")
                                 .font(.body.weight(.semibold))
                                 .foregroundStyle(.secondary)
+                                .accessibilityHidden(true)
                         }
+                        .titleTapTarget()
                     }
                     .buttonStyle(.plain)
                     .accessibilityHint("Shows the whole catalog")
@@ -107,6 +118,14 @@ struct CatalogRow: View {
                 ForEach(metas) { meta in
                     if meta.id == metas.first?.id {
                         poster(meta).focused($isFirstFocused)
+                            #if os(tvOS)
+                            // After the poster is on screen; a request made as the row loads is dropped.
+                            .task {
+                                guard takesFocusWhenLoaded, !hasTakenFocus else { return }
+                                hasTakenFocus = true
+                                isFirstFocused = true
+                            }
+                            #endif
                     } else {
                         poster(meta)
                     }
@@ -161,7 +180,7 @@ struct CatalogRow: View {
 
 /// Stands in for missing artwork: a title in the poster's place, rather than a
 /// blank tile. Filenames, as debrid libraries list them, are tidied into words.
-private struct TitleCard: View {
+struct TitleCard: View {
     let name: String
 
     var body: some View {
@@ -188,6 +207,11 @@ private struct TitleCard: View {
     /// "Obsession.2026.2160p.UHD.BluRay.Remux" → ("Obsession", "2026"). Release names put the
     /// title first and then the year or quality, so everything from there on is dropped.
     static func readable(_ name: String) -> (title: String, year: String?) {
+        // Most catalog names have nothing to tidy, and the patterns below cost more than the
+        // rest of a poster tile: a release name has a separator, a digit or a quality word.
+        let lowered = name.lowercased()
+        guard name.contains(where: { $0.isNumber || $0 == "." || $0 == "_" })
+                || ["uhd", "bluray", "remux", "web"].contains(where: lowered.contains) else { return (name, nil) }
         var name = name
         if let dot = name.lastIndex(of: "."), name.distance(from: dot, to: name.endIndex) <= 5,
            name[name.index(after: dot)...].allSatisfy(\.isLetter) {
@@ -231,6 +255,7 @@ struct PosterTile: View {
     @Environment(LibraryStore.self) private var library
 
     var body: some View {
+        let progress = library.progress[meta.id]
         ZStack {
             Color.white.opacity(0.06)
             // Shown underneath, so titles whose artwork is missing or fails still read.
@@ -241,7 +266,7 @@ struct PosterTile: View {
         }
         .overlay(alignment: .bottom) {
             // Movies only: a series' progress belongs to its episodes.
-            if let progress = library.progress[meta.id] {
+            if let progress {
                 WatchProgressBar(progress: progress)
             }
         }
@@ -250,6 +275,8 @@ struct PosterTile: View {
         .clipShape(.rect(cornerRadius: Metrics.posterRadius))
         .accessibilityElement()
         .accessibilityLabel(meta.name)
+        // The element replaces the progress bar's own label.
+        .accessibilityValue(progress.map { $0.isFinished ? "Watched" : "\(Int($0.fraction * 100)) percent watched" } ?? "")
         .contextMenu { SaveToMenu(title: meta) }
     }
 }

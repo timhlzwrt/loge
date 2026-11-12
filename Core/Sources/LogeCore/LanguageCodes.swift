@@ -42,3 +42,10 @@ public enum LanguageCodes {
         return tags.joined(separator: ",")
     }
 }
+
+public extension Locale {
+    /// The locale for dates, numbers and sizes the app shows. The interface is English only, so
+    /// formatting by the device region would mix "5. November 2014" or "1,5 GB" into English text.
+    /// Clock times use the device locale instead, so they follow its 12- or 24-hour setting.
+    static let interface = Locale(identifier: "en_US")
+}

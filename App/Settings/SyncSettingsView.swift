@@ -8,7 +8,7 @@ struct SyncSettingsView: View {
     @State private var connectionCode = ""
     @State private var recoveryKey = ""
     @State private var presentedSheet: SyncSheet?
-    @State private var actionError: String?
+    @State private var leaving: SyncGroup?
 
     var body: some View {
         SettingsPage("Sync") {
@@ -16,7 +16,11 @@ struct SyncSettingsView: View {
                 Section {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(sync.displayName ?? "Account").font(.title2.weight(.semibold))
-                        Text(sync.status.text).foregroundStyle(.secondary)
+                        // Inline, so a background sync doesn't add and remove a row and shift focus.
+                        HStack(spacing: 8) {
+                            Text(sync.status.text).foregroundStyle(.secondary)
+                            if sync.isSyncing { ProgressView() }
+                        }
                         if let date = sync.lastSync {
                             Text("Last synced \(date, style: .relative) ago")
                                 .font(.caption).foregroundStyle(.secondary)
@@ -32,7 +36,7 @@ struct SyncSettingsView: View {
                             .foregroundStyle(.secondary)
                         Button("Keep This Device's Version") { Task { await sync.resolve(useLocal: true) } }
                         Button("Keep Server Version") { Task { await sync.resolve(useLocal: false) } }
-                    } header: { Text("Review changes") }
+                    } header: { SettingsHeader("Review changes") }
                         .disabled(sync.isSyncing)
                 }
                 Section {
@@ -53,21 +57,23 @@ struct SyncSettingsView: View {
                                 Text(group.name).font(.headline)
                                 Text(SyncCategory.allCases.filter { group.categories.contains($0) }.map(\.name).joined(separator: ", "))
                                     .foregroundStyle(.secondary)
-                                Button("Leave shared setup", role: .destructive) {
-                                    Task { await sync.leaveGroup(id: group.id) }
-                                }
-                                .disabled(sync.isSyncing)
+                                Button("Leave shared setup", role: .destructive) { leaving = group }
+                                    #if os(iOS)
+                                    // Otherwise the whole row is the button, and a tap on the name leaves.
+                                    .buttonStyle(.borderless)
+                                    #endif
+                                    .disabled(sync.isSyncing)
                             }
                         }
-                    } header: { Text("Shared setup") } footer: {
+                    } header: { SettingsHeader("Shared setup") } footer: {
                         Text("Leaving a setup you created stops sharing for everyone. Other setups are removed only from your account.")
                     }
                 }
-                Section("Advanced") {
+                Section {
                     NavigationLink("Connection & recovery") {
-                        accountDetails
+                        SyncAccountDetailsView()
                     }
-                }
+                } header: { SettingsHeader("Advanced") }
             } else {
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
@@ -85,23 +91,39 @@ struct SyncSettingsView: View {
                         #if !os(macOS)
                         .textInputAutocapitalization(.never)
                         #endif
-                    Button("Connect account") {
-                        Task {
-                            actionError = nil
-                            await sync.connect(code: connectionCode, deviceName: currentDeviceName,
-                                               recoveryKey: recoveryKey.isEmpty ? nil : recoveryKey)
-                            if sync.isConnected { connectionCode = ""; recoveryKey = "" }
+                    if !trimmedRecoveryKey.isEmpty {
+                        LabeledContent("Recovery key added") {
+                            Button("Clear") { recoveryKey = "" }
+                                #if os(iOS)
+                                .buttonStyle(.borderless)
+                                #endif
                         }
                     }
-                    .disabled(connectionCode.isEmpty || sync.isSyncing || playback.current != nil)
-                } header: { Text("Connect account") } footer: {
+                    // A disabled row on tvOS reads as a stray caption under the field, so the action
+                    // appears once there's a code to connect with.
+                    #if os(tvOS)
+                    let showsConnect = !connectionCode.isEmpty || sync.isSyncing
+                    #else
+                    let showsConnect = true
+                    #endif
+                    if showsConnect {
+                        Button(sync.isSyncing ? "Connecting…" : "Connect account") {
+                            Task {
+                                await sync.connect(code: connectionCode, deviceName: currentDeviceName,
+                                                   recoveryKey: trimmedRecoveryKey.isEmpty ? nil : trimmedRecoveryKey)
+                                if sync.isConnected { connectionCode = ""; recoveryKey = "" }
+                            }
+                        }
+                        .disabled(connectionCode.isEmpty || sync.isSyncing || playback.current != nil)
+                    }
+                } footer: {
                     Text("""
                         Use a code from your server administrator or one of your connected devices. On Apple \
                         TV, paste it with the Remote keyboard on your phone.
                         """)
                 }
-                Section("Advanced") {
-                    NavigationLink("Recover an existing account") {
+                Section {
+                    NavigationLink(trimmedRecoveryKey.isEmpty ? "Recover an existing account" : "Change recovery key") {
                         SettingsPage("Recover account") {
                             Section {
                                 SecureField("Recovery key", text: $recoveryKey)
@@ -118,14 +140,22 @@ struct SyncSettingsView: View {
                             }
                         }
                     }
+                    #if !os(tvOS)
                     Link("Set up your own server", destination: URL(string: "https://github.com/timhlzwrt/loge/blob/main/docs/SYNC.md")!)
+                    #endif
+                } header: {
+                    SettingsHeader("Advanced")
+                } footer: {
+                    #if os(tvOS)
+                    // tvOS can't open web links.
+                    Text("To run your own server, see docs/SYNC.md in the loge repository on GitHub.")
+                    #endif
                 }
             }
             if playback.current != nil {
                 Section { Text("Close playback before connecting or disconnecting an account.").foregroundStyle(.secondary) }
             }
-            if sync.isSyncing { Section { ProgressView("Syncing…") } }
-            if let message = actionError ?? sync.errorMessage {
+            if let message = sync.errorMessage {
                 Section { Text(message).foregroundStyle(.red) }
             }
         }
@@ -137,59 +167,21 @@ struct SyncSettingsView: View {
             .frame(minWidth: 520, minHeight: 620)
             #endif
         }
+        .confirmationDialog(
+            "Leave \(leaving?.name ?? "shared setup")?",
+            isPresented: Binding(get: { leaving != nil }, set: { if !$0 { leaving = nil } }),
+            titleVisibility: .visible,
+            presenting: leaving
+        ) { group in
+            Button("Leave", role: .destructive) { Task { await sync.leaveGroup(id: group.id) } }
+        } message: { _ in
+            Text("If you created this setup, sharing stops for everyone in it. Otherwise only your account leaves.")
+        }
     }
 
-    private var accountDetails: some View {
-        SettingsPage("Connection & Recovery") {
-            Section {
-                if let endpoint = sync.endpoint, let host = URL(string: endpoint)?.host() {
-                    LabeledContent("Server", value: host)
-                }
-                LabeledContent("Account", value: sync.displayName ?? "Account")
-                Text("Playback progress belongs to this account. Account switching keeps each person's local library separate.")
-                    .foregroundStyle(.secondary)
-            }
-            Section("Devices") {
-                ForEach(sync.devices) { device in
-                    LabeledContent(device.name) {
-                        Button("Revoke access", role: .destructive) {
-                            Task { await sync.revokeDevice(id: device.id) }
-                        }
-                    }
-                }
-                Button("Refresh devices") { Task { await sync.refreshDevices() } }
-            }
-            Section {
-                if let key = sync.recoveryKey {
-                    NavigationLink("Recovery key") {
-                        SettingsPage("Recovery key") {
-                            Section {
-                                Text(key).font(.system(.body, design: .monospaced))
-                                    #if !os(tvOS)
-                                    .textSelection(.enabled)
-                                    #endif
-                            }
-                        }
-                    }
-                }
-            } footer: {
-                Text("Keep your recovery key safe. Resetting a server login cannot decrypt data without this key or a connected device.")
-            }
-            Section {
-                Button("Disconnect account", role: .destructive) {
-                    actionError = nil
-                    do { try sync.disconnect() }
-                    catch { actionError = "Couldn't remove this connection from Keychain. Try again." }
-                }
-                .disabled(sync.isSyncing || playback.current != nil)
-            } footer: {
-                Text("""
-                    Your account library stays saved on this device. Disconnecting returns to the local \
-                    library you used before connecting.
-                    """)
-            }
-        }
-        .task { await sync.refreshDevices() }
+    /// A pasted key often ends in a newline, which isn't valid base64.
+    private var trimmedRecoveryKey: String {
+        recoveryKey.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private var currentDeviceName: String {
@@ -241,15 +233,10 @@ private struct SyncSharingView: View {
                         #if !os(macOS)
                         .textInputAutocapitalization(.never)
                         #endif
-                    Button("Join shared setup") {
-                        Task {
-                            isWorking = true
-                            await sync.joinShare(code: code)
-                            isWorking = false
-                            if sync.errorMessage == nil { dismiss() }
-                        }
-                    }
-                    .disabled(code.isEmpty || isWorking)
+                    Button("Join shared setup", action: join)
+                        // `joinShare` returns without a word while a sync runs or a choice waits.
+                        .disabled(code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isWorking
+                                  || sync.isSyncing || sync.needsChoice)
                 } footer: {
                     Text("Shared addon and preference changes sync for everyone in the group. Your playback progress stays private.")
                 }
@@ -259,7 +246,7 @@ private struct SyncSharingView: View {
                         categoryToggle("Addons", category: .addons)
                         categoryToggle("Playback preferences", category: .playback)
                         categoryToggle("Appearance", category: .appearance)
-                    } header: { Text("What to share") } footer: {
+                    } header: { SettingsHeader("What to share") } footer: {
                         Text("Members share future changes to these categories. Playback progress and account access are never included.")
                     }
                 } else {
@@ -277,7 +264,7 @@ private struct SyncSharingView: View {
                 }
             } else {
                 Section {
-                    SyncCodeImage(code: code)
+                    QRCodeImage(code, label: "Scan this connection code with your other device")
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
                     Text(code)
@@ -293,8 +280,12 @@ private struct SyncSharingView: View {
                     Text("This code expires and works once. Share it only with the intended person or device.")
                 }
             }
-            if isWorking { Section { ProgressView("Creating connection…") } }
+            if isWorking { Section { ProgressView(mode == .join ? "Joining…" : "Creating code…") } }
             if let errorMessage { Section { Text(errorMessage).foregroundStyle(.red) } }
+            #if os(tvOS)
+            // The toolbar's Done doesn't show on tvOS; Menu also closes the sheet.
+            Section { Button("Done") { dismiss() } }
+            #endif
         }
         .toolbar { Button("Done") { dismiss() } }
     }
@@ -303,6 +294,21 @@ private struct SyncSharingView: View {
         Toggle(title, isOn: Binding(get: { categories.contains(category) }, set: { enabled in
             if enabled { categories.insert(category) } else { categories.remove(category) }
         }))
+    }
+
+    private func join() {
+        isWorking = true
+        errorMessage = nil
+        Task {
+            await sync.joinShare(code: code)
+            isWorking = false
+            // Failures land on the Sync page behind this sheet, so they're repeated here.
+            if sync.status == .sharedSetupJoined && sync.errorMessage == nil {
+                dismiss()
+            } else {
+                errorMessage = sync.errorMessage ?? "Couldn't join the shared setup. Try again."
+            }
+        }
     }
 
     private func createCode() {
@@ -325,16 +331,21 @@ private struct SyncSharingView: View {
     }
 }
 
-private struct SyncCodeImage: View {
+/// A QR code on a white square, which phones read reliably on a dark screen.
+struct QRCodeImage: View {
     private let image: CGImage?
-    init(code: String) {
+    private let label: String
+
+    init(_ message: String, label: String) {
         let filter = CIFilter.qrCodeGenerator()
-        filter.message = Data(code.utf8)
+        filter.message = Data(message.utf8)
         filter.correctionLevel = "M"
         image = filter.outputImage.flatMap {
             CIContext().createCGImage($0, from: $0.extent)
         }
+        self.label = label
     }
+
     var body: some View {
         if let image {
             Image(decorative: image, scale: 1)
@@ -342,7 +353,7 @@ private struct SyncCodeImage: View {
                 .frame(width: 250, height: 250)
                 .padding(16)
                 .background(.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .accessibilityLabel("Scan this connection code with your other device")
+                .accessibilityLabel(label)
         }
     }
 }

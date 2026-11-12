@@ -19,16 +19,36 @@ final class NowPlaying {
     private var tasks: [Task<Void, Never>] = []
     private var artworkTask: Task<Void, Never>?
     private var commandTargets: [(MPRemoteCommand, Any)] = []
+    /// The elapsed time last reported, and when and at what rate, to tell a seek from playback.
+    private var reported: (position: Double, date: Date, rate: Double)?
+    private let playNext: @MainActor () -> Void
+    /// Whether the next track button skips to the next episode: only once there is one.
+    var canPlayNext = false {
+        didSet { MPRemoteCommandCenter.shared().nextTrackCommand.isEnabled = canPlayNext }
+    }
 
-    init(player: MPVPlayer) {
+    init(player: MPVPlayer, playNext: @escaping @MainActor () -> Void) {
         self.player = player
+        self.playNext = playNext
         registerCommands()
         tasks.append(Task { [weak self, player] in
-            // Elapsed time is extrapolated from the rate, so whole-second updates are enough.
-            for await _ in Observations({ (player.status, player.position, player.duration, player.speed) }) {
+            for await _ in Observations({ (player.status, player.duration, player.speed) }) {
                 self?.update()
             }
         })
+        tasks.append(Task { [weak self, player] in
+            for await position in Observations({ player.position }) {
+                self?.positionChanged(position)
+            }
+        })
+    }
+
+    /// The system extrapolates elapsed time from the rate, so only a jump, such as a seek,
+    /// needs reporting rather than every second.
+    private func positionChanged(_ position: Double) {
+        guard let reported else { return }
+        let expected = reported.position + Date.now.timeIntervalSince(reported.date) * reported.rate
+        if abs(position - expected) > 2 { update() }
     }
 
     func show(_ request: PlaybackRequest) {
@@ -64,6 +84,8 @@ final class NowPlaying {
             command.removeTarget(target)
         }
         commandTargets = []
+        canPlayNext = false
+        reported = nil
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
         #if os(macOS)
         MPNowPlayingInfoCenter.default().playbackState = .stopped
@@ -73,12 +95,14 @@ final class NowPlaying {
     private func update() {
         guard let request else { return }
         let item = request.item
+        let rate = player.status == .playing ? player.speed : 0
+        reported = (player.position, .now, rate)
         var info: [String: Any] = [
             // Episodes show their own title over the series name, like the TV app.
             MPMediaItemPropertyTitle: item?.episodeTitle ?? request.title,
             MPNowPlayingInfoPropertyMediaType: MPNowPlayingInfoMediaType.video.rawValue,
             MPNowPlayingInfoPropertyElapsedPlaybackTime: player.position,
-            MPNowPlayingInfoPropertyPlaybackRate: player.status == .playing ? player.speed : 0,
+            MPNowPlayingInfoPropertyPlaybackRate: rate,
             MPNowPlayingInfoPropertyDefaultPlaybackRate: 1.0,
         ]
         if item?.episodeTitle != nil, let series = item?.title {
@@ -102,13 +126,19 @@ final class NowPlaying {
         let center = MPRemoteCommandCenter.shared()
         let player = player
         // The system calls these handlers on the main thread.
-        add(center.playCommand) { _ in MainActor.assumeIsolated { player.play() } }
+        // At the end, playing starts over, as the player's own button does.
+        add(center.playCommand) { _ in
+            MainActor.assumeIsolated { player.status == .ended ? player.togglePause() : player.play() }
+        }
         add(center.pauseCommand) { _ in MainActor.assumeIsolated { player.pause() } }
         add(center.togglePlayPauseCommand) { _ in MainActor.assumeIsolated { player.togglePause() } }
         center.skipForwardCommand.preferredIntervals = [10]
         center.skipBackwardCommand.preferredIntervals = [10]
         add(center.skipForwardCommand) { _ in MainActor.assumeIsolated { player.seek(by: 10) } }
         add(center.skipBackwardCommand) { _ in MainActor.assumeIsolated { player.seek(by: -10) } }
+        let playNext = playNext
+        center.nextTrackCommand.isEnabled = false
+        add(center.nextTrackCommand) { _ in MainActor.assumeIsolated { playNext() } }
         add(center.changePlaybackPositionCommand) { event in
             guard let event = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
             let time = event.positionTime

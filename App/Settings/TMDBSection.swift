@@ -4,6 +4,7 @@ import SwiftUI
 struct TMDBSection: View {
     @Environment(TMDBAccount.self) private var tmdb
     @State private var isSettingUp = false
+    @State private var confirmsRemoval = false
     @State private var errorMessage: String?
 
     var body: some View {
@@ -12,9 +13,14 @@ struct TMDBSection: View {
             Button(tmdb.isConfigured ? "Replace API token" : "Connect TMDB") { isSettingUp = true }
                 .sheet(isPresented: $isSettingUp) { TMDBSetupView() }
             if tmdb.isConfigured || tmdb.storageError != nil {
-                Button("Remove API token", role: .destructive) {
-                    do { try tmdb.disconnect() } catch { errorMessage = error.localizedDescription }
-                }
+                Button("Remove API token", role: .destructive) { confirmsRemoval = true }
+                    .confirmationDialog("Remove the TMDB token?", isPresented: $confirmsRemoval, titleVisibility: .visible) {
+                        Button("Remove", role: .destructive) {
+                            do { try tmdb.disconnect() } catch { errorMessage = error.localizedDescription }
+                        }
+                    } message: {
+                        Text("Details, cast portraits and recommendations from TMDB stop until a token is entered again.")
+                    }
             }
             if let message = errorMessage ?? tmdb.storageError?.localizedDescription {
                 Text(message).foregroundStyle(.red)
@@ -26,7 +32,10 @@ struct TMDBSection: View {
                 }
             }
         } footer: {
-            Text("Adds movie and series details, cast portraits and crew credits. The API token is stored in this device's Keychain.")
+            Text("""
+                Adds cast and crew with photos and filmographies, member reviews, More Like This, Recommended \
+                and Popular Directors. The API token is stored in this device's Keychain.
+                """)
         }
         .onChange(of: tmdb.revision) { errorMessage = nil }
     }

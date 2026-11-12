@@ -23,6 +23,8 @@ public final class AccountSync {
     public var displayName: String? { connection?.displayName }
     public var endpoint: String? { connection?.endpoint }
     public var recoveryKey: String? { connection?.key }
+    /// Marks this device in the device list, where every iPhone is called "iPhone".
+    public var currentDeviceID: String? { connection?.deviceID }
     public var choiceSummary: String {
         if let groupChoice { return "Shared setup: " + groupChoice.grant.categories.map(\.name).sorted().joined(separator: ", ") }
         if let choice, choice.initial {
@@ -141,6 +143,7 @@ public final class AccountSync {
     @ObservationIgnored private var generation = UUID()
     @ObservationIgnored private var observer: AccountSyncDefaultsObserver?
     @ObservationIgnored private var pending: Task<Void, Never>?
+    @ObservationIgnored private var isCheckQueued = false
     @ObservationIgnored private var lastObservedSettings: SyncedSettings?
     @ObservationIgnored private var lastObservedProgress: PlaybackSyncSnapshot?
 
@@ -159,6 +162,15 @@ public final class AccountSync {
             self.init(addons: addons, library: library, defaults: defaults)
         }
     }
+    #if DEBUG
+    /// UI checks show how a connected account's states read, without a server.
+    public func showForTesting(status: Status, needsChoice: Bool) {
+        isConnected = true
+        self.status = status
+        self.needsChoice = needsChoice
+    }
+    #endif
+
     init(addons: AddonStore, library: LibraryStore, defaults: UserDefaults, storage: Storage, session: URLSession) {
         self.library = library
         localSetup = AccountSyncLocalSetup(addons: addons, defaults: defaults)
@@ -167,7 +179,7 @@ public final class AccountSync {
         restoreConnection()
         rememberObserved()
         observer = AccountSyncDefaultsObserver { [weak self] in
-            Task { @MainActor [weak self] in self?.localChanged() }
+            Task { @MainActor [weak self] in self?.queueLocalCheck() }
         }
     }
 
@@ -718,25 +730,23 @@ public final class AccountSync {
         }
     }
 
-    public func refreshDevices() async {
+    /// Throws rather than reporting through `status`: a device list that can't load says
+    /// nothing about whether the account syncs.
+    public func refreshDevices() async throws {
         guard let connection else { return }
         let id = generation
-        do {
-            let devices = try await client(connection).devices()
-            guard generation == id else { return }
-            self.devices = devices
-        } catch { if generation == id { fail(error) } }
+        let devices = try await client(connection).devices()
+        guard generation == id else { return }
+        self.devices = devices
     }
 
-    public func revokeDevice(id deviceID: String) async {
+    public func revokeDevice(id deviceID: String) async throws {
         guard let connection else { return }
         let id = generation
-        do {
-            try await client(connection).revokeDevice(deviceID)
-            guard generation == id else { return }
-            if deviceID == connection.deviceID { try disconnect() }
-            else { devices.removeAll { $0.id == deviceID } }
-        } catch { if generation == id { fail(error) } }
+        try await client(connection).revokeDevice(deviceID)
+        guard generation == id else { return }
+        if deviceID == connection.deviceID { try disconnect() }
+        else { devices.removeAll { $0.id == deviceID } }
     }
 
     private func syncGroups(client: AccountSyncClient, id: UUID) async throws {
@@ -928,13 +938,25 @@ public final class AccountSync {
         lastObservedProgress = library.playbackSyncSnapshot
     }
 
+    /// Saving progress writes several defaults keys at once; one check covers them all.
+    private func queueLocalCheck() {
+        guard isConnected, !isCheckQueued else { return }
+        isCheckQueued = true
+        Task { [weak self] in
+            self?.isCheckQueued = false
+            self?.localChanged()
+        }
+    }
+
     private func localChanged() {
+        // Snapshots are rebuilt only for an account that can sync them; `finish()` and
+        // `disconnect()` remember what was observed before the next one starts.
+        guard isConnected, choice?.initial != true else { return }
         let settings = localSetup.current
         let progress = library.playbackSyncSnapshot
         let settingsChanged = settings != lastObservedSettings
         guard settingsChanged || progress != lastObservedProgress else { return }
         rememberObserved()
-        guard isConnected, choice?.initial != true else { return }
         if !isSyncing { status = .waiting }
         // Settings changes are deliberate and few; playback progress changes every few seconds.
         schedule(after: settingsChanged ? 1 : 15)

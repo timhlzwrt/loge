@@ -34,6 +34,8 @@ struct InformationSection: View {
                     }
                 }
             }
+            // At the reviews' width, so the page's text ends on one line on a portrait iPad.
+            .readingWidth()
             #if os(tvOS)
             .padding(20)
             .background(.white.opacity(isFocused ? 0.08 : 0), in: .rect(cornerRadius: Metrics.cardRadius))
@@ -63,7 +65,8 @@ struct InformationSection: View {
         if let date = details?.releaseDate {
             facts.append((meta.type == MediaType.series ? "First Aired" : "Released", formattedDate(date)))
         } else if let date = meta.releaseDate {
-            facts.append((meta.type == MediaType.series ? "First Aired" : "Released", date.formatted(date: .long, time: .omitted)))
+            facts.append((meta.type == MediaType.series ? "First Aired" : "Released",
+                          date.formatted(.dateTime.day().month(.wide).year().locale(.interface))))
         }
         if let status = details?.status { facts.append(("Status", status)) }
         if let seasons = details?.seasonCount {
@@ -75,7 +78,7 @@ struct InformationSection: View {
             facts.append(("Original Title", originalTitle))
         }
         if let language = details?.originalLanguage {
-            facts.append(("Original Language", Locale(identifier: "en").localizedString(forLanguageCode: language) ?? language))
+            facts.append(("Original Language", Locale.interface.localizedString(forLanguageCode: language) ?? language))
         }
         if let countries = details?.countries, !countries.isEmpty {
             facts.append(("Country", countries.joined(separator: ", ")))
@@ -84,12 +87,12 @@ struct InformationSection: View {
         }
         if let studios = details?.studios, !studios.isEmpty { facts.append(("Production", studios.joined(separator: ", "))) }
         if let rating = details?.rating, let votes = details?.voteCount {
-            facts.append(("TMDB Rating", "\(rating.formatted(.number.precision(.fractionLength(1))))/10 · \(votes.formatted()) votes"))
+            facts.append(("TMDB Rating", "\(rating.formatted(.number.precision(.fractionLength(1)).locale(.interface)))/10 · "
+                + "\(votes.formatted(.number.locale(.interface))) votes"))
         }
-        if let budget = details?.budget { facts.append(("Budget", budget.formatted(.currency(code: "USD").precision(.fractionLength(0))))) }
-        if let revenue = details?.revenue {
-            facts.append(("Box Office", revenue.formatted(.currency(code: "USD").precision(.fractionLength(0)))))
-        }
+        let dollars = IntegerFormatStyle<Int>.Currency(code: "USD", locale: .interface).precision(.fractionLength(0))
+        if let budget = details?.budget { facts.append(("Budget", budget.formatted(dollars))) }
+        if let revenue = details?.revenue { facts.append(("Box Office", revenue.formatted(dollars))) }
         if let awards = meta.awards, !awards.isEmpty {
             facts.append(("Awards", awards))
         }
@@ -101,7 +104,7 @@ struct InformationSection: View {
         guard parts.count == 3,
               let date = Calendar(identifier: .gregorian)
                 .date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2])) else { return value }
-        return date.formatted(.dateTime.day().month(.wide).year().locale(Locale(identifier: "en")))
+        return date.formatted(.dateTime.day().month(.wide).year().locale(.interface))
     }
 }
 
@@ -146,5 +149,7 @@ struct ExpandableText: View {
         }
         .buttonStyle(.plain)
         .accessibilityHint(isTruncated ? "Shows the whole description" : "")
+        // A short synopsis has nothing to expand, so it isn't announced as a button.
+        .accessibilityRemoveTraits(isTruncated || isExpanded ? [] : .isButton)
     }
 }

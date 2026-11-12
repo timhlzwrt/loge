@@ -27,7 +27,8 @@ final class DiscoverySnapshotTests: XCTestCase {
             XCTAssertTrue(ready.waitForExistence(timeout: 20))
             if screen == "overview" {
                 XCTAssertTrue(app.buttons["Read review"].firstMatch.waitForExistence(timeout: 15))
-                XCTAssertEqual(app.buttons.matching(identifier: "Read review").count, 2)
+                // The second review fits in its preview, so only the first offers the rest.
+                XCTAssertEqual(app.buttons.matching(identifier: "Read review").count, 1)
                 XCTAssertTrue(app.buttons["All reviews"].exists)
             }
             let image = app.screenshot()
