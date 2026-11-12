@@ -16,7 +16,8 @@ final class PlayerMenuTests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
 
-        let card = app.buttons.matching(NSPredicate(format: "label CONTAINS 'min left'")).firstMatch
+        // The card's label is the title; the time left is its value.
+        let card = app.buttons.matching(NSPredicate(format: "value CONTAINS 'minutes left'")).firstMatch
         XCTAssertTrue(card.waitForExistence(timeout: 15), "Nothing in Continue Watching")
         card.tap()
 

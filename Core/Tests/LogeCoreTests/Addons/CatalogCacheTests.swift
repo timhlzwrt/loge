@@ -98,6 +98,27 @@ final class CatalogCacheTests: Sendable {
         #expect(fetched == ["a"])
     }
 
+    @Test func pullToRefreshAsksTheAddonForAFreshPage() async throws {
+        let cache = cache()
+        _ = try await ids(cache) { [page = page("a")] in page }
+        advance(1)
+        await cache.expireAll()
+        let fetched = try await ids(cache) { [page = page("b")] in page }
+        #expect(fetched == ["b"])
+        let next = try await ids(cache) { Issue.record("Asked again after refreshing"); return Data() }
+        #expect(next == ["b"])
+    }
+
+    @Test func failedPullToRefreshKeepsThePageFromBefore() async throws {
+        struct Unreachable: Error {}
+        let cache = cache()
+        _ = try await ids(cache) { [page = page("a")] in page }
+        advance(1)
+        await cache.expireAll()
+        let kept = try await ids(cache) { throw Unreachable() }
+        #expect(kept == ["a"])
+    }
+
     @Test func undecodablePageIsNotKept() async throws {
         let cache = cache()
         await #expect(throws: AddonError.invalidResponse) {

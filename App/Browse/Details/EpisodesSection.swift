@@ -5,18 +5,22 @@ struct EpisodesSection: View {
     @Environment(TraktAccount.self) private var trakt
     let videos: [Video]
     let upNextID: String?
+    /// The series' backdrop, shown for episodes without a still of their own.
+    let backdrop: String?
     let route: (Video) -> SourcesRoute
     /// Opens the sources for an episode.
     let choose: (Video) -> Void
     /// Beside another column, where a shelf can't draw past its own edges.
     let staysInColumn: Bool
     @State private var season: Int
+    @State private var isConfirmingUnwatched = false
     @Environment(LibraryStore.self) private var library
 
-    init(videos: [Video], upNextID: String?, route: @escaping (Video) -> SourcesRoute, choose: @escaping (Video) -> Void,
-         staysInColumn: Bool = false) {
+    init(videos: [Video], upNextID: String?, backdrop: String?, route: @escaping (Video) -> SourcesRoute,
+         choose: @escaping (Video) -> Void, staysInColumn: Bool = false) {
         self.videos = videos
         self.upNextID = upNextID
+        self.backdrop = backdrop
         self.route = route
         self.choose = choose
         self.staysInColumn = staysInColumn
@@ -30,7 +34,7 @@ struct EpisodesSection: View {
             seasonMenu
                 .padding(.horizontal, Metrics.gutter)
             #if os(macOS)
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 18, alignment: .top), count: 4),
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: Metrics.episodeWidth), spacing: 18, alignment: .top)],
                       alignment: .leading, spacing: 28) {
                 ForEach(episodes) { episodeButton($0) }
             }
@@ -53,6 +57,10 @@ struct EpisodesSection: View {
                 .onAppear {
                     if let upNextID { proxy.scrollTo(upNextID, anchor: .leading) }
                 }
+                // A new season starts at its first episode, not where the last one was scrolled to.
+                .onChange(of: season) {
+                    if let first = episodes.first { proxy.scrollTo(first.id, anchor: .leading) }
+                }
             }
             #endif
         }
@@ -62,7 +70,7 @@ struct EpisodesSection: View {
         Button {
             choose(video)
         } label: {
-            EpisodeCard(video: video)
+            EpisodeCard(video: video, backdrop: backdrop)
         }
         #if os(tvOS)
         // Lifts just the still on focus, with the text below it, like the TV app.
@@ -88,9 +96,9 @@ struct EpisodesSection: View {
                     library.markWatched(items)
                     trakt.markWatched(items)
                 }
+                // Clears the progress of every episode in the season, so it asks first.
                 Button("Mark Season as Unwatched", systemImage: "eye.slash") {
-                    library.markUnwatched(episodes.map(\.id))
-                    trakt.markUnwatched(episodes.map { route($0).item })
+                    isConfirmingUnwatched = true
                 }
             }
         } label: {
@@ -100,7 +108,9 @@ struct EpisodesSection: View {
                 Image(systemName: "chevron.down")
                     .font(.footnote.weight(.bold))
                     .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
             }
+            .titleTapTarget()
         }
         #if os(tvOS)
         .buttonStyle(SeasonMenuStyle())
@@ -111,6 +121,15 @@ struct EpisodesSection: View {
         .fixedSize()
         .accessibilityLabel("Season")
         .accessibilityValue(Self.seasonName(season))
+        .confirmationDialog("Mark \(Self.seasonName(season)) as unwatched?", isPresented: $isConfirmingUnwatched,
+                            titleVisibility: .visible) {
+            Button("Mark as Unwatched", role: .destructive) {
+                library.markUnwatched(episodes.map(\.id))
+                trakt.markUnwatched(episodes.map { route($0).item })
+            }
+        } message: {
+            Text("Progress and watched marks for its episodes are removed.")
+        }
     }
 
     @ViewBuilder
@@ -189,12 +208,14 @@ struct SeasonMenuStyle: ButtonStyle {
 
 struct EpisodeCard: View {
     let video: Video
+    /// Shown when the episode has no still: addons often leave whole seasons without them.
+    var backdrop: String?
     @Environment(LibraryStore.self) private var library
 
     var body: some View {
         let progress = library.progress[video.id]
         VStack(alignment: .leading, spacing: 3) {
-            Artwork(url: video.thumbnail)
+            Artwork(url: video.thumbnail, fallbacks: [backdrop].compactMap { $0 })
                 .overlay {
                     if let progress {
                         WatchProgressBar(progress: progress)
@@ -205,6 +226,8 @@ struct EpisodeCard: View {
                 .opacity(video.isReleased() ? 1 : 0.5)
                 #if os(tvOS)
                 .hoverEffect(.highlight)
+                #else
+                .modifier(PointerHighlight())
                 #endif
                 .padding(.bottom, 9)
             if let caption = caption(progress) {
@@ -234,7 +257,7 @@ struct EpisodeCard: View {
     private func caption(_ progress: WatchProgress?) -> String? {
         var parts = [video.episode.map { "Episode \($0)" }]
         if !video.isReleased(), let date = video.releaseDate {
-            parts.append("Airs \(date.formatted(.dateTime.day().month()))")
+            parts.append("Airs \(date.formatted(.dateTime.day().month().locale(.interface)))")
         } else if let progress, !progress.isFinished {
             parts.append("\(max(Int((progress.duration - progress.position) / 60), 1)) min left")
         }

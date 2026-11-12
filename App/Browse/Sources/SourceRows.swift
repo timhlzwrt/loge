@@ -59,10 +59,19 @@ struct StreamRow: View {
         let isCold = details.isCached == false
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                // HDR is what tells two otherwise equal 4K files apart, so it sits by the title.
-                let range = Text(details.dynamicRange.first.map { "  \($0)" } ?? "").font(summaryFont.weight(.semibold))
-                Text("\(Text(title).font(titleFont))\(range)")
-                    .lineLimit(1)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(title)
+                        .font(titleFont)
+                        .lineLimit(1)
+                    // HDR is what tells two otherwise equal 4K files apart, so it sits by the
+                    // title and is the last thing to be cut.
+                    if let range = details.dynamicRange.first {
+                        Text(range)
+                            .font(summaryFont.weight(.semibold))
+                            .lineLimit(1)
+                            .layoutPriority(1)
+                    }
+                }
                 if let summary = summary(details) {
                     Text(summary)
                         .font(summaryFont)
@@ -103,13 +112,20 @@ struct StreamRow: View {
     }
 
     /// "Recommended for your 32 Mbps connection", "Last played", or a warning that the file
-    /// isn't cached; shortened when it's both, to stay on one line.
+    /// isn't cached; shortened when it's both, to stay on one line. The warning stays on the
+    /// other two, since dimming alone doesn't reach VoiceOver.
     private var note: String? {
-        if isLastPlayed { return connectionSpeed == nil ? "Last played" : "Last played · recommended" }
-        if let connectionSpeed {
-            return "Recommended for your \((connectionSpeed / 1_000_000).formatted(.number.precision(.fractionLength(0)))) Mbps connection"
+        let isCold = entry.details.isCached == false
+        let marked: String? = if isLastPlayed {
+            connectionSpeed == nil ? "Last played" : "Last played · recommended"
+        } else if let connectionSpeed {
+            "Recommended for your "
+                + "\((connectionSpeed / 1_000_000).formatted(.number.precision(.fractionLength(0)).locale(.interface))) Mbps connection"
+        } else {
+            nil
         }
-        return entry.details.isCached == false ? "Not cached, may be slow to start" : nil
+        guard let marked else { return isCold ? "Not cached, may be slow to start" : nil }
+        return isCold ? marked + " · not cached" : marked
     }
 
     /// Codec and audio; the dynamic range is already beside the title.
@@ -135,12 +151,14 @@ struct StreamRow: View {
     private let titleFont = Font.body.weight(.semibold)
     private let summaryFont = Font.subheadline
     private let sizeFont = Font.body
-    private let rowHeight: CGFloat = 50
+    /// A minimum only: rows with nothing under the title stay one line tall.
+    private let rowHeight: CGFloat = 32
     #else
     private let titleFont = Font.callout.weight(.semibold)
     private let summaryFont = Font.footnote
     private let sizeFont = Font.subheadline
-    private let rowHeight: CGFloat = 60
+    /// The touch target; rows with nothing under the title stay one line tall.
+    private let rowHeight: CGFloat = 44
     #endif
 }
 

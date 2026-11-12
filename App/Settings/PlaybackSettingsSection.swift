@@ -34,7 +34,7 @@ struct PlaybackSettingsSection: View {
             .pickerStyle(.navigationLink)
             #endif
         } header: {
-            Text("Playback")
+            SettingsHeader("Playback")
         } footer: {
             Text("""
                 Languages apply when a file has a matching track. The size limit applies to series episodes, \

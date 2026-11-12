@@ -6,14 +6,23 @@ struct TMDBCreditTile: View {
     let title: TMDBCreditTitle
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Artwork(url: title.posterURL)
-                .aspectRatio(2 / 3, contentMode: .fit)
-                .clipShape(.rect(cornerRadius: Metrics.posterRadius))
-                #if os(tvOS)
-                // Only the poster lifts; a card around the text clipped its first letters.
-                .hoverEffect(.highlight)
-                #endif
+        VStack(alignment: .leading, spacing: Metrics.liftedCaptionSpacing) {
+            // Without a poster the tile names the title, as catalog posters do.
+            ZStack {
+                if title.posterURL == nil {
+                    Color.white.opacity(0.06)
+                    // The caption below already names it.
+                    TitleCard(name: title.name).accessibilityHidden(true)
+                } else {
+                    Artwork(url: title.posterURL)
+                }
+            }
+            .aspectRatio(2 / 3, contentMode: .fit)
+            .clipShape(.rect(cornerRadius: Metrics.posterRadius))
+            #if os(tvOS)
+            // Only the poster lifts; a card around the text clipped its first letters.
+            .hoverEffect(.highlight)
+            #endif
             Text(title.name).font(.cardTitle).lineLimit(2)
             CreditMetaLines(title: title, roleLineLimit: 2)
         }
@@ -44,15 +53,18 @@ struct PeopleRow: View {
     }
 
     private var tiles: some View {
-        VStack(alignment: .leading, spacing: Metrics.headerSpacing) {
+        let hasPortraits = people.contains { $0.portraitURL != nil }
+        return VStack(alignment: .leading, spacing: Metrics.headerSpacing) {
             Text("Cast & Crew")
                 .font(.sectionTitle)
                 .padding(.horizontal, Metrics.gutter)
             HorizontalShelf("cast and crew") {
-                LazyHStack(alignment: .top, spacing: Metrics.rowSpacing) {
+                // Not lazy: a lazy row took the first tile's height, which cut off the captions of a
+                // longer name further along. TMDB's cast is capped to the top billed, so it stays short.
+                HStack(alignment: .top, spacing: Metrics.rowSpacing) {
                     ForEach(people) { person in
                         NavigationLink(value: PersonRoute(person: person, title: title)) {
-                            PersonTile(person: person)
+                            PersonTile(person: person, showsPortrait: hasPortraits)
                         }
                         #if os(tvOS)
                         .buttonStyle(PersonButtonStyle())
@@ -104,7 +116,7 @@ struct CreditsList: View {
                         NavigationLink(value: PersonRoute(person: person, title: title)) {
                             Text(person.name)
                                 .foregroundStyle(.white.opacity(0.88))
-                                .frame(minHeight: 32, alignment: .leading)
+                                .frame(minHeight: Self.nameHeight, alignment: .leading)
                                 .contentShape(.rect)
                         }
                         .buttonStyle(.plain)
@@ -113,12 +125,22 @@ struct CreditsList: View {
             }
         }
     }
+
+    /// A full touch target on iPhone and iPad; the Mac's pointer needs less.
+    #if os(macOS)
+    private static let nameHeight: CGFloat = 32
+    #else
+    private static let nameHeight: CGFloat = 44
+    #endif
 }
 #endif
 
 /// TMDB portraits fall back to initials when no photo is available.
 struct PersonTile: View {
     let person: Person
+    /// False on the TV when no one in the row has a photo: a row of initials in grey
+    /// circles read as placeholders, so the names stand alone there.
+    var showsPortrait = true
     #if os(tvOS)
     @Environment(\.isFocused) private var isFocused
     #else
@@ -127,47 +149,79 @@ struct PersonTile: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            AsyncImage(url: person.portraitURL.flatMap(URL.init(string:))) { phase in
-                if let image = phase.image {
-                    image.resizable().scaledToFill()
-                } else {
+            if showsPortrait {
+                ZStack {
                     Text(initials)
                         .font(Self.initialsFont)
                         .foregroundStyle(isFocused ? AnyShapeStyle(.black) : AnyShapeStyle(.secondary))
+                    // Through the decoded-image cache, so portraits don't flash initials again
+                    // when the shelf brings a tile back.
+                    if person.portraitURL != nil {
+                        Artwork(url: person.portraitURL)
+                    }
                 }
+                    .frame(width: Metrics.personSize, height: Metrics.personSize)
+                    .background(isFocused ? AnyShapeStyle(.tint) : AnyShapeStyle(.white.opacity(0.08)), in: .circle)
+                    .clipShape(.circle)
+                    #if os(tvOS)
+                    // The circle fills with the accent and lifts, as the glass buttons above it do.
+                    .scaleEffect(isFocused ? 1.08 : 1)
+                    .shadow(color: .black.opacity(isFocused ? 0.5 : 0), radius: 24, y: 14)
+                    .animation(.easeOut(duration: 0.15), value: isFocused)
+                    #endif
             }
-                .frame(width: Metrics.personSize, height: Metrics.personSize)
-                .background(isFocused ? AnyShapeStyle(.tint) : AnyShapeStyle(.white.opacity(0.08)), in: .circle)
-                .clipShape(.circle)
-                #if os(tvOS)
-                // The circle fills with the accent and lifts, as the glass buttons above it do.
-                .scaleEffect(isFocused ? 1.08 : 1)
-                .shadow(color: .black.opacity(isFocused ? 0.5 : 0), radius: 24, y: 14)
-                .animation(.easeOut(duration: 0.15), value: isFocused)
-                #endif
-            VStack(spacing: 2) {
-                Text(person.name)
-                    .font(Self.nameFont)
-                    .lineLimit(2)
-                if let character = person.character {
-                    Text(character)
-                        .font(Self.roleFont)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-                if let roles {
-                    Text(roles)
-                        .font(Self.roleFont)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-            }
-            .multilineTextAlignment(.center)
+            captions
         }
         .frame(width: Metrics.personSize * 1.3)
         .contentShape(.rect)
         .accessibilityElement()
         .accessibilityLabel([person.name, person.character, roles].compactMap { $0 }.joined(separator: ", "))
+    }
+
+    @ViewBuilder
+    private var captions: some View {
+        let lines = VStack(spacing: 2) {
+            Text(person.name)
+                .font(Self.nameFont)
+                .lineLimit(2)
+            if let character = person.character {
+                Text(character)
+                    .font(Self.roleFont)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(showsPortrait ? 1 : 2)
+            }
+            if let roles {
+                Text(roles)
+                    .font(Self.roleFont)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(showsPortrait ? 1 : 2)
+            }
+        }
+        .multilineTextAlignment(.center)
+        if showsPortrait {
+            // Room for a two-line name and a role is kept under every portrait, so the row is
+            // as tall whether or not a name in it wraps, and no name is cut to fit.
+            ZStack(alignment: .top) {
+                VStack(spacing: 2) {
+                    Text(verbatim: "A\nA").font(Self.nameFont)
+                    Text(verbatim: "A").font(Self.roleFont)
+                }
+                .hidden()
+                lines
+            }
+        } else {
+            // Without circles, focus fills the names' own space with the accent, as it fills the circle.
+            lines
+                .foregroundStyle(isFocused ? AnyShapeStyle(.black) : AnyShapeStyle(.primary))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 14)
+                .frame(maxWidth: .infinity)
+                .background(isFocused ? AnyShapeStyle(.tint) : AnyShapeStyle(.clear), in: .rect(cornerRadius: Metrics.posterRadius))
+                #if os(tvOS)
+                .scaleEffect(isFocused ? 1.08 : 1)
+                .animation(.easeOut(duration: 0.15), value: isFocused)
+                #endif
+        }
     }
 
     /// "MM" for Matthew McConaughey.

@@ -102,6 +102,74 @@ final class DiscoveryTVTests: XCTestCase {
         XCTAssertTrue(app.buttons["Subtitles"].waitForExistence(timeout: 5), "Focus was lost after cancelling")
     }
 
+    /// A film with nothing after it ends on a card whose Start Over takes Select; Menu closes.
+    @MainActor
+    func testEndCardStartsOverAndMenuCloses() throws {
+        let app = try launchPlayer()
+        defer { app.terminate() }
+        skipToEnd(app)
+        let startOver = app.buttons["Start Over"]
+        XCTAssertTrue(startOver.waitForExistence(timeout: 10))
+        waitForFocus(on: startOver)
+        screenshot("tv-end-card")
+        XCUIRemote.shared.press(.select)
+        let ended = app.staticTexts["fixture-ended"]
+        wait(for: [expectation(for: NSPredicate(format: "value == 'no'"), evaluatedWith: ended)], timeout: 10)
+        XCTAssertLessThan(Int(app.staticTexts["fixture-position"].value as? String ?? "") ?? Int.max, 15)
+        skipToEnd(app)
+        XCTAssertTrue(startOver.waitForExistence(timeout: 10))
+        waitForFocus(on: startOver)
+        XCUIRemote.shared.press(.menu)
+        let position = app.staticTexts["fixture-position"]
+        wait(for: [expectation(for: NSPredicate { _, _ in !position.exists }, evaluatedWith: position)], timeout: 5)
+    }
+
+    /// A next-episode lookup that lands after the end replaces the end card, and focus follows.
+    @MainActor
+    func testLateUpNextReplacesTheEndCard() throws {
+        let app = try launchPlayer(environment: ["PLAYBACK_FIXTURE_NEXT": "late"])
+        defer { app.terminate() }
+        skipToEnd(app)
+        let startOver = app.buttons["Start Over"]
+        XCTAssertTrue(startOver.waitForExistence(timeout: 10))
+        waitForFocus(on: startOver)
+        let play = app.buttons["Play Now"]
+        XCTAssertTrue(play.waitForExistence(timeout: 10))
+        waitForFocus(on: play)
+        screenshot("tv-late-up-next")
+        XCUIRemote.shared.press(.select)
+        let source = app.staticTexts["fixture-source"]
+        wait(for: [expectation(for: NSPredicate(format: "value == 'source=next'"), evaluatedWith: source)], timeout: 10)
+    }
+
+    /// Both offers show during the credits; down goes from Skip Credits to Up Next below it.
+    @MainActor
+    func testDownReachesUpNextFromSkipCredits() throws {
+        let app = try launchPlayer(environment: ["PLAYBACK_FIXTURE_NEXT": "1"])
+        defer { app.terminate() }
+        for label in ["Skip Intro", "Skip Recap"] {
+            let skip = app.buttons[label]
+            XCTAssertTrue(skip.waitForExistence(timeout: 30), "\(label) didn't appear")
+            waitForFocus(on: skip)
+            XCUIRemote.shared.press(.select)
+        }
+        let credits = app.buttons["Skip Credits"], play = app.buttons["Play Now"]
+        XCTAssertTrue(credits.waitForExistence(timeout: 30))
+        XCTAssertTrue(play.waitForExistence(timeout: 30))
+        waitForFocus(on: credits)
+        XCUIRemote.shared.press(.down)
+        waitForFocus(on: play)
+        screenshot("tv-up-next-from-skip-credits")
+        // Cancelled, the card is gone, and up from the picture must leave focus somewhere usable.
+        XCUIRemote.shared.press(.right)
+        waitForFocus(on: app.buttons["Cancel"])
+        XCUIRemote.shared.press(.select)
+        XCTAssertFalse(play.waitForExistence(timeout: 2), "Cancel didn't close the offer")
+        XCUIRemote.shared.press(.up)
+        XCUIRemote.shared.press(.down)
+        XCTAssertTrue(app.buttons["Subtitles"].waitForExistence(timeout: 5), "Focus was lost after cancelling and pressing up")
+    }
+
     @MainActor
     func testRemotePlaysTheNextEpisodeFromUpNext() throws {
         let app = try launchPlayer(environment: ["PLAYBACK_FIXTURE_NEXT": "1"])
@@ -241,7 +309,8 @@ final class DiscoveryTVTests: XCTestCase {
         defer { app.terminate() }
         let read = app.buttons["Read review"].firstMatch
         XCTAssertTrue(read.waitForExistence(timeout: 15))
-        XCTAssertEqual(app.buttons.matching(identifier: "Read review").count, 2)
+        // The second review fits in its preview, so only the first offers the rest.
+        XCTAssertEqual(app.buttons.matching(identifier: "Read review").count, 1)
         XCTAssertTrue(app.buttons["All reviews"].exists)
         let focused = expectation(for: NSPredicate { _, _ in read.hasFocus }, evaluatedWith: app)
         wait(for: [focused], timeout: 8)

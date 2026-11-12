@@ -76,6 +76,19 @@ final class MPVPlayer {
     func setCommunitySegments(_ segments: [PlaybackSegment]) {
         communitySegments = segments
     }
+
+    /// Where the skippable segments start and end, for marking on the timeline.
+    var segmentBoundaries: [Double] {
+        guard let duration else { return [] }
+        var marks = communitySegments.flatMap { [$0.start, $0.end] }
+        for chapter in chapters {
+            if let skip = PlaybackChapter.skip(at: chapter.start, chapters: chapters, duration: duration) {
+                marks += [chapter.start, skip.end]
+            }
+        }
+        // The file's own ends need no mark.
+        return Set(marks).filter { $0 > 1 && $0 < duration - 1 }.sorted()
+    }
     private(set) var speed = 1.0
     private(set) var isZoomedToFill = false
     /// The playing video's frame rate and dynamic range, for Apple TV to switch the display to.
@@ -137,18 +150,16 @@ final class MPVPlayer {
             return parts.isEmpty ? "Track \(id)" : parts.joined(separator: " · ")
         }
 
+        private static let codecNames = [
+            "ac3": "Dolby Digital", "eac3": "Dolby Digital Plus", "truehd": "Dolby TrueHD",
+            "opus": "Opus", "vorbis": "Vorbis", "alac": "Apple Lossless",
+        ]
+
+        /// Names mpv's codec IDs; the rest, such as AAC, DTS and FLAC, read as they are in capitals.
         private static func codecName(_ codec: String) -> String {
-            switch codec {
-            case "aac": "AAC"
-            case "ac3": "Dolby Digital"
-            case "eac3": "Dolby Digital Plus"
-            case "truehd": "Dolby TrueHD"
-            case "dts": "DTS"
-            case "flac": "FLAC"
-            case "opus": "Opus"
-            case "mp3": "MP3"
-            default: codec.uppercased()
-            }
+            // mpv names uncompressed sound by sample format, such as pcm_s16le.
+            if codec.hasPrefix("pcm_") { return "PCM" }
+            return codecNames[codec] ?? codec.uppercased()
         }
 
         private static func channelLayout(_ count: Int) -> String {
@@ -193,6 +204,7 @@ final class MPVPlayer {
     @ObservationIgnored private var hasSelectedSubtitles = false
     private struct SeekOperation {
         let seconds: Double
+        var isAbsolute = false
         let completion: () -> Void
     }
     @ObservationIgnored private var pendingSeeks: [SeekOperation] = []
@@ -311,6 +323,11 @@ final class MPVPlayer {
         cancelSeeks()
         position = 0
         duration = nil
+        // mpv reports these as unavailable until the new file has them, which leaves the old
+        // file's values standing: an ended episode would read as ended again on opening the next.
+        isEnded = false
+        isBuffering = false
+        isPaused = false
         demuxedTracks = []
         chapters = []
         communitySegments = []
@@ -356,8 +373,14 @@ final class MPVPlayer {
         command(["loadfile", url.absoluteString, "replace"])
     }
 
+    /// At the end, where unpausing would only reach the end again, starts over instead.
     func togglePause() {
-        command(["cycle", "pause"])
+        if case .loaded = loadState, isEnded {
+            seek(to: 0)
+            play()
+        } else {
+            command(["cycle", "pause"])
+        }
     }
 
     func play() {
@@ -382,6 +405,14 @@ final class MPVPlayer {
 
     func seek(to seconds: Double) {
         command(["seek", String(seconds), "absolute"], replyID: 0)
+    }
+
+    /// Calls `completion` once playback restarts after the seek, wherever it lands: a seek
+    /// made meanwhile takes this one's place in mpv.
+    func seek(to seconds: Double, completion: @escaping () -> Void) {
+        guard !isShutDown, case .loaded = loadState, seconds.isFinite else { completion(); return }
+        pendingSeeks.append(SeekOperation(seconds: seconds, isAbsolute: true, completion: completion))
+        runNextSeek()
     }
 
     /// For the end of a scrub: lands on the keyframe next to `seconds` instead of decoding on
@@ -454,6 +485,15 @@ final class MPVPlayer {
     }
 
     func dismissTrackError() { trackError = nil }
+
+    /// Gives up on a file that hasn't opened, as if mpv had failed to open it, so the failure
+    /// offers Try Again. Stopping keeps a late start from playing behind the failure.
+    func failLoading(_ message: String) {
+        guard case .loading = loadState else { return }
+        command(["stop"])
+        loadState = .failed(message)
+        cancelSeeks()
+    }
 
     /// What the connection sustained for this file, once there are enough samples to say.
     var measuredDownloadSpeed: Double? {
@@ -745,7 +785,8 @@ final class MPVPlayer {
             // The clock extrapolates elapsed time; its rate changes only with state or speed.
             return
         case .double("duration", let value):
-            if let value, value.isFinite, value > 0 { duration = value }
+            // Read again every second; an unchanged value shouldn't notify every observer.
+            if let value, value.isFinite, value > 0, value != duration { duration = value }
         case .chapters(let value):
             if value != chapters { chapters = value }
         case .tracks(let value):
@@ -830,7 +871,7 @@ final class MPVPlayer {
             log.error("Seek did not finish; releasing Picture in Picture controls")
             cancelSeeks()
         }
-        command(["seek", String(operation.seconds), "relative"], replyID: id)
+        command(["seek", String(operation.seconds), operation.isAbsolute ? "absolute" : "relative"], replyID: id)
     }
 
     private func completeSeek() {

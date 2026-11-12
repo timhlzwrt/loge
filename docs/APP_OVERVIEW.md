@@ -51,7 +51,8 @@ navigation destinations.
 - `MetaDetailView.swift`: title details, seasons, episode cards, watched
   actions and next episode selection.
 - `PersonView.swift`: person details and role-filtered TMDB filmographies when
-  connected, with a Cinemeta name/credit fallback without TMDB.
+  connected. Without TMDB it says a filmography needs TMDB and shows the title the
+  person was opened from: Cinemeta's search no longer names cast or directors.
 - `SourcesView.swift`: source selection, autoplay and fallback candidates. Resolution
   groups retain addon order for ties, with cached-first, bitrate and file-size
   sorting plus a reported-bitrate cap; unknown rates stay visible.
@@ -188,9 +189,12 @@ controls and mpv's A/V offset. Run it on an iPad too: iPhone simulators have no 
 in Picture, so they take the path that pauses, while real iPhones and iPads keep playing.
 Actual screen-lock recovery is outside simulator verification and isn't a planned
 hardware-testing task. `DiscoveryTVTests` uses the same fixture for the remote's path through the player on
-tvOS: skip offers, Up Next (`PLAYBACK_FIXTURE_NEXT=1` offers a next episode), the panel,
-Sources and the failure screen. A `?fail-once=<anything>` query on the fixture's URL fails
-its first request, for Try Again.
+tvOS: skip offers, Up Next (`PLAYBACK_FIXTURE_NEXT=1` offers a next episode, `late` only
+after the end), the end card, the panel, Sources and the failure screen. A
+`?fail-once=<anything>` query on the fixture's URL fails its first request, for Try Again;
+`?hang=<anything>` never starts, for the 20-second open timeout.
+`TEST_RUNNER_PLAYBACK_FIXTURE_SHORT_URL` (a clip under 30 s, such as a second test addon
+on :8767) adds a switch to a shorter source.
 `DiscoveryTVTests.testLibraryFocusMovesBetweenRows`
 and the remote driver's `TEST_RUNNER_DISCOVERY_SCREEN=library` use an isolated
 library fixture for navigation checks without changing the user's saved titles.

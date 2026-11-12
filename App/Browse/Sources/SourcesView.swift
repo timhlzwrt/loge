@@ -13,7 +13,8 @@ struct SourcesView: View {
     @Environment(AddonStore.self) private var store
     @Environment(LibraryStore.self) private var library
     @Environment(\.dismiss) private var dismiss
-    @State private var results: [StreamProvider.ID: Result<[StreamSource], Error>] = [:]
+    /// Each addon's playable streams, read into details once as they arrive.
+    @State private var results: [StreamProvider.ID: Result<[ListedSource], Error>] = [:]
     @State private var hasAutoplayed = false
     @State private var playedAutomatically = false
     @State private var sourceOrder = StreamDetails.SortOrder.cachedFirst
@@ -21,10 +22,13 @@ struct SourcesView: View {
     @State private var maximumBitrate = 0
     #if os(macOS)
     @State private var selectedID: ListedSource.ID?
+    @FocusState private var isListFocused: Bool
     #endif
     /// Chosen in the sheet, to play once it has closed.
     @State private var pendingPlay: ListedSource?
     @State private var isAddingAddon = false
+    /// Resolution groups showing every row rather than the first few.
+    @State private var expandedGroups: Set<SourceSelection.Group.ID> = []
     @AppStorage(ConnectionSpeed.key) private var connectionSpeed = 0.0
     @Environment(PlaybackSession.self) private var playback
 
@@ -42,6 +46,15 @@ struct SourcesView: View {
                     Button("Add Addon") { isAddingAddon = true }
                         .buttonStyle(.glassProminent)
                         .foregroundStyle(.black)
+                    #if os(macOS)
+                    // The sheet's only way out otherwise; iOS has its Close button.
+                    if isChoosing {
+                        Button("Cancel") { dismiss() }
+                            .keyboardShortcut(.cancelAction)
+                            .buttonStyle(.glass)
+                            .tint(.clear)
+                    }
+                    #endif
                 }
                 #if os(iOS)
                 .overlay(alignment: .topTrailing) {
@@ -56,18 +69,22 @@ struct SourcesView: View {
                     }
                 }
                 #endif
-                .sheet(isPresented: $isAddingAddon) {
-                    NavigationStack {
-                        AddonsSettingsView()
-                            .toolbar {
-                                ToolbarItem(placement: .confirmationAction) {
-                                    Button("Done") { isAddingAddon = false }
-                                }
-                            }
-                    }
-                }
+                #if os(macOS)
+                .frame(width: isChoosing ? 520 : nil, height: isChoosing ? 360 : nil)
+                #endif
             } else {
                 content(providers)
+            }
+        }
+        // On the Group, so installing an addon swaps in the list without closing this sheet.
+        .sheet(isPresented: $isAddingAddon) {
+            NavigationStack {
+                AddonsSettingsView()
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { isAddingAddon = false }
+                        }
+                    }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -76,11 +93,12 @@ struct SourcesView: View {
         #if !os(tvOS)
         .navigationTitle(route.title)
         #endif
-        .task {
+        // Keyed by the addons, so one added from the empty state is asked too.
+        .task(id: providers.map(\.id)) {
+            guard !providers.isEmpty else { return }
             await load(providers)
             // Leaving Sources cancels loading even when a shared prefetched request finishes later.
             guard !Task.isCancelled else { return }
-            playContinuingSourceIfPossible()
             // Either way the attempt is over; without a match the list is the way forward.
             hasAutoplayed = true
         }
@@ -161,12 +179,13 @@ struct SourcesView: View {
     private func phoneSheet(_ groups: [SourceSelection.Group], providers: [StreamProvider]) -> some View {
         VStack(spacing: 0) {
             ZStack(alignment: .trailing) {
+                // The episode code goes under the series, where truncating the long name can't cut it off.
                 VStack(spacing: 1) {
-                    Text(route.title)
+                    Text(route.item.title)
                         .font(.headline)
                         .lineLimit(1)
-                    if let count = countLabel(groups) {
-                        Text(count)
+                    if let detail = [route.item.episodeCode, countLabel(groups)].compactMap({ $0 }).joined(separator: " · ").nilIfEmpty {
+                        Text(detail)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -207,9 +226,14 @@ struct SourcesView: View {
                     .foregroundStyle(.secondary)
             }
             .padding(.top, 20)
-            ScrollView {
-                list(groups, providers: providers, selectedID: selected)
-                    .padding(.horizontal, 20)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    list(groups, providers: providers, selectedID: selected)
+                        .padding(.horizontal, 20)
+                }
+                .onChange(of: selectedID) { _, id in
+                    if let id { proxy.scrollTo(id) }
+                }
             }
             HStack(spacing: 10) {
                 Spacer()
@@ -231,6 +255,20 @@ struct SourcesView: View {
         }
         .frame(width: 520, height: 600)
         .background(Color.canvas)
+        // The arrow keys move the selection, as in a Mac list, so Return can play any row.
+        .focusable()
+        .focusEffectDisabled()
+        .focused($isListFocused)
+        .onAppear { isListFocused = true }
+        .onMoveCommand { direction in
+            let ids = groups.flatMap(\.entries).map(\.id)
+            guard let index = selected.flatMap(ids.firstIndex(of:)) else { return }
+            switch direction {
+            case .up: selectedID = ids[max(index - 1, 0)]
+            case .down: selectedID = ids[min(index + 1, ids.count - 1)]
+            default: break
+            }
+        }
     }
     #endif
 
@@ -243,6 +281,8 @@ struct SourcesView: View {
         let recommended = recommendedID(in: groups)
         let failed = providers.filter { if case .failure = results[$0.id] { true } else { false } }
         let isLoading = providers.contains { results[$0.id] == nil }
+        // Folding never hides the rows the list points out.
+        let kept = Set([lastPlayed, recommended, selectedID].compactMap { $0 })
         ListContainer {
             sourceOptions
             if maximumBitrate > 0 {
@@ -250,15 +290,23 @@ struct SourcesView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
-            if route.autoplay && !hasAutoplayed && library.sources[route.item.metaID] != nil {
-                Text("Starting with your last source…")
+            if let status = autoplayStatus(providers: providers, lastPlayed: lastPlayed) {
+                Text(status)
                     .foregroundStyle(.secondary)
             }
             ForEach(groups) { group in
-                SourceGroupView(title: group.title) {
-                    ForEach(group.entries) { entry in
+                let isFoldable = group.entries.count > Self.foldedLength + 2
+                let isExpanded = !isFoldable || expandedGroups.contains(group.id)
+                let shown = isExpanded ? group.entries : group.entries.enumerated()
+                    .filter { $0.offset < Self.foldedLength || kept.contains($0.element.id) }
+                    .map(\.element)
+                SourceGroupView(title: "\(group.title) · \(group.entries.count)") {
+                    ForEach(shown) { entry in
                         row(entry, isLastPlayed: entry.id == lastPlayed, isRecommended: entry.id == recommended,
                             isSelected: entry.id == selectedID)
+                    }
+                    if isFoldable {
+                        foldButton(group.id, hidden: group.entries.count - shown.count, isExpanded: isExpanded)
                     }
                 }
             }
@@ -268,20 +316,71 @@ struct SourcesView: View {
             }
             if !failed.isEmpty {
                 HStack {
-                    Text(groups.isEmpty ? "Couldn't load sources." : "Some sources couldn't be loaded.")
+                    // Named by host, so the user knows which addon to check.
+                    let hosts = failed.map { URL(string: $0.manifestURL)?.host() ?? $0.name }
+                    Text("Couldn't load sources from \(hosts.formatted(.list(type: .and).locale(.interface))).")
                         .foregroundStyle(.secondary)
                     Spacer()
-                    Button("Retry") {
-                        for provider in failed { results[provider.id] = nil }
-                        Task { await load(failed) }
-                    }
+                    Button("Retry") { retry(failed) }
                 }
             }
             if groups.isEmpty && !isLoading && failed.isEmpty {
-                Text(maximumBitrate > 0 ? "No sources match this bitrate limit." : "No sources found.")
-                    .foregroundStyle(.secondary)
+                if maximumBitrate > 0 {
+                    Text("No sources match this bitrate limit.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    // An aggregator can come back empty when its own sources time out.
+                    HStack {
+                        Text("No sources found.")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Retry") { retry(providers) }
+                    }
+                }
             }
         }
+    }
+
+    /// Rows per resolution before the rest fold away; the sort already puts the best first.
+    private static let foldedLength = 5
+
+    /// Stays in place when pressed, so tvOS focus keeps a target while rows appear above it.
+    private func foldButton(_ id: SourceSelection.Group.ID, hidden: Int, isExpanded: Bool) -> some View {
+        Button {
+            if isExpanded { expandedGroups.remove(id) } else { expandedGroups.insert(id) }
+        } label: {
+            Text(isExpanded ? "Show fewer" : "Show \(hidden) more")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+                #if !os(tvOS)
+                .padding(.horizontal, 16)
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .contentShape(.rect)
+                #endif
+        }
+        #if !os(tvOS)
+        .buttonStyle(.plain)
+        #endif
+    }
+
+    /// What autoplay is waiting for, or that it can't continue, so the list underneath
+    /// isn't mistaken for a start that's still coming.
+    private func autoplayStatus(providers: [StreamProvider], lastPlayed: ListedSource.ID?) -> String? {
+        guard route.autoplay, !playedAutomatically, let remembered = library.sources[route.item.metaID],
+              providers.contains(where: { $0.id == remembered.providerURL })
+        else { return nil }
+        if !hasAutoplayed {
+            let host = URL(string: remembered.providerURL)?.host() ?? "your addon"
+            return "Waiting for \(host) to start your last source…"
+        }
+        // Still listed but not started (too large to start by itself): its row reads "Last played".
+        guard lastPlayed == nil, case .success = results[remembered.providerURL] else { return nil }
+        return "Your last source isn't listed now. Choose one below."
+    }
+
+    private func retry(_ providers: [StreamProvider]) {
+        for provider in providers { results[provider.id] = nil }
+        Task { await load(providers) }
     }
 
     private var sourceOptions: some View {
@@ -365,22 +464,12 @@ struct SourcesView: View {
                                 by: [sourceOrder, secondaryOrder])
     }
 
+    /// In the user's addon order.
     private func listedSources(_ providers: [StreamProvider]) -> [ListedSource] {
         providers.flatMap { provider -> [ListedSource] in
-            guard case .success(let streams) = results[provider.id] else { return [] }
-            return streams.enumerated()
-                .filter { $0.element.playbackURL != nil }
-                .map {
-                    ListedSource(id: "\(provider.id)#\($0.offset)", stream: $0.element, provider: provider,
-                                 details: details($0.element))
-                }
+            guard case .success(let entries) = results[provider.id] else { return [] }
+            return entries
         }
-    }
-
-    /// The length of the file as last played here beats the listed runtime, which is rounded.
-    private func details(_ stream: StreamSource) -> StreamDetails {
-        let played = library.progress[route.id].flatMap { $0.isEstimated == true ? nil : $0.duration }
-        return StreamDetails(stream, runtime: played ?? route.runtime)
     }
 
     /// Unknown bitrates pass, so a limit never hides sources that just don't say.
@@ -402,14 +491,25 @@ struct SourcesView: View {
 
     private func load(_ providers: [StreamProvider]) async {
         let route = route
-        await withTaskGroup(of: (StreamProvider.ID, Result<[StreamSource], Error>).self) { group in
+        // The length of the file as last played here beats the listed runtime, which is rounded.
+        let runtime = library.progress[route.id].flatMap { $0.isEstimated == true ? nil : $0.duration } ?? route.runtime
+        let rememberedProvider = library.sources[route.item.metaID]?.providerURL
+        await withTaskGroup(of: (StreamProvider.ID, Result<[ListedSource], Error>).self) { group in
             for provider in providers where results[provider.id] == nil {
                 group.addTask {
                     do {
                         // Awaited on its own line: wrapped directly in `.success(...)`, the Release
                         // build never delivered the result and the list kept loading.
                         let streams = try await provider.streams(type: route.type, id: route.id)
-                        return (provider.id, .success(streams))
+                        // Read into details once here: in the view body, every redraw re-ran the
+                        // tag patterns over every stream, during playback too.
+                        let listed = streams.enumerated()
+                            .filter { $0.element.playbackURL != nil }
+                            .map {
+                                ListedSource(id: "\(provider.id)#\($0.offset)", stream: $0.element, provider: provider,
+                                             details: StreamDetails($0.element, runtime: runtime))
+                            }
+                        return (provider.id, .success(listed))
                     } catch {
                         return (provider.id, .failure(error))
                     }
@@ -418,6 +518,11 @@ struct SourcesView: View {
             for await (id, result) in group {
                 guard !Task.isCancelled else { return }
                 results[id] = result
+                // Autoplay needs only the remembered addon, not the slowest of the others.
+                if id == rememberedProvider {
+                    playContinuingSourceIfPossible()
+                    hasAutoplayed = true
+                }
             }
         }
     }
@@ -426,10 +531,10 @@ struct SourcesView: View {
     /// Never its saved URL, since a stream host can refuse an old link.
     private func playContinuingSourceIfPossible() {
         guard route.autoplay, !hasAutoplayed, let remembered = library.sources[route.item.metaID],
-              case .success(let streams) = results[remembered.providerURL],
-              let stream = SourceSelection.continuing(remembered, itemID: route.id, in: streams.filter(permitsAutomaticPlayback)),
-              let provider = store.addons.streamProviders(type: route.type, id: route.id)
-                .first(where: { $0.id == remembered.providerURL })
+              case .success(let entries) = results[remembered.providerURL],
+              let stream = SourceSelection.continuing(
+                remembered, itemID: route.id, in: entries.filter { permitsAutomaticPlayback($0.details) }.map(\.stream)),
+              let provider = entries.first?.provider
         else { return }
         hasAutoplayed = true
         playedAutomatically = true
@@ -459,14 +564,13 @@ struct SourcesView: View {
     /// What to try if `request` doesn't open, among the sources allowed to play automatically.
     private func fallbacks(for request: PlaybackRequest) -> [PlaybackRequest] {
         let providers = store.addons.streamProviders(type: route.type, id: route.id)
-        let candidates = listedSources(providers).filter { permitsAutomaticPlayback($0.stream) }
+        let candidates = listedSources(providers).filter { permitsAutomaticPlayback($0.details) }
         return SourceSelection.fallbacks(for: request.url, bingeGroup: request.bingeGroup, among: candidates)
             .compactMap { self.request(for: $0.stream, from: $0.provider) }
     }
 
-    private func permitsAutomaticPlayback(_ stream: StreamSource) -> Bool {
-        let details = details(stream)
-        return withinBitrateLimit(details)
+    private func permitsAutomaticPlayback(_ details: StreamDetails) -> Bool {
+        withinBitrateLimit(details)
             && details.permitsAutomaticPlayback(type: route.type, maximumFileSize: PlaybackPreferences.maximumAutomaticFileSize)
     }
 }

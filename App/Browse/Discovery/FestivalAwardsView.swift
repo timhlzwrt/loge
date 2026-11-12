@@ -12,14 +12,6 @@ struct FestivalAwardsView: View {
     @State private var failures = Set<String>()
     @State private var attempt = 0
 
-    private var filmWidth: CGFloat {
-        #if os(macOS)
-        160
-        #else
-        Metrics.posterWidth
-        #endif
-    }
-
     private var films: [FestivalFilm] {
         var result: [FestivalFilm] = []
         for award in edition?.awards ?? [] where award.isFilm && (section == nil || award.section == section) {
@@ -33,30 +25,39 @@ struct FestivalAwardsView: View {
     }
 
     var body: some View {
+        // Built once per update: the grid and the count both read it, and every resolved title updates the view.
+        let films = self.films
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 if let edition {
                     HStack(alignment: .center, spacing: 24) {
                         CollectionArtwork(collection: collection)
                             .frame(width: Metrics.posterWidth * 1.4, height: Metrics.posterWidth * 0.72)
+                            .clipShape(.rect(cornerRadius: Metrics.posterRadius))
                             .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 8) {
                             Text("\(String(edition.year)) winners").font(.sectionTitle)
                             Text("\(films.count) films").font(.metaLine).foregroundStyle(.secondary)
-                            NavigationLink("All awards", value: FestivalRoute.allAwards(collection))
+                            NavigationLink(value: FestivalRoute.allAwards(collection)) {
+                                Text("All awards").frame(minHeight: 44).contentShape(.rect)
+                            }
                             .font(.metaLine)
                             .buttonStyle(.plain)
                         }
                     }
                     sectionPicker(edition)
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: filmWidth), spacing: Metrics.rowSpacing,
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: Metrics.posterWidth), spacing: Metrics.rowSpacing,
                                                 alignment: .top)], alignment: .leading, spacing: 24) {
                         ForEach(films) { film in
                             NavigationLink(value: FestivalRoute.film(title: film.title, collection: collection)) {
                                 FestivalFilmTile(film: film, meta: matches[film.title],
                                                  loading: !finished.contains(film.title) && !failures.contains(film.title))
                             }
-                            .tileButtonStyle()
+                            #if os(tvOS)
+                            .buttonStyle(.borderless)
+                            #else
+                            .buttonStyle(.plain)
+                            #endif
                         }
                     }
                     .accessibilityIdentifier("festival-films")
@@ -67,7 +68,9 @@ struct FestivalAwardsView: View {
                         }.font(.metaLine)
                     }
                     Divider()
-                    NavigationLink("Previous recorded winners", value: FestivalRoute.recordedWinners(collection))
+                    NavigationLink(value: FestivalRoute.recordedWinners(collection)) {
+                        Text("Previous recorded winners").frame(minHeight: 44).contentShape(.rect)
+                    }
                     .font(.metaLine)
                 } else if failed {
                     ContentUnavailableView("Award list unavailable", systemImage: "film",
@@ -188,6 +191,10 @@ private struct FestivalFilmTile: View {
             }
             .aspectRatio(2 / 3, contentMode: .fit)
             .clipShape(.rect(cornerRadius: Metrics.posterRadius))
+            #if os(tvOS)
+            // Only the poster lifts, as on credit tiles; a card around the text clipped its first letters.
+            .hoverEffect(.highlight)
+            #endif
             Text(film.title).font(.cardTitle).foregroundStyle(.primary).lineLimit(2)
             Text(film.awardSummary).font(.metaLine).foregroundStyle(.secondary).lineLimit(2)
             if film.awards.count > 1 {

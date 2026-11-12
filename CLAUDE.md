@@ -117,7 +117,8 @@ best-quality order, retry for unreachable addons, director and cast on details, 
 Playback menu, VoiceOver labels in the player. From using it: Picture in Picture no longer
 starts after the player closed, search uses only the built-in catalogs, scrub thumbnails and
 keyframe seeks, stream lists fetched while details are open and kept 10 minutes, Cast & Crew
-and Information on details with person pages (a Cinemeta name search; no people database).
+and Information on details with person pages (filmographies need TMDB: since November 2026
+Cinemeta's search no longer names cast or directors, so without TMDB the page says so).
 Phase 4 and 2 November: TMDB metadata, filmographies and festival collections (PR #9); both
 devices get a Release build of main every night (`nightly-deploy.sh`); sources load in
 Release builds again (an optimizer bug lost the task group's result); festival queries take
@@ -382,6 +383,27 @@ redraw for the timeline, and the menus' closures made SwiftUI rebuild them each 
 `AudioMenu` and `MoreMenu` are `Equatable` on the player and used with `.equatable()`; measured with
 `_logChanges`, an open Audio menu went from a rebuild per second to none. Playback UI tests expect the
 simulator in portrait; one left in landscape fails `testEpisodePausePersistsAndResumesAfterRelaunch`.
+12 November, UX/UI sweep: removing an addon, the TMDB token, Trakt sign-out and app keys, Sync
+disconnect, device revoke, leaving a shared setup, deleting a list and marking a season unwatched
+all ask first. iPad has one window (`UIApplicationSupportsMultipleScenes` NO): every window would
+share the one `PlaybackSession` and present its player. The Mac has no New Window and no Player item
+in Window; ⌘, opens Settings, ⌘F Search, and ⌘←/⌘→/⌘. apply only while the player window is key.
+Dates and numbers use `Locale.interface` (en_US) so they match the English UI; clock times ("Ends at",
+History) follow the device. Person filmographies need TMDB; the Cinemeta name search is gone (it no
+longer returns cast or directors), so without TMDB the page says so and shows the title it came from.
+TMDB cast puts directors first, then the top 20 billed, then writers. Sources headings carry counts and
+fold past seven rows to five ("Show N more"); autoplay says what it waits for. Player: an end card
+(Start Over) when nothing follows, "Ends at", cuts in the timeline at skip segments, the display kept
+awake only while loading or playing (Mac: a `ProcessInfo` activity), a 20 s open timeout that fails with
+Try Again, and resuming past a shorter source's end seeks to 30 s before it instead of finishing.
+tvOS skip offers sit bottom trailing; down from Skip Credits reaches Up Next. The iOS timeline is a
+`Slider` to accessibility (10 s steps, spoken position), so FlowTests drag it. New DEBUG fixture screens
+(`--discovery-ui-test -DISCOVERY_SCREEN …`): `series`, `details-unmatched`, `details-busy`,
+`sources-folded|autoplay` (need `Tools/test-addon.py --port 8769 --many --delay 5`), `sources-empty(-sheet)`,
+`settings-review|failed`, `trakt-signin|keys`, `carousel-resume`; playback fixture `PLAYBACK_FIXTURE_NEXT=late`,
+`PLAYBACK_FIXTURE_SHORT_URL` and `?hang=`. Skipped: PiP tests on iPhone simulators, account sharing
+without a code file, the TMDB filmography tests without a token file. Unverified: everything Mac-only
+(built, not run), live TMDB (fixture data only), the iPad hardware keyboard, and hardware behaviour.
 
 Verification for these tasks: reuse `LibraryStoreTests`, `TraktTests`,
 `UITests/FlowTests.swift`, `UITests/PlaybackRegressionTests.swift`,

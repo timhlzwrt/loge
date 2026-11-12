@@ -140,9 +140,9 @@ is in the public domain, so no third-party artwork appears.
 - **No Apple TV Top Shelf extension.** Continue Watching inside the app works;
   system Home Screen integration is on hold.
 - **English interface only.** Audio and subtitle language preferences are separate.
-- **Recommendations need a TMDB token.** Without one, Home has only its discovery
-  feeds. Letterboxd links/lists do not mean Letterboxd ratings or account sync
-  are integrated.
+- **Recommendations and filmographies need a TMDB token.** Without one, Home has only
+  its discovery feeds and a person's page lists only the title it was opened from.
+  Letterboxd links/lists do not mean Letterboxd ratings or account sync are integrated.
 
 ### Testing scope
 

@@ -97,7 +97,12 @@ struct RemoteImage<Content: View>: View {
     var body: some View {
         content(phase)
             .task(id: url) {
-                guard let url, ArtworkCache.cached(url) == nil else { return }
+                guard let url else { return }
+                // Held here too: if the cache evicts an image on screen, nothing would load it again.
+                if let cached = ArtworkCache.cached(url) {
+                    loaded = (url, cached)
+                    return
+                }
                 let image = await ArtworkCache.image(for: url)
                 loaded = (url, image)
             }
@@ -105,8 +110,8 @@ struct RemoteImage<Content: View>: View {
 
     private var phase: Phase {
         guard let url else { return .failure }
+        if let loaded, loaded.url == url { return loaded.image.map(Phase.success) ?? .failure }
         if let image = ArtworkCache.cached(url) { return .success(image) }
-        guard let loaded, loaded.url == url else { return .loading }
-        return loaded.image.map(Phase.success) ?? .failure
+        return .loading
     }
 }

@@ -6,7 +6,6 @@ struct DiscoveryCollectionRow: View {
     let title: String
     let collections: [FilmCollection]
     var onFocus: (FilmCollection) -> Void = { _ in }
-    @FocusState private var focusedCollection: FilmCollection?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.headerSpacing) {
@@ -22,16 +21,19 @@ struct DiscoveryCollectionRow: View {
                             if tmdb.isConfigured, let id = collection.tmdbPersonID {
                                 NavigationLink(value: PersonRoute(person: Person(
                                     name: collection.name, roles: [.director], tmdbID: id, portraitURL: collection.artworkURL))) {
-                                    CollectionTile(collection: collection)
+                                    tile(collection)
                                 }
                             } else {
                                 NavigationLink(value: collection) {
-                                    CollectionTile(collection: collection)
+                                    tile(collection)
                                 }
                             }
                         }
-                        .tileButtonStyle()
-                        .focused($focusedCollection, equals: collection)
+                        #if os(tvOS)
+                        .buttonStyle(.borderless)
+                        #else
+                        .buttonStyle(.plain)
+                        #endif
                     }
                 }
                 #if os(tvOS)
@@ -42,15 +44,15 @@ struct DiscoveryCollectionRow: View {
             .scrollClipDisabled()
             .accessibilityIdentifier(collections.first?.isFestival == true ? "festival-collections" : "director-collections")
         }
-        .onChange(of: focusedCollection) {
-            if let focusedCollection { onFocus(focusedCollection) }
-        }
-        .task(id: "\(tmdb.revision):\(focusedCollection?.id ?? "")") {
-            guard tmdb.isConfigured, let id = focusedCollection?.tmdbPersonID else { return }
-            do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
-            // Reused by the person page; a preload failure leaves its retry flow intact.
-            _ = try? await tmdb.personDetails(id: id)
-        }
+    }
+
+    private func tile(_ collection: FilmCollection) -> some View {
+        CollectionTile(collection: collection)
+            #if os(tvOS)
+            // Each tile watches its own focus, so a move updates the two tiles involved, not the row.
+            .modifier(ReportsFocus { onFocus(collection) })
+            .modifier(PrefetchesFilmography(personID: tmdb.isConfigured ? collection.tmdbPersonID : nil))
+            #endif
     }
 }
 
@@ -67,6 +69,10 @@ private struct CollectionTile: View {
             CollectionArtwork(collection: collection)
                 .frame(width: width, height: collection.isFestival ? width * 9 / 16 : width * 1.25)
                 .clipShape(.rect(cornerRadius: Metrics.posterRadius))
+                #if os(tvOS)
+                // Only the artwork lifts, as on credit tiles; a card around the text clipped its first letters.
+                .hoverEffect(.highlight)
+                #endif
                 .accessibilityHidden(true)
             Text(collection.name)
                 .font(.cardTitle)
@@ -150,6 +156,9 @@ struct RecordedCollectionView: View {
                             NavigationLink(value: film.title) {
                                 VStack(alignment: .leading, spacing: 6) {
                                     PosterTile(meta: film.title, width: nil)
+                                        #if os(tvOS)
+                                        .hoverEffect(.highlight)
+                                        #endif
                                     Text(film.title.name)
                                         .font(.cardTitle)
                                         .foregroundStyle(.primary)
@@ -159,7 +168,11 @@ struct RecordedCollectionView: View {
                                     }
                                 }
                             }
-                            .tileButtonStyle()
+                            #if os(tvOS)
+                            .buttonStyle(.borderless)
+                            #else
+                            .buttonStyle(.plain)
+                            #endif
                         }
                     }
                     .accessibilityElement(children: .contain)

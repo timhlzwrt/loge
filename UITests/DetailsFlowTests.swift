@@ -20,7 +20,9 @@ final class DetailsFlowTests: XCTestCase {
     }
 
     @MainActor
-    func testDirectorOpensTheirFilms() {
+    func testDirectorPageSaysTheFilmographyNeedsTMDB() {
+        // Without TMDB there's no filmography: Cinemeta's search no longer says who worked on what.
+        // TMDBFilmographyTests covers the TMDB filmography.
         open("Interstellar")
         screenshot("details-movie-top")
         XCTAssertTrue(app.staticTexts["Cast & Crew"].waitForExistence(timeout: 15))
@@ -30,22 +32,24 @@ final class DetailsFlowTests: XCTestCase {
         screenshot("details-movie-credits")
 
         person("Christopher Nolan").tap()
-        XCTAssertTrue(app.staticTexts["Movies"].waitForExistence(timeout: 20))
-        XCTAssertTrue(app.buttons["Inception"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Filmography needs TMDB"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Connect TMDB in Settings to list Christopher Nolan's films and series."].exists)
+        XCTAssertTrue(app.staticTexts["Credited on"].exists)
         XCTAssertTrue(app.buttons["Interstellar"].exists)
+        // The name heads the page once, beside the statement, not again in the navigation bar.
+        XCTAssertEqual(app.staticTexts.matching(identifier: "Christopher Nolan").count, 1)
         screenshot("person-director")
     }
 
     @MainActor
     func testActorPageKeepsTheSeriesTheyWereFoundOn() {
-        // Searching Cinemeta for Bryan Cranston doesn't return Breaking Bad itself.
         open("Breaking Bad")
         XCTAssertTrue(app.staticTexts["Cast & Crew"].waitForExistence(timeout: 15))
         app.swipeUp()
         screenshot("details-series-credits")
 
         person("Bryan Cranston").tap()
-        XCTAssertTrue(app.staticTexts["Series"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.staticTexts["Credited on"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["Breaking Bad"].exists)
         screenshot("person-actor")
     }

@@ -14,7 +14,9 @@ final class PlaybackSession {
     private(set) var player: MPVPlayer?
     private(set) var pictureInPicture: PictureInPicture?
     /// The following episode, looked up as the current one nears its end.
-    private(set) var next: PlaybackRequest?
+    private(set) var next: PlaybackRequest? {
+        didSet { nowPlaying?.canPlayNext = next != nil }
+    }
     /// Whether the player screen should show; false while only the floating window does.
     var isScreenPresented = false
     /// The source that was asked for didn't open, and another is being tried.
@@ -44,9 +46,15 @@ final class PlaybackSession {
     @ObservationIgnored private var needsEstimatedSeek = false
     @ObservationIgnored private var estimatedResumeFraction: Double?
     @ObservationIgnored private var estimatedResumePosition: Double?
+    /// Where this file was opened, in seconds: another source's position after a switch can lie
+    /// past the end of a shorter file, which mpv then opens at its end.
+    @ObservationIgnored private var openedAt: Double?
     @ObservationIgnored private var pendingRestore: ((Bool) -> Void)?
     @ObservationIgnored private var isInBackground = false
     @ObservationIgnored private var tasks: [Task<Void, Never>] = []
+    #if os(macOS)
+    @ObservationIgnored private var displayActivity: NSObjectProtocol?
+    #endif
 
     init(library: LibraryStore, addons: AddonStore, trakt: TraktAccount, accountSync: AccountSync? = nil) {
         self.library = library
@@ -85,20 +93,31 @@ final class PlaybackSession {
         }
         self.player = player
         self.pictureInPicture = pictureInPicture
-        nowPlaying = NowPlaying(player: player)
+        nowPlaying = NowPlaying(player: player) { [weak self] in self?.playNext() }
         observe(player)
         load(request, resumeEstimatedProgress: !usesCurrentPosition)
         isScreenPresented = true
-        #if !os(macOS)
-        UIApplication.shared.isIdleTimerDisabled = true
-        #endif
     }
 
     func end() {
         isScreenPresented = false
         stopPlayback()
-        #if !os(macOS)
-        UIApplication.shared.isIdleTimerDisabled = false
+        keepDisplayAwake(false)
+    }
+
+    /// The screen stays on while a video plays or is about to, and may sleep once it's paused.
+    private func keepDisplayAwake(_ awake: Bool) {
+        #if os(macOS)
+        // mpv's video output on the Mac doesn't hold this itself, as AVPlayer would.
+        if awake, displayActivity == nil {
+            displayActivity = ProcessInfo.processInfo.beginActivity(
+                options: [.idleDisplaySleepDisabled, .userInitiated], reason: "Playing video")
+        } else if !awake, let displayActivity {
+            ProcessInfo.processInfo.endActivity(displayActivity)
+            self.displayActivity = nil
+        }
+        #else
+        UIApplication.shared.isIdleTimerDisabled = awake
         #endif
     }
 
@@ -237,11 +256,13 @@ final class PlaybackSession {
         estimatedResumeFraction = resumeEstimatedProgress
             ? request.item.flatMap { library.estimatedFraction(for: $0.id) } : nil
         estimatedResumePosition = nil
+        openedAt = estimatedResumeFraction == nil ? request.startAt : nil
         openingTimeout?.cancel()
         openingTimeout = Task {
             // Debrid links that are still being cached can hang instead of failing.
             do { try await Task.sleep(for: .seconds(20)) } catch { return }
-            if current == request && isOpeningFile { tryAnotherSource() }
+            guard current == request && isOpeningFile, !tryAnotherSource() else { return }
+            player.failLoading("timed out")
         }
         externalSubtitles?.cancel()
         externalSubtitles = Task { await findSubtitles(for: request, preferring: subtitles) }
@@ -324,6 +345,7 @@ final class PlaybackSession {
     }
 
     private func statusChanged(_ status: MPVPlayer.Status) {
+        keepDisplayAwake([.loading, .playing, .buffering].contains(status))
         let wasOpeningFile = isOpeningFile
         if isOpeningFile && status != .loading && status != .idle {
             isOpeningFile = false
@@ -345,6 +367,17 @@ final class PlaybackSession {
             recordProgress()
             scrobble(.pause)
         case .ended:
+            if openedPastEnd, let player, let duration = player.duration {
+                // Not watched: nothing played. Near the end, as close as this file allows, and
+                // not saved before that seek lands, so the time between isn't saved as the end.
+                let opened = openedAt
+                player.seek(to: max(duration - 30, 0)) { [weak self] in
+                    // Unless another file has been opened meanwhile.
+                    if self?.openedAt == opened { self?.openedAt = nil }
+                }
+                player.play()
+                return
+            }
             recordProgress()
             lookUpNextIfDue()
             continueInPictureInPicture()
@@ -367,7 +400,7 @@ final class PlaybackSession {
     /// reporting it would cost another device its position: a pause replaces that position, and
     /// a start removes it.
     private func reportableProgress(for item: WatchItem) -> Double? {
-        guard estimatedResumeFraction == nil, let player, let duration = player.duration, duration > 0,
+        guard estimatedResumeFraction == nil, !openedPastEnd, let player, let duration = player.duration, duration > 0,
               library.recordsProgress(for: item.id, at: player.position) else { return nil }
         return player.position / duration * 100
     }
@@ -380,7 +413,15 @@ final class PlaybackSession {
         // The seek is asynchronous; preserve the remote entry until its position arrives.
         let target = max(fraction * duration - 5, 0)
         estimatedResumePosition = target
-        player.seek(to: target)
+        player.seek(to: target) { [weak self] in
+            // Or until playback restarts anywhere else: a seek back made before this one landed
+            // replaces it, and waiting for the target would hold back saving and scrobbling
+            // until playback passed it again. A new file has cleared the target already.
+            guard let self, estimatedResumePosition == target else { return }
+            estimatedResumePosition = nil
+            estimatedResumeFraction = nil
+            if player.status == .playing { scrobble(.start) }
+        }
         return true
     }
 
@@ -392,9 +433,15 @@ final class PlaybackSession {
         ConnectionSpeed.record(speed)
     }
 
+    /// Whether the file opened at its end because the position it was opened at lies beyond it.
+    private var openedPastEnd: Bool {
+        guard let openedAt, let duration = player?.duration else { return false }
+        return openedAt >= duration - 1
+    }
+
     private func recordProgress(flushSync: Bool = true) {
         // Live streams have no duration, and nothing is known before the file has loaded.
-        guard !isOpeningFile, estimatedResumeFraction == nil, let item = current?.item, let player,
+        guard !isOpeningFile, estimatedResumeFraction == nil, !openedPastEnd, let item = current?.item, let player,
               let duration = player.duration, player.position > 0 else { return }
         library.record(item, position: player.position, duration: duration)
         lastRecordedPosition = player.position
@@ -527,11 +574,22 @@ final class PlaybackSession {
         isLookingUpNext = true
         let episodes = episodes
         tasks.append(Task {
-            let found = try? await NextEpisode.request(after: current, episodes: episodes)
-            // The episode may have changed while the lookup ran.
-            guard self.current == current else { return }
-            self.next = found
-            if self.player?.status == .ended { self.continueInPictureInPicture() }
+            do {
+                let found = try await NextEpisode.request(after: current, episodes: episodes)
+                // The episode may have changed while the lookup ran.
+                guard self.current == current else { return }
+                self.next = found
+                if self.player?.status == .ended { self.continueInPictureInPicture() }
+            } catch {
+                guard !Task.isCancelled, self.current == current else { return }
+                log.error("Next episode lookup failed: \(error.localizedDescription)")
+                // Tried again later rather than on every position update, so a struggling addon
+                // isn't asked each second; at the end, nothing else would ask again.
+                do { try await Task.sleep(for: .seconds(30)) } catch { return }
+                guard self.current == current else { return }
+                self.isLookingUpNext = false
+                self.lookUpNextIfDue()
+            }
         })
     }
 }

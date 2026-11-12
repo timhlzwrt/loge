@@ -4,6 +4,14 @@ import SwiftUI
 struct HomeView: View {
     /// Replaced on pull-to-refresh, which rebuilds the rows so they load again.
     @State private var refreshID = UUID()
+    /// Returning to Home runs `.task` again; its artwork is already cached by then.
+    @State private var prefetched = false
+    #if !os(tvOS)
+    /// Opened by the carousel's Play. Declared here rather than in the carousel's lazy stacks,
+    /// where navigation destinations aren't reliably found.
+    @State private var playing: SourcesRoute?
+    @State private var opening: MetaPreview?
+    #endif
     #if os(iOS)
     /// The scroll view runs under the status bar, so what it holds can't read this itself.
     @State private var topInset: CGFloat = 0
@@ -16,7 +24,7 @@ struct HomeView: View {
         #else
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 28) {
-                FeaturedCarousel(movies: sources[0], series: sources[1])
+                FeaturedCarousel(movies: sources[0], series: sources[1], playing: $playing, opening: $opening)
                     #if os(iOS)
                     .overlay(alignment: .topTrailing) {
                         if Metrics.isPhone { settingsButton }
@@ -35,12 +43,19 @@ struct HomeView: View {
             .padding(.bottom, 32)
             .id(refreshID)
         }
-        .task(id: refreshID) {
+        .task {
+            guard !prefetched else { return }
+            prefetched = true
             await prefetchArtwork(of: sources)
         }
         .refreshable {
+            // The spinner stays until every row's first page is fresh; then the rows rebuild from them.
+            await CatalogCache.shared.expireAll()
+            await prefetchArtwork(of: sources)
             refreshID = UUID()
         }
+        .navigationDestination(item: $playing) { SourcesView(route: $0) }
+        .navigationDestination(item: $opening) { MetaDetailView(preview: $0) }
         // The hero starts at the top edge of the screen, under the status bar or toolbar.
         .ignoresSafeArea(edges: .top)
         .background(Color.canvas)

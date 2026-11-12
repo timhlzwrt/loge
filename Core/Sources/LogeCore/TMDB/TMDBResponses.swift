@@ -47,16 +47,17 @@ struct DetailsResponse: Decodable {
         let genres = genres?.compactMap { nonempty($0.name) }
         let countryNames = production_countries?.compactMap { country in
             nonempty(country.name) ?? nonempty(country.iso_3166_1).map {
-                Locale(identifier: "en_US").localizedString(forRegionCode: $0) ?? $0
+                Locale.interface.localizedString(forRegionCode: $0) ?? $0
             }
         } ?? []
         let countries = countryNames.isEmpty ? origin_country?.compactMap { code in
-            nonempty(code).map { Locale(identifier: "en_US").localizedString(forRegionCode: $0) ?? $0 }
+            nonempty(code).map { Locale.interface.localizedString(forRegionCode: $0) ?? $0 }
         } : countryNames
         let companies = production_companies?.compactMap { nonempty($0.name) }
         let rating = vote_average.flatMap { value in
             value.isFinite && (0...10).contains(value) && (vote_count ?? 0) > 0 ? value : nil
         }
+        let recommended = recommended(isMovie: isMovie)
         return TMDBDetails(
             overview: nonempty(overview),
             posterURL: imageURL(poster_path, size: "w500"),
@@ -74,12 +75,14 @@ struct DetailsResponse: Decodable {
             rating: rating, voteCount: vote_count.flatMap { $0 >= 0 ? $0 : nil },
             budget: isMovie ? budget.flatMap { $0 > 0 ? $0 : nil } : nil,
             revenue: isMovie ? revenue.flatMap { $0 > 0 ? $0 : nil } : nil,
-            tmdbID: id, recommendations: recommended(isMovie: isMovie))
+            tmdbID: id, recommendations: recommended.titles, recommendationsAreSimilar: recommended.areSimilar)
     }
 
-    private func recommended(isMovie: Bool) -> [TMDBCreditTitle] {
+    private func recommended(isMovie: Bool) -> (titles: [TMDBCreditTitle], areSimilar: Bool) {
         let recommended = recommendations?.titles(isMovie: isMovie, excluding: id) ?? []
-        return recommended.isEmpty ? similar?.titles(isMovie: isMovie, excluding: id) ?? [] : recommended
+        guard recommended.isEmpty else { return (recommended, false) }
+        let similar = similar?.titles(isMovie: isMovie, excluding: id) ?? []
+        return (similar, !similar.isEmpty)
     }
 }
 
@@ -148,8 +151,17 @@ struct CreditsResponse: Decodable {
                 add(credit, role: .writer)
             }
         }
-        return people
+        // TMDB's cast runs on to dozens of uncredited extras, mostly without photos, so the
+        // director came last, after all of them. Directors lead, as a film's credits do.
+        let directors = people.filter { $0.roles.contains(.director) }
+        let cast = people.filter { !$0.roles.contains(.director) && $0.roles.contains(.actor) }.prefix(Self.castLimit)
+        let shown = Set(cast.map(\.id))
+        let writers = people.filter { !$0.roles.contains(.director) && $0.roles.contains(.writer) && !shown.contains($0.id) }
+        return directors + cast + writers
     }
+
+    /// The top-billed cast, as TMDB's own title pages show before "Full Cast & Crew".
+    static let castLimit = 20
 }
 
 struct PersonResponse: Decodable {

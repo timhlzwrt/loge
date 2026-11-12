@@ -13,7 +13,8 @@ import XCTest
 /// Then append one command per line to `$REMOTE_DIR/commands`:
 /// `up`, `down`, `left`, `right`, `select`, `hold-select`, `menu`, `playpause`,
 /// `type <text>`, `wait <seconds>` or `stop`. After running each line the driver
-/// appends that line's number to `$REMOTE_DIR/done`.
+/// appends that line's number to `$REMOTE_DIR/done`. With `TEST_RUNNER_PLAYBACK_FIXTURE_URL`
+/// (and optionally `TEST_RUNNER_PLAYBACK_FIXTURE_NEXT`) it opens the playback fixture.
 final class RemoteDriverTests: XCTestCase {
     @MainActor
     func testDriveRemote() throws {
@@ -28,6 +29,11 @@ final class RemoteDriverTests: XCTestCase {
         if let path = ProcessInfo.processInfo.environment["SYNC_TEST_CODE_FILE"] {
             app.launchArguments += ["--sync-ui-test"]
             app.launchEnvironment["SYNC_TEST_CODE_FILE"] = path
+        } else if ProcessInfo.processInfo.environment["PLAYBACK_FIXTURE_URL"] != nil {
+            app.launchArguments += ["--playback-ui-test"]
+            for key in ["PLAYBACK_FIXTURE_URL", "PLAYBACK_FIXTURE_NEXT"] {
+                app.launchEnvironment[key] = ProcessInfo.processInfo.environment[key]
+            }
         } else if let screen = ProcessInfo.processInfo.environment["DISCOVERY_SCREEN"] {
             app.launchArguments += ["--discovery-ui-test"]
             app.launchEnvironment["DISCOVERY_SCREEN"] = screen

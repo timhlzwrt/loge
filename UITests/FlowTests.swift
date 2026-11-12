@@ -485,7 +485,7 @@ final class FlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 5))
         let timeline = app.sliders["Playback position"]
         XCTAssertTrue(timeline.waitForExistence(timeout: 5))
-        timeline.adjust(toNormalizedSliderPosition: 0.2)
+        drag(timeline, by: 0.2)
         let pausedPosition = app.sliders["Playback position"].value as? String
         let pip = app.buttons["Picture in Picture"]
         guard pip.waitForExistence(timeout: 10) else { throw XCTSkip("Picture in Picture isn't available on this simulator") }
@@ -531,6 +531,14 @@ final class FlowTests: XCTestCase {
         app.buttons["Close"].tap()
     }
 
+    /// The bar moves by how far a drag travels rather than to where it lands, as a finger would
+    /// use it; `adjust(toNormalizedSliderPosition:)` needs a system slider's scrubber.
+    @MainActor
+    private func drag(_ timeline: XCUIElement, by fraction: Double) {
+        let middle = timeline.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        middle.press(forDuration: 0.05, thenDragTo: timeline.coordinate(withNormalizedOffset: CGVector(dx: 0.5 + fraction, dy: 0.5)))
+    }
+
     @MainActor
     func testTransportSeeksPreservePlaybackState() {
         installTestAddonIfNeeded(name: "Playback Test Streams", manifestURL: "http://127.0.0.1:8766/manifest.json")
@@ -546,13 +554,18 @@ final class FlowTests: XCTestCase {
         }
         XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 5))
         let timeline = app.sliders["Playback position"]
+        // The value is spoken, as in "12 seconds of 1 minute".
         func position() -> Double? {
-            guard let value = timeline.value as? String else { return nil }
-            let parts = value.split(separator: ":").compactMap { Double($0) }
-            guard parts.count >= 2 else { return nil }
-            return parts.reduce(0) { $0 * 60 + $1 }
+            guard let value = (timeline.value as? String)?.components(separatedBy: " of ").first else { return nil }
+            let units: [String: Double] = ["hour": 3600, "hours": 3600, "minute": 60, "minutes": 60, "second": 1, "seconds": 1]
+            let words = value.replacingOccurrences(of: ",", with: "").split(separator: " ")
+            var total: Double?
+            for (number, unit) in zip(words, words.dropFirst()) {
+                if let n = Double(number), let factor = units[String(unit)] { total = (total ?? 0) + n * factor }
+            }
+            return total
         }
-        timeline.adjust(toNormalizedSliderPosition: 0)
+        drag(timeline, by: -0.5)
         expectation(for: NSPredicate { _, _ in position() == 0 }, evaluatedWith: nil)
         waitForExpectations(timeout: 10)
         app.buttons["Forward 10 seconds"].tap()
@@ -663,7 +676,9 @@ final class FlowTests: XCTestCase {
             language.tap()
             XCTAssertFalse(app.alerts.firstMatch.exists)
             app.buttons["Subtitles"].tap()
-            let subtitle = index == 1 ? app.buttons["Off"] : app.buttons.matching(NSPredicate(format: "label CONTAINS %@", index == 0 ? "German" : "English")).firstMatch
+            // Any two tracks: which languages the addons offer follows the device's languages.
+            let tracks = app.buttons.matching(NSPredicate(format: "label CONTAINS ' · '"))
+            let subtitle = index == 1 ? app.buttons["Off"] : tracks.element(boundBy: index == 0 ? 0 : 1)
             XCTAssertTrue(subtitle.waitForExistence(timeout: 5))
             subtitle.tap()
             for _ in 0..<15 where !app.buttons["Pause"].exists {

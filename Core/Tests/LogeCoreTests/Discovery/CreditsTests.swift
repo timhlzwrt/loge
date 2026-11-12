@@ -38,19 +38,4 @@ struct CreditsTests {
         let meta = try JSONDecoder().decode(Meta.self, from: Data(json.utf8))
         #expect(meta.people == [Person(name: "Ana", roles: [.actor]), Person(name: "Ben", roles: [.director])])
     }
-
-    @Test func personTitlesKeepOnlyCreditedResultsNewestFirst() {
-        let person = Person(name: "Tom Hanks", roles: [.actor])
-        let found = MetaPreview(id: "tt3", type: "movie", name: "Larry Crowne", releaseInfo: "2011")
-        let results = [
-            MetaPreview(id: "tt1", type: "movie", name: "Tom Hanks: The Nomad", releaseInfo: "2023"),
-            MetaPreview(id: "tt2", type: "movie", name: "Greyhound", releaseInfo: "2020", cast: ["tom hanks"]),
-            MetaPreview(id: "tt4", type: "movie", name: "Dragnet", releaseInfo: "1987", writer: ["Tom Hanks"]),
-            MetaPreview(id: "tt5", type: "movie", name: "That Thing You Do!", releaseInfo: "1996", director: ["Tom Hanks"]),
-        ]
-
-        // The title they were found on is kept even though search didn't return it.
-        #expect(person.titles(in: results, foundOn: found).map(\.id) == ["tt2", "tt3", "tt5", "tt4"])
-        #expect(person.titles(in: results + [found], foundOn: found).filter { $0.id == "tt3" }.count == 1)
-    }
 }

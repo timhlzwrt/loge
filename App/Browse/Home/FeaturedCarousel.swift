@@ -7,6 +7,8 @@ struct FeaturedCarousel: View {
     @Environment(TMDBAccount.self) private var tmdb
     let movies: CatalogSource
     let series: CatalogSource
+    @Binding var playing: SourcesRoute?
+    @Binding var opening: MetaPreview?
     @State private var items: [MetaPreview] = []
     @State private var currentID: MetaPreview.ID?
     #if os(macOS)
@@ -21,7 +23,8 @@ struct FeaturedCarousel: View {
         ScrollView(.horizontal) {
             LazyHStack(spacing: 0) {
                 ForEach(items) { meta in
-                    FeaturedPage(meta: meta, isCentred: isCentred, bottomInset: items.count > 1 ? 38 : 18)
+                    FeaturedPage(meta: meta, isCentred: isCentred, bottomInset: items.count > 1 ? 38 : 18,
+                                 playing: $playing, opening: $opening)
                         .containerRelativeFrame(.horizontal)
                 }
             }
@@ -45,6 +48,8 @@ struct FeaturedCarousel: View {
             }
         }
         .task {
+            // Returning to Home runs this again; the pages and the one showing stay.
+            guard items.isEmpty else { return }
             // The carousel is decoration on top of the rows below, which show
             // their own error, so a failure here just leaves it out.
             async let movieItems = try? movies.items()
@@ -133,13 +138,17 @@ struct FeaturedPage: View {
     let isCentred: Bool
     /// Room for the page dots.
     let bottomInset: CGFloat
+    /// Set once a series' episodes are known, which opens its sources.
+    @Binding var playing: SourcesRoute?
+    /// Set when a series' episodes couldn't be loaded; its details say why.
+    @Binding var opening: MetaPreview?
 
     @Environment(AddonStore.self) private var store
     @Environment(LibraryStore.self) private var library
-    /// Set once a series' episodes are known, which opens its sources.
-    @State private var playing: SourcesRoute?
-    /// Set when a series' episodes couldn't be loaded; its details say why.
-    @State private var opening: MetaPreview?
+    /// A series' full details, which say which episode Play starts.
+    @State private var details: Meta?
+    /// Play on a series waits for its episodes.
+    @State private var isPreparingPlay = false
 
     var body: some View {
         ZStack(alignment: isCentred ? .bottom : .bottomLeading) {
@@ -149,7 +158,8 @@ struct FeaturedPage: View {
                     .contentShape(.rect)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(meta.name)
+            // The title link below opens the same page; one stop per page is enough.
+            .accessibilityHidden(true)
             #if os(macOS)
             // Lets the backdrop run on under the floating sidebar.
             .backgroundExtensionEffect()
@@ -178,8 +188,18 @@ struct FeaturedPage: View {
             .padding(.horizontal, Metrics.gutter)
             .padding(.bottom, bottomInset)
         }
-        .navigationDestination(item: $playing) { SourcesView(route: $0) }
-        .navigationDestination(item: $opening) { MetaDetailView(preview: $0) }
+        // Only for a series being watched, so Play can say which episode it resumes.
+        .task(id: meta.id) {
+            guard meta.type == MediaType.series, isStarted, details == nil else { return }
+            details = await loadDetails()
+        }
+        .task(id: isPreparingPlay) {
+            guard isPreparingPlay else { return }
+            await play()
+            isPreparingPlay = false
+        }
+        // Leaving the page cancels Play, so Sources can't open later over something else.
+        .onDisappear { isPreparingPlay = false }
     }
 
     /// A backdrop cropped to a phone's portrait hero can lose its subject, so that takes the
@@ -205,11 +225,22 @@ struct FeaturedPage: View {
     private var buttons: some View {
         HStack(spacing: 12) {
             Button {
-                Task { await play() }
+                isPreparingPlay = true
             } label: {
-                Label(isStarted ? "Resume" : "Play", systemImage: "play.fill")
+                Label {
+                    Text(playLabel)
+                } icon: {
+                    if isPreparingPlay {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(.black)
+                    } else {
+                        Image(systemName: "play.fill")
+                    }
+                }
             }
             .buttonStyle(PrimaryButtonStyle())
+            .disabled(isPreparingPlay)
             Button(library.isSaved(meta.id) ? "Remove from Watch Later" : "Add to Watch Later",
                    systemImage: library.isSaved(meta.id) ? "checkmark" : "plus") {
                 library.toggleSaved(meta)
@@ -224,6 +255,19 @@ struct FeaturedPage: View {
         library.isInProgress(metaID: meta.id)
     }
 
+    /// "Resume S2, E3" once a series' episodes are known, as on its details page.
+    private var playLabel: String {
+        if let details, let action = PlayAction(preview: meta, meta: details, library: library) {
+            return action.label
+        }
+        return isStarted ? "Resume" : "Play"
+    }
+
+    /// The details are a preview here: Play falls back to the details page, which reports errors.
+    private func loadDetails() async -> Meta? {
+        try? await store.addons.metaClient(type: meta.type, id: meta.id)?.meta(type: meta.type, id: meta.id)
+    }
+
     /// Movies go straight to their sources. A series needs its episodes first, to know which
     /// one is up next; without them it opens the details instead.
     private func play() async {
@@ -231,7 +275,8 @@ struct FeaturedPage: View {
             playing = PlayAction(preview: meta, meta: nil, library: library)?.route
             return
         }
-        let details = try? await store.addons.metaClient(type: meta.type, id: meta.id)?.meta(type: meta.type, id: meta.id)
+        if details == nil { details = await loadDetails() }
+        guard !Task.isCancelled else { return }
         if let route = PlayAction(preview: meta, meta: details, library: library)?.route {
             playing = route
         } else {

@@ -6,6 +6,7 @@ import SwiftUI
 /// Hidden while TMDB details load, without a token, and when TMDB has nothing to suggest.
 struct MoreLikeThisRow: View {
     let titles: [TMDBCreditTitle]
+    var areSimilar = false
 
     var body: some View {
         if !titles.isEmpty {
@@ -15,9 +16,17 @@ struct MoreLikeThisRow: View {
 
     private var row: some View {
         VStack(alignment: .leading, spacing: Metrics.headerSpacing) {
-            Text("More Like This")
-                .font(.sectionTitle)
-                .padding(.horizontal, Metrics.gutter)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("More Like This")
+                    .font(.sectionTitle)
+                // Where the titles come from, which is all TMDB says about why: its "similar"
+                // list is matched on genres and keywords; its recommendations aren't explained.
+                Text(areSimilar ? "Similar genres and keywords, from TMDB" : "Recommended on TMDB")
+                    .font(.metaLine)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, Metrics.gutter)
             HorizontalShelf("More Like This") {
                 LazyHStack(alignment: .top, spacing: Metrics.rowSpacing) {
                     ForEach(titles) { title in

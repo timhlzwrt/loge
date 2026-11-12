@@ -14,20 +14,7 @@ struct SettingsView: View {
     @AppStorage(Accent.storageKey) private var accent = Accent.white
 
     var body: some View {
-        settingsContent
-            #if !os(tvOS)
-            .scrollContentBackground(.hidden)
-            #endif
-            .background(Color.canvas)
-            .navigationTitle("Settings")
-    }
-
-    @ViewBuilder private var settingsContent: some View {
-        #if os(macOS)
-        Form { sections }.formStyle(.grouped)
-        #else
-        List { sections }
-        #endif
+        SettingsPage("Settings") { sections }
     }
 
     @ViewBuilder private var sections: some View {
@@ -35,7 +22,7 @@ struct SettingsView: View {
             NavigationLink {
                 SyncSettingsView()
             } label: {
-                LabeledContent("Sync", value: sync.isConnected ? (sync.displayName ?? "Connected") : "Off")
+                LabeledContent("Sync", value: syncSummary)
             }
         }
         Section {
@@ -77,9 +64,17 @@ struct SettingsView: View {
         }
     }
 
+    /// States that hold up syncing come before the account name, so they show without opening the page.
+    private var syncSummary: String {
+        guard sync.isConnected else { return "Off" }
+        if sync.needsChoice { return "Needs review" }
+        if sync.status == .failed { return "Couldn't sync" }
+        return sync.displayName ?? "Connected"
+    }
+
     private var traktSummary: String {
         switch trakt.state {
-        case .signedIn(let username): username
+        case .signedIn(let username): trakt.isPaused ? "Paused" : username
         case .awaitingApproval: "Signing in"
         case .signedOut: "Off"
         }
@@ -100,43 +95,101 @@ struct SettingsPage<Content: View>: View {
         Group {
             #if os(macOS)
             Form { content }.formStyle(.grouped)
+            #elseif os(tvOS)
+            List {
+                // Lined up with the rows, as on My Lists; the system's title is centred and grey.
+                // The padding clears the tab menu.
+                Text(title)
+                    .font(.system(size: 57, weight: .bold))
+                    .accessibilityAddTraits(.isHeader)
+                    .padding(.top, 60)
+                content
+            }
             #else
             List { content }
             #endif
         }
             #if !os(tvOS)
             .scrollContentBackground(.hidden)
+            .navigationTitle(title)
             #endif
             .background(Color.canvas)
-            .navigationTitle(title)
+    }
+}
+
+/// A section heading. The TV's system headers are small and grey, hard to read as headings
+/// from across the room, so there they take the size of the app's other section titles.
+struct SettingsHeader: View {
+    let title: String
+
+    init(_ title: String) { self.title = title }
+
+    var body: some View {
+        Text(title)
+            #if os(tvOS)
+            .font(.sectionTitle)
+            .foregroundStyle(.white)
+            .textCase(nil)
+            .padding(.top, 24)
+            #endif
     }
 }
 
 struct AddonsSettingsView: View {
     @Environment(AddonStore.self) private var store
+    @Environment(AccountSync.self) private var sync
     @State private var manifestURL = ""
     @State private var isInstalling = false
     @State private var installError: AddonStore.InstallError?
+    @State private var removing: InstalledAddon?
 
     var body: some View {
-        List {
+        SettingsPage("Addons") {
             Section {
                 Text("Movies, series, search and IMDb ratings are built in. Add a playback addon to watch.")
                     .foregroundStyle(.secondary)
             }
             Section {
                 if store.addons.isEmpty {
+                    #if os(tvOS)
+                    // Typing a configured URL with the remote is the slow way; Sync brings it from a phone.
+                    NavigationLink {
+                        SyncSettingsView()
+                    } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("No playback addons yet")
+                            Text(sync.isConnected
+                                 ? "Addons added on your other devices appear here."
+                                 : "Connect Sync to bring your addons over from your iPhone.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    #else
                     Text("No playback addons yet")
                         .foregroundStyle(.secondary)
+                    #endif
                 }
                 ForEach(store.addons) { addon in
                     let row = AddonRow(addon: addon, isUnreachable: store.unreachable.contains(addon.id))
-                    #if os(tvOS)
-                    // Plain rows can't take focus on tvOS, so the row opens its actions instead.
-                    Menu { actions(for: addon) } label: { row }
-                    #else
-                    row.contextMenu { actions(for: addon) }
-                    #endif
+                    Group {
+                        #if os(tvOS)
+                        // Plain rows can't take focus on tvOS, so the row opens its actions instead.
+                        Menu { actions(for: addon) } label: { row }
+                        #else
+                        row.contextMenu { actions(for: addon) }
+                        #endif
+                    }
+                    // On the row, so on iPhone and iPad the dialog points at the addon it removes.
+                    .confirmationDialog(
+                        "Remove \(addon.displayName)?",
+                        isPresented: Binding(get: { removing?.id == addon.id }, set: { if !$0 { removing = nil } }),
+                        titleVisibility: .visible
+                    ) {
+                        Button("Remove", role: .destructive) { store.remove(addon.id) }
+                    } message: {
+                        Text("Adding it back means entering its manifest URL again.")
+                    }
                 }
                 #if !os(tvOS)
                 .onMove { store.move(fromOffsets: $0, toOffset: $1) }
@@ -145,13 +198,15 @@ struct AddonsSettingsView: View {
                 }
                 #endif
             } header: {
-                Text("Your addons")
+                SettingsHeader("Your addons")
             } footer: {
-                Text("Addons higher in the list are asked first.")
-                    .foregroundStyle(.secondary)
+                if store.addons.count > 1 {
+                    Text("Addons higher in the list are asked first.")
+                        .foregroundStyle(.secondary)
+                }
             }
 
-            Section("Add addon") {
+            Section {
                 TextField("Manifest URL", text: $manifestURL)
                     .autocorrectionDisabled()
                     #if !os(macOS)
@@ -160,26 +215,36 @@ struct AddonsSettingsView: View {
                     #endif
                     .onSubmit(install)
                     .onChange(of: manifestURL) { installError = nil }
-                Button(action: install) {
-                    if isInstalling {
-                        ProgressView()
-                    } else {
-                        Text("Install")
+                // The keyboard's Done already installs on tvOS, where a disabled Install row reads as
+                // stray grey text; it shows once there's a URL to install.
+                #if os(tvOS)
+                let showsInstall = !isManifestURLEmpty || isInstalling
+                #else
+                let showsInstall = true
+                #endif
+                if showsInstall {
+                    Button(action: install) {
+                        if isInstalling {
+                            ProgressView()
+                        } else {
+                            Text("Install")
+                        }
                     }
+                    .accessibilityLabel(isInstalling ? "Installing" : "Install")
+                    .disabled(isManifestURLEmpty || isInstalling)
                 }
-                .disabled(manifestURL.trimmingCharacters(in: .whitespaces).isEmpty || isInstalling)
                 if let installError {
                     Text(message(for: installError))
                         .foregroundStyle(.red)
                 }
+            } header: {
+                SettingsHeader("Add addon")
+            } footer: {
+                #if os(tvOS)
+                Text("Paste the URL with the Remote keyboard on your iPhone, or add the addon on a device connected to Sync.")
+                #endif
             }
-
         }
-        #if !os(tvOS)
-        .scrollContentBackground(.hidden)
-        #endif
-        .background(Color.canvas)
-        .navigationTitle("Addons")
         #if os(iOS)
         .toolbar {
             if !store.addons.isEmpty { EditButton() }
@@ -187,10 +252,15 @@ struct AddonsSettingsView: View {
         #endif
     }
 
+    private var isManifestURLEmpty: Bool {
+        manifestURL.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
     @ViewBuilder
     private func actions(for addon: InstalledAddon) -> some View {
-        // tvOS lists have no drag-to-reorder, so moving lives in the row's menu there.
-        #if os(tvOS)
+        // tvOS lists have no drag-to-reorder, and dragging rows in the Mac's grouped form is easy
+        // to miss, so moving lives in the row's menu there too.
+        #if !os(iOS)
         if let index = store.addons.firstIndex(of: addon) {
             Button("Move Up", systemImage: "arrow.up") {
                 store.move(fromOffsets: [index], toOffset: index - 1)
@@ -203,13 +273,13 @@ struct AddonsSettingsView: View {
         }
         #endif
         Button("Remove", systemImage: "trash", role: .destructive) {
-            store.remove(addon.id)
+            removing = addon
         }
     }
 
     private func install() {
         // Return in the empty field submits too; that is not a wrong URL, just no URL yet.
-        guard !isInstalling, !manifestURL.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        guard !isInstalling, !isManifestURLEmpty else { return }
         isInstalling = true
         installError = nil
         Task {
@@ -236,6 +306,10 @@ struct AddonsSettingsView: View {
 private struct AddonRow: View {
     let addon: InstalledAddon
     let isUnreachable: Bool
+    #if os(tvOS)
+    /// The row turns white under focus, where the orange warning disappears.
+    @Environment(\.isFocused) private var isFocused
+    #endif
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -260,18 +334,31 @@ private struct AddonRow: View {
                       : "Couldn't reach \(addon.host). Using the last known version.",
                       systemImage: "exclamationmark.triangle")
                     .font(.caption)
+                    #if os(tvOS)
+                    .foregroundStyle(isFocused ? .black : .orange)
+                    #else
                     .foregroundStyle(.orange)
+                    #endif
             } else if addon.manifest == nil {
                 Text("Loading…")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                Text(addon.host)
+                Text(caption)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
         // Full-width rows, so focused rows on tvOS line up instead of hugging their text.
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// What the addon answers, then its host: "Streams · Subtitles · example.com".
+    private var caption: String {
+        let resources = Set(addon.manifest?.resources.map(\.name) ?? [])
+        let provides = [("stream", "Streams"), ("subtitles", "Subtitles"), ("catalog", "Catalogs"), ("meta", "Details")]
+            .filter { resources.contains($0.0) }
+            .map(\.1)
+        return (provides + [addon.host]).joined(separator: " · ")
     }
 }

@@ -63,7 +63,7 @@ struct HistoryView: View {
         return days
     }
 
-    /// "Today", "Yesterday", "Saturday 24 October"; short drops the weekday, for card captions.
+    /// "Today", "Yesterday", "Saturday, October 24"; short drops the weekday, for card captions.
     static func dayTitle(_ date: Date, short: Bool = false) -> String {
         let calendar = Calendar.current
         if calendar.isDateInToday(date) { return "Today" }
@@ -72,7 +72,7 @@ struct HistoryView: View {
         if !calendar.isDate(date, equalTo: .now, toGranularity: .year) {
             format = format.year()
         }
-        return date.formatted(format)
+        return date.formatted(format.locale(.interface))
     }
 }
 
@@ -126,6 +126,7 @@ struct WatchCard: View {
                 // Clear of the focus lift.
                 .padding(.bottom, 18)
                 #else
+                .modifier(PointerHighlight())
                 .padding(.bottom, 9)
                 #endif
             Text([item.episodeCode, detail].compactMap { $0 }.joined(separator: " · "))

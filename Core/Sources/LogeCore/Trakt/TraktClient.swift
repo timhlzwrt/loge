@@ -29,6 +29,13 @@ public struct TraktDeviceCode: Sendable, Equatable {
     public var expiresAt: Date
     /// Seconds to wait between checks for the user's approval.
     public var interval: Int
+
+    #if DEBUG
+    /// A code for UI checks of the sign-in screen; it doesn't exist on Trakt.
+    public static let uiFixture = TraktDeviceCode(deviceCode: "ui-fixture", userCode: "A1B2C3D4",
+                                                  verificationURL: "https://trakt.tv/activate",
+                                                  expiresAt: .distantFuture, interval: 5)
+    #endif
 }
 
 /// Progress Trakt holds for something started on any device.

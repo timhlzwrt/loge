@@ -9,13 +9,17 @@ Logs each request's path and X-Test-Token header so header forwarding can be che
 For local audio-language switching, first run `sh Tools/generate-playback-fixture.sh`,
 then `python3 Tools/test-addon.py --port 8766 --tracks-file /tmp/loge-multiaudio.mov`.
 Install its manifest in addition to the default server's manifest.
-Requesting /tracks.mov?fail-once=<anything> fails the first request for that query.
+Requesting /tracks.mov?fail-once=<anything> fails the first request for that query, and
+/tracks.mov?hang=<anything> answers only after a minute.
+For the folded source list and the autoplay status lines (the `sources-*` screens of
+`--discovery-ui-test`), run `python3 Tools/test-addon.py --port 8769 --many --delay 5`.
 """
 import json
 import argparse
 from pathlib import Path
 import re
 import sys
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -24,6 +28,8 @@ parser.add_argument("--bind", default="127.0.0.1", help="Interface for local or 
 parser.add_argument("--host", default="127.0.0.1", help="Host advertised to a physical device on the LAN")
 parser.add_argument("--tracks-file", type=Path, help="Local multi-audio MOV for track-switch tests")
 parser.add_argument("--name", help="Name for a separate playback fixture addon and its source")
+parser.add_argument("--many", action="store_true", help="Twelve 1080p sources, enough for the list to fold them")
+parser.add_argument("--delay", type=float, default=0, help="Seconds to wait before answering a stream request")
 args = parser.parse_args() if __name__ == "__main__" else parser.parse_args([])
 PORT = args.port
 BASE = f"http://{args.host}:{PORT}"
@@ -84,6 +90,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/manifest.json":
             self.send_json(MANIFEST)
         elif self.path.startswith("/stream/"):
+            time.sleep(args.delay)
             self.send_json({"streams": STREAMS})
         elif self.path.startswith("/subtitles/"):
             self.send_json({"subtitles": SUBTITLES})
@@ -100,6 +107,10 @@ class Handler(BaseHTTPRequestHandler):
             if query.startswith("fail-once=") and query not in FAILED_ONCE:
                 FAILED_ONCE.add(query)
                 self.send_error(404)
+            elif query.startswith("hang="):
+                # A link that never starts sending, like a debrid file still being cached.
+                time.sleep(60)
+                self.send_error(504)
             else:
                 self.send_tracks()
         elif self.path == "/protected.mkv":
@@ -151,6 +162,9 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    if args.many:
+        STREAMS = [{"name": "Test\n1080p", "description": f"Big Buck Bunny · Copy {index} · WEB-DL H.264 AAC\n{index} GB",
+                    "url": MKV, "behaviorHints": {"filename": f"Big_Buck_Bunny_{index}.mkv"}} for index in range(1, 13)]
     if TRACKS_FILE:
         MANIFEST["name"] = args.name or "Playback Test Streams"
         STREAMS = [{"name": args.name or "Local Multi Track", "url": f"{BASE}/tracks.mov",

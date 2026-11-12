@@ -7,7 +7,11 @@ struct HorizontalShelf<Content: View>: View {
     #if os(macOS)
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var position = ScrollPosition()
-    @State private var geometry = ShelfGeometry()
+    /// Only whether there's more to either side: stored whole, the offset redrew the shelf and
+    /// its content on every frame of a scroll.
+    @State private var edges = ShelfEdges()
+    /// Read only when a page button is pressed, so it isn't observed.
+    @State private var latest = LatestGeometry()
     #endif
 
     init(_ label: String, @ViewBuilder content: () -> Content) {
@@ -22,15 +26,18 @@ struct HorizontalShelf<Content: View>: View {
             .scrollIndicators(.never)
             .scrollPosition($position)
             .onScrollGeometryChange(for: ShelfGeometry.self) { ShelfGeometry($0) } action: { _, value in
-                geometry = value
+                latest.geometry = value
+            }
+            .onScrollGeometryChange(for: ShelfEdges.self) { ShelfEdges(ShelfGeometry($0)) } action: { _, value in
+                edges = value
             }
             .overlay(alignment: .leading) {
-                if geometry.offset > 1 {
+                if edges.canGoBack {
                     pageButton(forward: false).padding(.leading, 2)
                 }
             }
             .overlay(alignment: .trailing) {
-                if geometry.offset < geometry.maximum - 1 {
+                if edges.canGoForward {
                     pageButton(forward: true).padding(.trailing, 2)
                 }
             }
@@ -42,6 +49,7 @@ struct HorizontalShelf<Content: View>: View {
     #if os(macOS)
     private func pageButton(forward: Bool) -> some View {
         Button {
+            let geometry = latest.geometry
             let distance = max(1, geometry.width - Metrics.gutter * 2)
             let target = min(geometry.maximum, max(0, geometry.offset + (forward ? distance : -distance)))
             withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.22)) {
@@ -59,6 +67,22 @@ struct HorizontalShelf<Content: View>: View {
         .buttonStyle(.plain)
         .accessibilityLabel("\(forward ? "Next" : "Previous") \(label)")
         .help("\(forward ? "Next" : "Previous") \(label)")
+    }
+
+    private final class LatestGeometry {
+        var geometry = ShelfGeometry()
+    }
+
+    private struct ShelfEdges: Equatable {
+        var canGoBack = false
+        var canGoForward = false
+
+        init() {}
+
+        init(_ geometry: ShelfGeometry) {
+            canGoBack = geometry.offset > 1
+            canGoForward = geometry.offset < geometry.maximum - 1
+        }
     }
 
     private struct ShelfGeometry: Equatable {

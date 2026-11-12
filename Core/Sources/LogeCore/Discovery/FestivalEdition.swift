@@ -12,6 +12,11 @@ public struct FestivalEdition: Decodable, Sendable {
     public enum Failure: Error { case missingData, invalidData }
 
     public static func all() throws -> [Self] {
+        try bundled.get()
+    }
+
+    /// Decoded once: navigation destinations ask again each time the stack updates.
+    private static let bundled: Result<[FestivalEdition], any Error> = Result { () throws -> [FestivalEdition] in
         guard let url = Bundle.module.url(forResource: "festival-awards-2026", withExtension: "json") else {
             throw Failure.missingData
         }

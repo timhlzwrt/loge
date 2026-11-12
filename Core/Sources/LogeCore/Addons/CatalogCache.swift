@@ -12,8 +12,8 @@ private let log = Logger(subsystem: "li.tjh.MediaApp", category: "catalogs")
 /// is shown at once while a refresh runs in the background for the next time it's asked
 /// for. Pages are kept as files in Caches: the system may purge them, which only costs a
 /// network request.
-actor CatalogCache {
-    static let shared = CatalogCache(
+public actor CatalogCache {
+    public static let shared = CatalogCache(
         directory: URL.cachesDirectory.appending(path: "Catalogs", directoryHint: .isDirectory)
     )
 
@@ -26,6 +26,9 @@ actor CatalogCache {
     }
     private var entries: [URL: Entry] = [:]
     private var refreshing: Set<URL> = []
+    /// Set by pull to refresh: pages kept from before it are asked for again, and shown only
+    /// if that fails.
+    private var expired: Date?
 
     private let directory: URL?
     private let freshLifetime: TimeInterval
@@ -45,16 +48,26 @@ actor CatalogCache {
         self.now = now
     }
 
+    /// Makes the next request for every page go to its addon, for pull to refresh.
+    public func expireAll() {
+        entries = [:]
+        expired = now()
+    }
+
     /// - Parameter persist: Whether the page is worth keeping across launches; searches aren't.
     func metas(for url: URL, persist: Bool, load: @escaping Load, decode: @escaping Decode) async throws -> [MetaPreview] {
         if let entry = entries[url], now().timeIntervalSince(entry.started) < freshLifetime {
             return try await result(of: entry, for: url)
         }
+        var kept: [MetaPreview]?
         if persist, let stored = read(url), case let age = now().timeIntervalSince(stored.saved),
            age < staleLimit, let metas = try? decode(stored.data) {
-            remember(Task<[MetaPreview], any Error> { metas }, for: url, started: age < freshLifetime ? stored.saved : now())
-            if age >= freshLifetime { refresh(url, load: load, decode: decode) }
-            return metas
+            guard let expired, stored.saved < expired else {
+                remember(Task<[MetaPreview], any Error> { metas }, for: url, started: age < freshLifetime ? stored.saved : now())
+                if age >= freshLifetime { refresh(url, load: load, decode: decode) }
+                return metas
+            }
+            kept = metas
         }
         let entry = remember(Task {
             let data = try await load()
@@ -62,7 +75,13 @@ actor CatalogCache {
             if persist { write(data, for: url) }
             return metas
         }, for: url, started: now())
-        return try await result(of: entry, for: url)
+        do {
+            return try await result(of: entry, for: url)
+        } catch {
+            // A refresh that fails keeps showing the page from before.
+            guard let kept, !(error is CancellationError) else { throw error }
+            return kept
+        }
     }
 
     @discardableResult

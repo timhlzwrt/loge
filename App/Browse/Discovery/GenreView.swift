@@ -3,6 +3,9 @@ import SwiftUI
 
 /// Movie genres on Home, each a still from a defining film with the genre's name over it.
 struct GenreRow: View {
+    /// Called with whichever genre has focus; drives the tvOS home header.
+    var onFocus: (DiscoveryCatalogs.Genre) -> Void = { _ in }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.headerSpacing) {
             Text("Genres")
@@ -13,6 +16,9 @@ struct GenreRow: View {
                     ForEach(DiscoveryCatalogs.genres) { genre in
                         NavigationLink(value: genre) {
                             GenreTile(genre: genre)
+                                #if os(tvOS)
+                                .modifier(ReportsFocus { onFocus(genre) })
+                                #endif
                         }
                         .tileButtonStyle()
                     }
@@ -39,7 +45,8 @@ struct GenreTile: View {
             .background { Artwork(url: genre.stillPreview) }
             .overlay {
                 // Keeps the name legible over bright stills.
-                LinearGradient(colors: [.clear, .black.opacity(0.55)], startPoint: .center, endPoint: .bottom)
+                LinearGradient(stops: [.init(color: .clear, location: 0.35), .init(color: .black.opacity(0.7), location: 1)],
+                               startPoint: .top, endPoint: .bottom)
             }
             .overlay(alignment: .bottomLeading) {
                 Text(genre.name)

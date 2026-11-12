@@ -165,6 +165,49 @@ final class PlaybackRegressionTests: XCTestCase {
         XCTAssertTrue(app.buttons["Play fixture"].waitForExistence(timeout: 5))
     }
 
+    /// A position from a longer source lies past the end of a shorter one, where mpv opens it.
+    @MainActor
+    func testSwitchingToAShorterSourceDoesNotFinishTheEpisode() throws {
+        guard let url = ProcessInfo.processInfo.environment["PLAYBACK_FIXTURE_URL"],
+              let shorter = ProcessInfo.processInfo.environment["PLAYBACK_FIXTURE_SHORT_URL"] else {
+            throw XCTSkip("Set TEST_RUNNER_PLAYBACK_FIXTURE_URL and TEST_RUNNER_PLAYBACK_FIXTURE_SHORT_URL (a clip under 30 s).")
+        }
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments += ["--playback-ui-test"]
+        app.launchEnvironment["PLAYBACK_FIXTURE_URL"] = url
+        app.launchEnvironment["PLAYBACK_FIXTURE_SHORT_URL"] = shorter
+        app.launchEnvironment["PLAYBACK_FIXTURE_PROGRESS_ID"] = "short-source-fixture-\(UUID().uuidString)"
+        app.launch()
+        defer {
+            app.terminate()
+            app.launch()
+            app.buttons["Remove fixture progress"].tap()
+            app.terminate()
+        }
+        app.buttons["Play fixture"].tap()
+        let position = app.staticTexts["fixture-position"]
+        XCTAssertTrue(position.waitForExistence(timeout: 30))
+        let opened = expectation(for: NSPredicate { _, _ in
+            (Int(position.value as? String ?? "") ?? -1) >= 1
+        }, evaluatedWith: app)
+        wait(for: [opened], timeout: 15)
+        app.buttons["Seek fixture to 35 seconds"].tap()
+        let advanced = expectation(for: NSPredicate { _, _ in
+            (Int(position.value as? String ?? "") ?? -1) >= 36
+        }, evaluatedWith: app)
+        wait(for: [advanced], timeout: 15)
+        app.buttons["Replace with shorter source"].tap()
+        // Playing again from near the shorter file's end, not stopped on its last frame.
+        let playing = expectation(for: NSPredicate { _, _ in
+            app.staticTexts["fixture-ended"].value as? String == "no"
+                && (Int(position.value as? String ?? "") ?? Int.max) < 8
+        }, evaluatedWith: app)
+        wait(for: [playing], timeout: 15)
+        let saved = Int(app.staticTexts["fixture-saved-position"].firstMatch.value as? String ?? "") ?? -1
+        XCTAssertGreaterThanOrEqual(saved, 35, "The longer source's position is kept, not replaced by the shorter one's end")
+    }
+
     @MainActor
     func testPictureInPictureRestoresTheSamePlayback() throws {
         guard let url = ProcessInfo.processInfo.environment["PLAYBACK_FIXTURE_URL"] else {
@@ -393,6 +436,25 @@ final class PlaybackRegressionTests: XCTestCase {
         XCTAssertFalse(app.staticTexts["Couldn't play this source"].exists)
     }
 
+    /// A link that never starts sending gives up after 20 seconds with an explanation, rather than spinning.
+    @MainActor
+    func testOpeningTimeoutExplainsItself() throws {
+        guard let url = ProcessInfo.processInfo.environment["PLAYBACK_FIXTURE_URL"] else {
+            throw XCTSkip("Set TEST_RUNNER_PLAYBACK_FIXTURE_URL for the isolated playback fixture.")
+        }
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments += ["--playback-ui-test"]
+        app.launchEnvironment["PLAYBACK_FIXTURE_URL"] = url + "?hang=\(UUID().uuidString)"
+        app.launch()
+        defer { app.terminate() }
+        app.buttons["Play fixture"].tap()
+        XCTAssertTrue(app.staticTexts["Couldn't play this source"].waitForExistence(timeout: 35))
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'The server hasn’t started' OR label BEGINSWITH \"The server hasn't started\"")).firstMatch.exists)
+        screenshot("open-timeout")
+        XCTAssertTrue(app.buttons["Try Again"].exists)
+    }
+
     /// The buttons sit beside the title above the timeline in iPhone landscape, and every menu's actions can be reached.
     @MainActor
     func testPhoneLandscapeControlsAndMenus() throws {
@@ -431,7 +493,7 @@ final class PlaybackRegressionTests: XCTestCase {
         screenshot("phone-landscape-timing-panel")
         app.buttons["Done"].tap()
 
-        let timeline = app.otherElements["Playback position"]
+        let timeline = app.sliders["Playback position"]
         XCTAssertTrue(timeline.waitForExistence(timeout: 5))
         XCTAssertLessThanOrEqual(app.buttons["Audio"].frame.maxY, timeline.frame.minY, "Buttons aren't above the timeline")
 

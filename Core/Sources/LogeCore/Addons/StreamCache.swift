@@ -38,12 +38,20 @@ actor StreamCache {
     }
 
     private func result(of entry: Entry, for key: Key) async throws -> [StreamSource] {
+        let streams: [StreamSource]
         do {
-            return try await entry.task.value
+            streams = try await entry.task.value
         } catch {
             // Failures aren't kept, so Retry asks the addon again.
-            if entries[key]?.started == entry.started { entries[key] = nil }
+            forget(entry, for: key)
             throw error
         }
+        // Nor are empty lists: aggregators answer with none when their upstream times out.
+        if streams.isEmpty { forget(entry, for: key) }
+        return streams
+    }
+
+    private func forget(_ entry: Entry, for key: Key) {
+        if entries[key]?.started == entry.started { entries[key] = nil }
     }
 }
