@@ -4,13 +4,13 @@ import Foundation
 /// These are editorial shelves, not recommendations derived from viewing history.
 public enum DiscoveryCatalogs {
     public static let home: [CatalogSource] = [
-        source(type: MediaType.movie, id: "top", title: "Popular Movies", compactTitle: "Movies"),
-        source(type: MediaType.series, id: "top", title: "Popular Series", compactTitle: "Series"),
-        letterboxd(id: "letterboxd-popular", title: "Popular on Letterboxd", compactTitle: "Letterboxd"),
-        source(type: MediaType.movie, id: "imdbRating", title: "IMDb Favourites · Movies", compactTitle: "IMDb Movies"),
-        source(type: MediaType.series, id: "imdbRating", title: "IMDb Favourites · Series", compactTitle: "IMDb Series"),
+        source(type: MediaType.movie, id: "top", title: "Popular Movies"),
+        source(type: MediaType.series, id: "top", title: "Popular Series"),
+        letterboxd(id: "letterboxd-popular", title: "Popular on Letterboxd"),
+        source(type: MediaType.movie, id: "imdbRating", title: "IMDb Favourites · Movies"),
+        source(type: MediaType.series, id: "imdbRating", title: "IMDb Favourites · Series"),
         source(type: MediaType.series, id: "top", title: "Crime Series", genre: "Crime"),
-        source(type: MediaType.movie, id: "top", title: "Science Fiction", genre: "Sci-Fi", compactTitle: "Sci-Fi"),
+        source(type: MediaType.movie, id: "top", title: "Science Fiction", genre: "Sci-Fi"),
         source(type: MediaType.movie, id: "top", title: "Animation", genre: "Animation"),
     ]
 
@@ -127,14 +127,13 @@ public enum DiscoveryCatalogs {
     /// IDs. Letterboxd has no public API; used without configuration, it needs no account.
     static let letterboxdURL = "https://api.stremboxd.com/manifest.json"
 
-    private static func letterboxd(id: String, title: String, genre: String? = nil, compactTitle: String? = nil) -> CatalogSource {
+    private static func letterboxd(id: String, title: String, genre: String? = nil) -> CatalogSource {
         let catalog = AddonManifest.Catalog(type: MediaType.movie, id: id, extra: [
             AddonManifest.Catalog.Extra(name: "genre", options: letterboxdGenres),
             AddonManifest.Catalog.Extra(name: "skip"),
         ])
         var source = CatalogSource(manifestURL: letterboxdURL, catalog: catalog, title: title, genre: genre)
         source.usesCinemetaArtwork = true
-        source.compactTitle = compactTitle
         return source
     }
 
@@ -145,16 +144,14 @@ public enum DiscoveryCatalogs {
         "War", "Western",
     ]
 
-    private static func source(type: String, id: String, title: String, genre: String? = nil, compactTitle: String? = nil) -> CatalogSource {
+    private static func source(type: String, id: String, title: String, genre: String? = nil) -> CatalogSource {
         var extras = [
             AddonManifest.Catalog.Extra(name: "genre", options: genres(for: type)),
             AddonManifest.Catalog.Extra(name: "skip"),
         ]
         if id == "top" { extras.append(.init(name: "search")) }
         let catalog = AddonManifest.Catalog(type: type, id: id, extra: extras)
-        var source = CatalogSource(manifestURL: AddonStore.cinemetaURL, catalog: catalog, title: title, genre: genre)
-        source.compactTitle = compactTitle
-        return source
+        return CatalogSource(manifestURL: AddonStore.cinemetaURL, catalog: catalog, title: title, genre: genre)
     }
 
     private static func genres(for type: String) -> [String] {

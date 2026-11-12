@@ -69,7 +69,7 @@ struct HorizontalShelf<Content: View>: View {
         init() {}
 
         init(_ geometry: ScrollGeometry) {
-            // Sidebar safe-area insets are included in offsets, but not in scroll targets.
+            // Leading safe-area insets are included in offsets, but not in scroll targets.
             offset = geometry.contentOffset.x + geometry.contentInsets.leading
             width = geometry.containerSize.width
             maximum = max(0, geometry.contentSize.width - width)

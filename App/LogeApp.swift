@@ -258,41 +258,22 @@ struct RootView: View {
             tab("Home", systemImage: "house") {
                 BrowseStack { HomeView() }
             }
-            #if os(macOS)
-            // The sidebar reads top to bottom, so Search sits with the other places to go.
-            tab("Search", systemImage: "magnifyingglass", role: .search) {
-                BrowseStack { SearchView() }
-            }
-            #endif
             tab("My Lists", systemImage: "bookmark") {
                 BrowseStack { MyListView() }
             }
-            #if os(macOS)
-            TabSection("Catalogs") {
-                ForEach(DiscoveryCatalogs.home) { source in
-                    Tab(source.shortTitle, systemImage: source.catalog.type == MediaType.series ? "tv" : "rectangle.portrait") {
-                        BrowseStack { CatalogGridView(source: source) }
-                    }
-                }
-            }
-            #endif
-            // iPhone opens Settings from a gear on Home.
-            if !Metrics.isPhone {
-                tab("Settings", systemImage: "gearshape") {
-                    NavigationStack { SettingsView() }
-                }
-            }
-            #if !os(macOS)
-            tab("Search", systemImage: "magnifyingglass", role: .search) {
+            // The search role sets the tab apart from the others, which a phone's one pill has no room for.
+            tab("Search", systemImage: "magnifyingglass", role: Metrics.isPhone ? nil : .search) {
                 BrowseStack { SearchView() }
             }
-            #endif
+            tab("Settings", systemImage: "gearshape") {
+                NavigationStack { SettingsView() }
+            }
         }
-        .tabViewStyle(.sidebarAdaptable)
+        .tabViewStyle(.tabBarOnly)
     }
 
     /// A tab that shows only its icon in the phone's tab bar, where the symbols are
-    /// familiar enough, and its name in a sidebar.
+    /// familiar enough, and its name in the pill at the top elsewhere.
     private func tab(
         _ title: String, systemImage: String, role: TabRole? = nil, @ViewBuilder content: () -> some View
     ) -> some TabContent<Never> {
@@ -325,7 +306,6 @@ private struct BrowseStack<Content: View>: View {
                 .navigationDestination(for: PersonRoute.self) { PersonView(route: $0) }
                 .navigationDestination(for: TMDBCreditTitle.self) { TMDBTitleView(title: $0) }
                 .navigationDestination(for: HistoryRoute.self) { _ in HistoryView() }
-                .navigationDestination(for: SettingsRoute.self) { _ in SettingsView() }
                 .navigationDestination(for: FilmCollection.self) { FilmCollectionView(collection: $0) }
                 .navigationDestination(for: DiscoveryCatalogs.Genre.self) { GenreView(genre: $0) }
                 .navigationDestination(for: FestivalRoute.self) { $0.destination }

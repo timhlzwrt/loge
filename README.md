@@ -26,7 +26,7 @@ host, bundle or sell content; only use sources you are entitled to access.
 - **iPhone:** iOS 26.0 or later. Portrait browsing, landscape playback.
 - **iPad:** iPadOS 26.0 or later. Adaptive browsing and full-screen playback.
 - **Apple TV:** tvOS 26.0 or later. Focus-driven browsing and Siri Remote controls.
-- **Mac:** macOS 26.0 or later. Sidebar navigation, a separate player window and
+- **Mac:** macOS 26.0 or later. A separate player window and
   signed in-app updates. The distributed build is for Apple silicon.
 
 These are the deployment minimums for this source revision, not the SDK version

@@ -5,7 +5,7 @@ import os
 private let log = Logger(subsystem: "li.tjh.MediaApp", category: "catalogs")
 
 /// Recent catalog pages, so Home paints from the last launch's results and screens that
-/// show the same catalog (the featured carousel and its row, See All, the Mac sidebar)
+/// show the same catalog (the featured carousel and its row, See All)
 /// share one request.
 ///
 /// A page younger than `freshLifetime` is used as is. An older one, up to `staleLimit`,
