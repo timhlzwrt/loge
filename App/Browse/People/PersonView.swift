@@ -70,12 +70,11 @@ struct PersonView: View {
         .scrollClipDisabled()
         .background(Color.canvas)
         .hidingPhoneTabBar()
-        // The name heads the page beside the portrait, so iOS leaves the bar untitled, as on
-        // details, and the TV draws its title over the filmography as the page scrolls.
+        // The name heads the page beside the portrait, so iOS leaves the bar untitled, as on details.
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
-        #elseif os(macOS)
-        .navigationTitle(route.person.name)
+        #else
+        .pageTitle(route.person.name)
         #endif
         .task(id: LoadKey(revision: tmdb.revision, attempt: attempt)) {
             #if DEBUG

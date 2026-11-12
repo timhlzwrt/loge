@@ -82,6 +82,44 @@ final class DiscoveryTVTests: XCTestCase {
     }
 
     @MainActor
+    func testRemoteRestartsEndedPlayback() throws {
+        let app = try launchPlayer()
+        defer { app.terminate() }
+        let ended = app.staticTexts["fixture-ended"]
+        let position = app.staticTexts["fixture-position"]
+        for usePlayPause in [false, true] {
+            skipToEnd(app)
+            wait(for: [expectation(for: NSPredicate(format: "value == 'yes'"), evaluatedWith: ended)], timeout: 5)
+
+            if usePlayPause {
+                XCUIRemote.shared.press(.playPause)
+            } else {
+                XCUIRemote.shared.press(.select)
+            }
+            let restarted = expectation(for: NSPredicate { _, _ in
+                let seconds = Int(position.value as? String ?? "") ?? -1
+                return ended.value as? String == "no" && seconds >= 1 && seconds < 10
+            }, evaluatedWith: app)
+            wait(for: [restarted], timeout: 10)
+            screenshot(usePlayPause ? "tv-restarted-playpause" : "tv-restarted-select")
+        }
+    }
+
+    @MainActor
+    func testFinishedMovieClosesPlayer() throws {
+        let app = try launchPlayer(environment: ["PLAYBACK_FIXTURE_MOVIE": "1"])
+        defer { app.terminate() }
+        let position = app.staticTexts["fixture-position"]
+        wait(for: [expectation(for: NSPredicate { _, _ in
+            (Int(position.value as? String ?? "") ?? -1) >= 1
+        }, evaluatedWith: position)], timeout: 30)
+        // Let the minute-long fixture reach EOF, including the final progress update.
+        wait(for: [expectation(for: NSPredicate { _, _ in !position.exists }, evaluatedWith: position)], timeout: 75)
+        XCTAssertTrue(app.buttons["Play fixture"].exists)
+        screenshot("tv-finished-movie-closed")
+    }
+
+    @MainActor
     func testRemoteCancelsTheUpNextCountdown() throws {
         let app = try launchPlayer(environment: ["PLAYBACK_FIXTURE_NEXT": "1"])
         defer { app.terminate() }
@@ -250,10 +288,125 @@ final class DiscoveryTVTests: XCTestCase {
     }
 
     @MainActor
+    private func containsFocus(_ element: XCUIElement) -> Bool {
+        // SwiftUI menus can put focus on an unnamed child rather than the button or cell.
+        element.hasFocus || element.descendants(matching: .any).allElementsBoundByIndex.contains { $0.hasFocus }
+    }
+
+    @MainActor
     private func waitForFocus(on element: XCUIElement) {
         let deadline = Date.now.addingTimeInterval(5)
-        while !element.hasFocus && Date.now < deadline { Thread.sleep(forTimeInterval: 0.2) }
-        XCTAssertTrue(element.hasFocus, "\(element.label) didn't take focus")
+        while !containsFocus(element) && Date.now < deadline { Thread.sleep(forTimeInterval: 0.2) }
+        if !containsFocus(element) { screenshot("tv-focus-failure") }
+        XCTAssertTrue(containsFocus(element), "\(element.label) didn't take focus")
+    }
+
+    @MainActor
+    func testSourcesInitiallyFocusLastPlayedOrRecommended() throws {
+        guard let manifest = ProcessInfo.processInfo.environment["DISCOVERY_ADDON_URL"] else {
+            throw XCTSkip("Set TEST_RUNNER_DISCOVERY_ADDON_URL to the local test addon.")
+        }
+        continueAfterFailure = false
+        for remembersSource in [false, true] {
+            let app = XCUIApplication()
+            app.launchArguments += ["--discovery-ui-test", "-connectionSpeed", "32000000"]
+            app.launchEnvironment["DISCOVERY_SCREEN"] = "sources"
+            app.launchEnvironment["DISCOVERY_ADDON_URL"] = manifest
+            if remembersSource { app.launchEnvironment["DISCOVERY_LAST_SOURCE"] = "1" }
+            app.launch()
+            defer { app.terminate() }
+            let source = app.buttons.matching(NSPredicate(format: "label CONTAINS %@",
+                remembersSource ? "Last played" : "Recommended for your")).firstMatch
+            XCTAssertTrue(source.waitForExistence(timeout: 15))
+            screenshot(remembersSource ? "tv-source-last-played-focused" : "tv-source-recommended-focused")
+            let cell = app.cells.containing(.button, identifier: source.label).firstMatch
+            waitForFocus(on: cell.exists ? cell : source)
+            // Sorting stays reachable above the sources.
+            for _ in 0..<15 {
+                if containsFocus(app.buttons["Sort & Filter"]) { break }
+                XCUIRemote.shared.press(.up)
+            }
+            waitForFocus(on: app.buttons["Sort & Filter"])
+        }
+    }
+
+    @MainActor
+    func testAddonRemovalRequiresConfirmation() throws {
+        guard let manifest = ProcessInfo.processInfo.environment["DISCOVERY_ADDON_URL"] else {
+            throw XCTSkip("Set TEST_RUNNER_DISCOVERY_ADDON_URL to the local test addon.")
+        }
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments += ["--discovery-ui-test"]
+        app.launchEnvironment["DISCOVERY_SCREEN"] = "addons"
+        app.launchEnvironment["DISCOVERY_ADDON_URL"] = manifest
+        app.launch()
+        defer { app.terminate() }
+        let addon = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Test Streams'")).firstMatch
+        XCTAssertTrue(addon.waitForExistence(timeout: 15), app.debugDescription)
+        let addonCell = app.cells.containing(.button, identifier: addon.label).firstMatch
+        for _ in 0..<3 {
+            if containsFocus(addon) || containsFocus(addonCell) { break }
+            XCUIRemote.shared.press(.up)
+        }
+        screenshot("tv-addon-row")
+        waitForFocus(on: addonCell.exists ? addonCell : addon)
+        let remote = XCUIRemote.shared
+        for cancels in [true, false] {
+            remote.press(.select)
+            let remove = app.collectionViews.cells.containing(.other, identifier: "trash").firstMatch
+            let hasRemove = remove.waitForExistence(timeout: 5)
+            screenshot("tv-addon-actions")
+            XCTAssertTrue(hasRemove)
+            for _ in 0..<4 {
+                if containsFocus(remove) { break }
+                remote.press(.down)
+            }
+            waitForFocus(on: remove)
+            remote.press(.select)
+            let hasConfirmation = app.staticTexts["Remove addon?"].waitForExistence(timeout: 5)
+            screenshot("tv-addon-removal-confirmation")
+            XCTAssertTrue(hasConfirmation)
+            let choice = app.buttons[cancels ? "Cancel" : "Remove"].firstMatch
+            for _ in 0..<3 {
+                if containsFocus(choice) { break }
+                remote.press(cancels ? .left : .right)
+            }
+            waitForFocus(on: choice)
+            screenshot(cancels ? "tv-addon-cancel-focused" : "tv-addon-remove-focused")
+            remote.press(.select)
+            if cancels {
+                waitForFocus(on: addonCell.exists ? addonCell : addon)
+            } else {
+                XCTAssertTrue(app.staticTexts["No playback addons yet"].waitForExistence(timeout: 5))
+            }
+        }
+    }
+
+    @MainActor
+    func testDetailsIconsAndInformationWithRemote() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments += ["--discovery-ui-test"]
+        app.launchEnvironment["DISCOVERY_SCREEN"] = "details"
+        app.launch()
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 15))
+        waitForFocus(on: app.buttons["Play"])
+        screenshot("tv-details-top")
+        let remote = XCUIRemote.shared
+        for name in ["Add to Watch Later", "Save to a List", "Choose a Source"] {
+            remote.press(.right)
+            screenshot("tv-details-\(name.replacingOccurrences(of: " ", with: "-"))")
+            waitForFocus(on: app.buttons[name])
+        }
+        let information = app.descendants(matching: .any)["detail-information"].firstMatch
+        for _ in 0..<12 {
+            if information.exists && containsFocus(information) { break }
+            remote.press(.down)
+        }
+        waitForFocus(on: information)
+        screenshot("tv-details-information-focused")
     }
 
     @MainActor

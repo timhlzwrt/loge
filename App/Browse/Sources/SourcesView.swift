@@ -20,6 +20,11 @@ struct SourcesView: View {
     @State private var sourceOrder = StreamDetails.SortOrder.cachedFirst
     @State private var secondaryOrder = StreamDetails.SortOrder.addonOrder
     @State private var maximumBitrate = 0
+    #if os(tvOS)
+    @FocusState private var focusedSourceID: ListedSource.ID?
+    @State private var initialFocusID: ListedSource.ID?
+    @State private var hasPlacedFocus = false
+    #endif
     #if os(macOS)
     @State private var selectedID: ListedSource.ID?
     @FocusState private var isListFocused: Bool
@@ -77,6 +82,12 @@ struct SourcesView: View {
             }
         }
         // On the Group, so installing an addon swaps in the list without closing this sheet.
+        #if os(tvOS)
+        // A sheet is a narrow panel there, with Done squeezed against the title; Menu closes this.
+        .fullScreenCover(isPresented: $isAddingAddon) {
+            NavigationStack { AddonsSettingsView() }
+        }
+        #else
         .sheet(isPresented: $isAddingAddon) {
             NavigationStack {
                 AddonsSettingsView()
@@ -87,13 +98,14 @@ struct SourcesView: View {
                     }
             }
         }
+        #endif
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.canvas)
         .hidingPhoneTabBar()
         #if !os(tvOS)
         .navigationTitle(route.title)
         #endif
-        // Keyed by the addons, so one added from the empty state is asked too.
+        // Again when the addons change: one installed from the empty state above has to be asked too.
         .task(id: providers.map(\.id)) {
             guard !providers.isEmpty else { return }
             await load(providers)
@@ -101,6 +113,14 @@ struct SourcesView: View {
             guard !Task.isCancelled else { return }
             // Either way the attempt is over; without a match the list is the way forward.
             hasAutoplayed = true
+            #if os(tvOS)
+            if !hasPlacedFocus {
+                let groups = groups(providers)
+                if let id = lastPlayedID(in: groups) ?? recommendedID(in: groups) ?? groups.first?.entries.first?.id {
+                    initialFocusID = id
+                }
+            }
+            #endif
         }
         .onDisappear {
             if let entry = pendingPlay { play(entry.stream, from: entry.provider) }
@@ -166,8 +186,13 @@ struct SourcesView: View {
                 }
             }
             .frame(maxWidth: 760, alignment: .leading)
-            List {
-                list(groups, providers: providers)
+            ScrollViewReader { proxy in
+                List {
+                    list(groups, providers: providers)
+                }
+                .task(id: initialFocusID) {
+                    if let initialFocusID { proxy.scrollTo(initialFocusID) }
+                }
             }
             .frame(width: 860)
             .frame(maxWidth: .infinity, alignment: .trailing)
@@ -440,7 +465,17 @@ struct SourcesView: View {
         }
         #else
         Button { choose(entry) } label: { label }
-            #if !os(tvOS)
+            #if os(tvOS)
+            .id(entry.id)
+            .focused($focusedSourceID, equals: entry.id)
+            .task(id: initialFocusID) {
+                // The list must mount the row before the focus engine can select it.
+                if !hasPlacedFocus, initialFocusID == entry.id {
+                    hasPlacedFocus = true
+                    focusedSourceID = entry.id
+                }
+            }
+            #else
             .buttonStyle(.plain)
             #endif
         #endif

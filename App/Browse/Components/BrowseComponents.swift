@@ -82,6 +82,29 @@ extension View {
         #endif
     }
 
+    /// The screen's name. tvOS pins a navigation title in place and draws whatever scrolls
+    /// across it, so there the same title sits on a strip of canvas that the content passes under.
+    func pageTitle(_ title: String) -> some View {
+        #if os(tvOS)
+        VStack(spacing: 0) {
+            Text(title)
+                .font(.system(size: 76, weight: .bold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .accessibilityAddTraits(.isHeader)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 50)
+                .padding(.bottom, 10)
+                .background { Color.canvas.ignoresSafeArea(edges: [.top, .horizontal]) }
+                .zIndex(1)
+            self
+        }
+        #else
+        navigationTitle(title)
+        #endif
+    }
+
     /// Keeps long text at a comfortable line length on iPad, where the page runs far wider.
     func readingWidth() -> some View {
         #if os(iOS)

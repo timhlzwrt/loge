@@ -76,6 +76,6 @@ struct GenreView: View {
             .padding(.vertical, 16)
         }
         .background(Color.canvas)
-        .navigationTitle(genre.name)
+        .pageTitle(genre.name)
     }
 }

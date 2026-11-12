@@ -172,24 +172,23 @@ struct AddonsSettingsView: View {
                 }
                 ForEach(store.addons) { addon in
                     let row = AddonRow(addon: addon, isUnreachable: store.unreachable.contains(addon.id))
-                    Group {
-                        #if os(tvOS)
-                        // Plain rows can't take focus on tvOS, so the row opens its actions instead.
-                        Menu { actions(for: addon) } label: { row }
-                        #else
-                        row.contextMenu { actions(for: addon) }
-                        #endif
-                    }
-                    // On the row, so on iPhone and iPad the dialog points at the addon it removes.
-                    .confirmationDialog(
-                        "Remove \(addon.displayName)?",
-                        isPresented: Binding(get: { removing?.id == addon.id }, set: { if !$0 { removing = nil } }),
-                        titleVisibility: .visible
-                    ) {
-                        Button("Remove", role: .destructive) { store.remove(addon.id) }
-                    } message: {
-                        Text("Adding it back means entering its manifest URL again.")
-                    }
+                    #if os(tvOS)
+                    // Plain rows can't take focus on tvOS, so the row opens its actions instead.
+                    Menu { actions(for: addon) } label: { row }
+                        .accessibilityLabel(addon.displayName)
+                    #else
+                    row.contextMenu { actions(for: addon) }
+                        // On the row, so on iPhone and iPad the dialog points at the addon it removes.
+                        .confirmationDialog(
+                            "Remove \(addon.displayName)?",
+                            isPresented: Binding(get: { removing?.id == addon.id }, set: { if !$0 { removing = nil } }),
+                            titleVisibility: .visible
+                        ) {
+                            Button("Remove", role: .destructive) { store.remove(addon.id) }
+                        } message: {
+                            Text("Adding it back means entering its manifest URL again.")
+                        }
+                    #endif
                 }
                 #if !os(tvOS)
                 .onMove { store.move(fromOffsets: $0, toOffset: $1) }
@@ -245,6 +244,11 @@ struct AddonsSettingsView: View {
                 #endif
             }
         }
+        #if os(tvOS)
+        .fullScreenCover(item: $removing) { addon in
+            AddonRemovalConfirmation(host: addon.host) { store.remove(addon.id) }
+        }
+        #endif
         #if os(iOS)
         .toolbar {
             if !store.addons.isEmpty { EditButton() }
@@ -302,6 +306,42 @@ struct AddonsSettingsView: View {
         }
     }
 }
+
+#if os(tvOS)
+/// Native tvOS alerts render their focused Cancel label white on the app's white accent.
+private struct AddonRemovalConfirmation: View {
+    let host: String
+    let remove: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @FocusState private var cancelFocused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            Text("Remove addon?").font(.title2.bold())
+            Text("To add this addon again, you'll need its manifest URL. Host: \(host).")
+                .foregroundStyle(.secondary)
+            HStack(spacing: 24) {
+                Button("Cancel") { dismiss() }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .focused($cancelFocused)
+                Button("Remove", role: .destructive) {
+                    remove()
+                    dismiss()
+                }
+                .buttonStyle(.glass)
+                .tint(.red)
+            }
+        }
+        .padding(40)
+        .frame(width: 640, alignment: .leading)
+        .background(Color.canvas, in: .rect(cornerRadius: Metrics.cardRadius))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .presentationBackground(.black.opacity(0.7))
+        .defaultFocus($cancelFocused, true)
+        .onExitCommand { dismiss() }
+    }
+}
+#endif
 
 private struct AddonRow: View {
     let addon: InstalledAddon

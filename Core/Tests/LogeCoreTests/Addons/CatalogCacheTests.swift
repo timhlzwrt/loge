@@ -31,6 +31,11 @@ final class CatalogCacheTests: Sendable {
         clock.date.withLock { $0.addTimeInterval(seconds) }
     }
 
+    private func isOnDisk(_ page: Data) -> Bool {
+        let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
+        return files.contains { (try? Data(contentsOf: $0)) == page }
+    }
+
     private func ids(_ cache: CatalogCache, persist: Bool = true, load: @escaping CatalogCache.Load) async throws -> [String] {
         try await cache.metas(for: url, persist: persist, load: load, decode: AddonClient.decodeCatalog).map(\.id)
     }
@@ -60,17 +65,14 @@ final class CatalogCacheTests: Sendable {
     @Test func stalePageShowsAtOnceAndRefreshesForNextTime() async throws {
         _ = try await ids(cache()) { [page = page("a")] in page }
         advance(120)
-        let refreshed = Mutex(false)
-        let stale = try await ids(cache()) { [page = page("b")] in
-            refreshed.withLock { $0 = true }
-            return page
-        }
+        let refreshedPage = page("b")
+        let stale = try await ids(cache()) { refreshedPage }
         #expect(stale == ["a"])
-        // The refresh runs on its own; wait for it to land on disk.
-        for _ in 0..<100 where !refreshed.withLock({ $0 }) {
+        // The refresh runs on its own; wait for the page itself to be on disk, since a
+        // fixed pause after the request is too short on a busy CI runner.
+        for _ in 0..<500 where !isOnDisk(refreshedPage) {
             try await Task.sleep(for: .milliseconds(10))
         }
-        try await Task.sleep(for: .milliseconds(50))
         let next = try await ids(cache()) { Issue.record("Asked again despite the refresh"); return Data() }
         #expect(next == ["b"])
     }

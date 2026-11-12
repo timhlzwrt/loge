@@ -236,8 +236,7 @@ struct PlayerView: View {
         }
         #if os(tvOS)
         .onPlayPauseCommand {
-            player?.togglePause()
-            showControls()
+            if let player { togglePlayback(player) }
         }
         .onMoveCommand { direction in
             // A swipe that scrubs shouldn't also jump 10 seconds.
@@ -289,6 +288,11 @@ struct PlayerView: View {
         // The end card's Start Over, for the same reason.
         .onChange(of: player.map(isFinished) ?? false) { _, finished in
             if finished && !isPanelShown { nextFocus = .play }
+        }
+        .onChange(of: player?.status == .ended) { _, ended in
+            if ended, session.current?.item?.type == MediaType.movie, session.next == nil {
+                closePlayback()
+            }
         }
         .animation(.easeInOut(duration: 0.2), value: isPanelShown)
         #elseif os(macOS)
@@ -358,8 +362,7 @@ struct PlayerView: View {
     /// would be what the focus engine picks instead of the button beside the focused one.
     private func remoteSurface(_ player: MPVPlayer) -> some View {
         Button {
-            player.togglePause()
-            showControls()
+            togglePlayback(player)
         } label: {
             Color.clear
         }
@@ -380,6 +383,17 @@ struct PlayerView: View {
                 onEnded: { finishScrub(player) }
             )
         }
+    }
+
+    /// At the end there is nothing to unpause, so it starts over, as the Play button does elsewhere.
+    private func togglePlayback(_ player: MPVPlayer) {
+        if player.status == .ended {
+            player.seek(to: 0)
+            player.play()
+        } else {
+            player.togglePause()
+        }
+        showControls()
     }
 
     /// A full swipe across the touch surface moves five minutes, or a tenth of a long film.

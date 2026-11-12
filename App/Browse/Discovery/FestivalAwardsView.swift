@@ -84,7 +84,7 @@ struct FestivalAwardsView: View {
             .padding(.vertical, 24)
         }
         .background(Color.canvas)
-        .navigationTitle(collection.name)
+        .pageTitle(collection.name)
         .task(id: collection) {
             edition = nil
             section = nil
@@ -279,7 +279,7 @@ private struct FestivalFilmInfoView: View {
             .padding(Metrics.gutter)
         }
         .background(Color.canvas)
-        .navigationTitle(film.title)
+        .pageTitle(film.title)
     }
 }
 
@@ -318,7 +318,7 @@ private struct FestivalAwardListView: View {
         .scrollContentBackground(.hidden)
         #endif
         .background(Color.canvas)
-        .navigationTitle("\(String(edition.year)) awards")
+        .pageTitle("\(String(edition.year)) awards")
     }
 
     private func label(_ award: FestivalAward) -> some View {

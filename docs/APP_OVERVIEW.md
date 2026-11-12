@@ -195,6 +195,9 @@ after the end), the end card, the panel, Sources and the failure screen. A
 `?hang=<anything>` never starts, for the 20-second open timeout.
 `TEST_RUNNER_PLAYBACK_FIXTURE_SHORT_URL` (a clip under 30 s, such as a second test addon
 on :8767) adds a switch to a shorter source.
+Source-focus and addon-removal checks use an isolated addon store. Run a second
+`Tools/test-addon.py` without `--tracks-file` on port 8765 and set
+`TEST_RUNNER_DISCOVERY_ADDON_URL=http://127.0.0.1:8765/manifest.json` for these checks.
 `DiscoveryTVTests.testLibraryFocusMovesBetweenRows`
 and the remote driver's `TEST_RUNNER_DISCOVERY_SCREEN=library` use an isolated
 library fixture for navigation checks without changing the user's saved titles.

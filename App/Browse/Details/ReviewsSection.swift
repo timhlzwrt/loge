@@ -279,9 +279,7 @@ private struct ReviewDetailView: View {
         }
         .background(Color.canvas)
         .hidingPhoneTabBar()
-        #if !os(tvOS)
-        .navigationTitle(review.author)
-        #endif
+        .pageTitle(review.author)
     }
 }
 
@@ -292,9 +290,7 @@ private struct ReviewListView: View {
         ScrollView { ReviewsSection(preview: preview, showsAll: true).padding(.vertical, 24) }
             .background(Color.canvas)
             .hidingPhoneTabBar()
-            #if !os(tvOS)
-            .navigationTitle("Reviews")
-            #endif
+            .pageTitle("Reviews")
     }
 }
 

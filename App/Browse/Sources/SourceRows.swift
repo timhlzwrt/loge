@@ -12,9 +12,10 @@ struct SourceGroupView<Content: View>: View {
         Section {
             content
         } header: {
+            // Not `.secondary`: a list header dims its text again, which left these unreadable.
             Text(title)
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.white.opacity(0.6))
         }
         #else
         VStack(alignment: .leading, spacing: 6) {
@@ -81,7 +82,7 @@ struct StreamRow: View {
                 if let note {
                     Text(note)
                         .font(summaryFont.weight(.medium))
-                        .foregroundStyle(isLastPlayed || connectionSpeed != nil ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                        .foregroundStyle(isLastPlayed || connectionSpeed != nil ? Self.highlight : AnyShapeStyle(.secondary))
                 }
             }
             Spacer(minLength: 8)
@@ -142,6 +143,13 @@ struct StreamRow: View {
             ?? entry.stream.cleanName?.components(separatedBy: .newlines).joined(separator: " ")
             ?? "Source"
     }
+
+    #if os(tvOS)
+    /// Not the accent: the focused row is a platter in that colour, and the note vanished on it.
+    private static let highlight = AnyShapeStyle(.primary)
+    #else
+    private static let highlight = AnyShapeStyle(.tint)
+    #endif
 
     #if os(tvOS)
     private let titleFont = Font.headline

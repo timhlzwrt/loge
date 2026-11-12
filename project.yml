@@ -70,6 +70,8 @@ targets:
         # explains how to sign with a certificate instead.
         CODE_SIGN_IDENTITY[sdk=macosx*]: "$(LOGE_MAC_SIGNING_IDENTITY:default=-)"
         LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]: "$(inherited) @executable_path/../Frameworks"
+        # The distributed Mac build is for Apple silicon; an Intel slice doubled its build time.
+        ARCHS[sdk=macosx*]: arm64
         # The commit stamp below reads the repository, outside what a sandboxed script may.
         ENABLE_USER_SCRIPT_SANDBOXING: NO
     # Settings > About shows which commit a build is, to compare with GitHub; the build
