@@ -12,6 +12,10 @@ struct HomeView: View {
     @State private var playing: SourcesRoute?
     @State private var opening: MetaPreview?
     #endif
+    #if os(macOS)
+    /// The scroll view runs under the toolbar, so what it holds can't read this itself.
+    @State private var topInset: CGFloat = 0
+    #endif
 
     var body: some View {
         let sources = DiscoveryCatalogs.home
@@ -47,12 +51,24 @@ struct HomeView: View {
         }
         .navigationDestination(item: $playing) { SourcesView(route: $0) }
         .navigationDestination(item: $opening) { MetaDetailView(preview: $0) }
+        #if os(macOS)
+        // The hero is a button reaching under the toolbar, where it took the click meant to
+        // move the window. This strip stays put while the page scrolls.
+        .overlay(alignment: .top) {
+            Color.clear
+                .frame(height: topInset)
+                .contentShape(.rect)
+                .gesture(WindowDragGesture())
+                .allowsWindowActivationEvents(true)
+        }
+        #endif
         // The hero starts at the top edge of the screen, under the status bar or toolbar.
         .ignoresSafeArea(edges: .top)
         .background(Color.canvas)
         #if os(iOS)
         .toolbar(.hidden, for: .navigationBar)
         #elseif os(macOS)
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { topInset = $0 }
         // The hero names what's on screen; the window needs no title over it.
         .toolbar(removing: .title)
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
