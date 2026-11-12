@@ -103,7 +103,6 @@ final class FlowTests: XCTestCase {
         }
         let tabBar = app.tabBars.firstMatch
         XCTAssertTrue(tabBar.waitForExistence(timeout: 5))
-        XCTAssertFalse(tabBar.buttons["Settings"].exists, "Settings is a gear on Home")
         openTab("Settings")
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
         XCTAssertTrue(tabBar.exists, "Settings keeps the tab bar")
@@ -825,8 +824,7 @@ final class FlowTests: XCTestCase {
 
     @MainActor
     private func openTab(_ name: String) {
-        // iPhone shows a tab bar, and Settings as a gear on Home; iPad shows the tabs as plain
-        // buttons at the top.
+        // iPhone shows a tab bar; iPad shows the tabs as plain buttons at the top.
         let tab = app.tabBars.buttons[name].firstMatch
         (tab.exists ? tab : app.buttons[name].firstMatch).tap()
     }

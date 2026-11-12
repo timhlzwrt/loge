@@ -160,10 +160,6 @@ struct FeaturedPage: View {
             .buttonStyle(.plain)
             // The title link below opens the same page; one stop per page is enough.
             .accessibilityHidden(true)
-            #if os(macOS)
-            // Lets the backdrop run on under the floating sidebar.
-            .backgroundExtensionEffect()
-            #endif
 
             VStack(alignment: isCentred ? .center : .leading, spacing: 12) {
                 NavigationLink(value: meta) {

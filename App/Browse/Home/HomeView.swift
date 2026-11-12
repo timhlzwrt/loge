@@ -12,10 +12,6 @@ struct HomeView: View {
     @State private var playing: SourcesRoute?
     @State private var opening: MetaPreview?
     #endif
-    #if os(iOS)
-    /// The scroll view runs under the status bar, so what it holds can't read this itself.
-    @State private var topInset: CGFloat = 0
-    #endif
 
     var body: some View {
         let sources = DiscoveryCatalogs.home
@@ -25,11 +21,6 @@ struct HomeView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 28) {
                 FeaturedCarousel(movies: sources[0], series: sources[1], playing: $playing, opening: $opening)
-                    #if os(iOS)
-                    .overlay(alignment: .topTrailing) {
-                        if Metrics.isPhone { settingsButton }
-                    }
-                    #endif
                 ContinueWatchingRow()
                 MyListRow()
                 RecommendedRow()
@@ -60,7 +51,6 @@ struct HomeView: View {
         .ignoresSafeArea(edges: .top)
         .background(Color.canvas)
         #if os(iOS)
-        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { topInset = $0 }
         .toolbar(.hidden, for: .navigationBar)
         #elseif os(macOS)
         // The hero names what's on screen; the window needs no title over it.
@@ -69,24 +59,6 @@ struct HomeView: View {
         #endif
         #endif
     }
-
-    #if os(iOS)
-    /// Scrolls away with the hero rather than floating over the rows. The hero keeps its frame
-    /// when its catalogs fail, so this stays reachable offline.
-    private var settingsButton: some View {
-        NavigationLink(value: SettingsRoute()) {
-            Label("Settings", systemImage: "gearshape")
-                .modifier(CapsuleIcon())
-                .fontWeight(.semibold)
-                .foregroundStyle(.white)
-                // The tint keeps the white symbol readable when the artwork behind it is bright.
-                .glassEffect(.regular.tint(.black.opacity(0.45)).interactive(), in: .circle)
-        }
-        .buttonStyle(.plain)
-        .padding(.top, topInset)
-        .padding(.trailing, 16)
-    }
-    #endif
 }
 
 /// Downloads artwork into the shared URL cache that `Artwork` and `TitleLogo` load from,

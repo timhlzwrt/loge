@@ -21,7 +21,7 @@ struct MetaDetailView: View {
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     #endif
     #if !os(tvOS)
-    /// The page's own shape rather than the screen's: the sidebar and window resizing narrow it.
+    /// The page's own shape rather than the screen's: window resizing narrows it.
     @State private var hasRoomForColumns = false
     #endif
     /// Set by "Choose a Source" and by picking an episode, which bypass the remembered source.

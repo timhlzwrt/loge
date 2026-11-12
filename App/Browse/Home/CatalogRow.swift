@@ -150,7 +150,7 @@ struct CatalogRow: View {
         }
         .scrollClipDisabled()
         #if os(tvOS)
-        // Home opens on its first row rather than on the sidebar.
+        // Home opens on its first row rather than on the tab bar.
         .defaultFocus($isFirstFocused, isPrimary)
         #endif
     }

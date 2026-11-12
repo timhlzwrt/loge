@@ -11,7 +11,7 @@ final class TMDBSetupTests: XCTestCase {
         XCUIDevice.shared.orientation = .portrait
         let app = XCUIApplication()
         app.launch()
-        // iPad has a Settings tab, iPhone a gear on Home; both are buttons with this name.
+        // The Settings tab is a button with this name on iPhone and iPad.
         let settings = app.buttons["Settings"].firstMatch
         XCTAssertTrue(settings.waitForExistence(timeout: 10))
         settings.tap()

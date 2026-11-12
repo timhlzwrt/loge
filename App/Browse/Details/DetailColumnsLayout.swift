@@ -59,7 +59,7 @@ struct DetailColumnsLayout: Layout {
     /// Calls `place` for each subview and returns the total height.
     private func arrange(_ subviews: Subviews, width: CGFloat, widening widened: Int,
                          place: (LayoutSubview, CGPoint, CGFloat) -> Void) -> CGFloat {
-        // Enough on the left for Play and the three actions, even beside the iPad's sidebar.
+        // Enough on the left for Play and the three actions, even in a narrow window.
         let mainWidth = min(max((width * 0.58).rounded(), 580), width)
         let sideIndices = subviews.indices.filter { subviews[$0][DetailColumnKey.self] == .side }
         let moved = Set(sideIndices.suffix(widened))

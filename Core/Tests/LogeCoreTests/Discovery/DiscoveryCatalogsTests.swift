@@ -14,14 +14,6 @@ struct DiscoveryCatalogsTests {
         #expect(shelves.first?.title == "Popular Movies")
     }
 
-    @Test func shortTitlesFitTheMacSidebarAndStayDistinct() {
-        let titles = DiscoveryCatalogs.home.map(\.shortTitle)
-        #expect(Set(titles).count == titles.count)
-        #expect(titles.allSatisfy { $0.count <= 12 })
-        #expect(DiscoveryCatalogs.home.first?.title == "Popular Movies")
-        #expect(titles.first == "Movies")
-    }
-
     @Test func detailsFillOnlyWhatAPreviewLacks() {
         let preview = MetaPreview(id: "tt1", type: "movie", name: "Film", logo: "https://img/own", runtime: "90 min")
         let meta = Meta(id: "tt1", type: "movie", name: "Film", logo: "https://img/meta", description: "Plot",

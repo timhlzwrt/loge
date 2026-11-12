@@ -163,6 +163,9 @@ without TMDB the page says so and shows the title it came from.
   drag it rather than tap it.
 - Resuming past a shorter source's end seeks to 30 s before it instead of finishing; opening
   a stream fails with Try Again after 20 s.
+- Navigation is the four tabs (Home, My Lists, Search, Settings) with `.tabBarOnly`, no sidebar
+  anywhere. Search has the search role except on iPhone, where the role would detach it from
+  the one pill; iPad and Mac draw it as the magnifier at the pill's trailing end.
 - Search's keyboard reappearing after going back is the system restoring a focused field;
   clearing focus on leaving doesn't stop it.
 
