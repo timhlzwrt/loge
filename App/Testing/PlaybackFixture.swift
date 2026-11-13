@@ -28,7 +28,16 @@ struct PlaybackFixtureView: View {
                 }
                 if let item {
                     Button("Play remote fixture") {
-                        library.mergeRemote(item, fraction: 0.5, estimatedDuration: 2_700, at: .now)
+                        // Halfway through on another device, whose file ran 45 minutes.
+                        var snapshot = library.playbackSyncSnapshot
+                        // Left by "Remove fixture progress"; a snapshot can't hold both.
+                        snapshot.removals[item.id] = nil
+                        snapshot.entries[item.id] = WatchProgress(item: item, position: 1_350, duration: 2_700, updatedAt: .now)
+                        do {
+                            try library.applyPlaybackSyncSnapshot(snapshot)
+                        } catch {
+                            assertionFailure("Couldn't save the remote fixture's progress: \(error)")
+                        }
                         session.start(PlaybackRequest(title: "Playback fixture", url: url, item: item,
                             startAt: library.resumePosition(for: item.id)))
                         // Force the ordering where a local update arrives before the real-duration seek.

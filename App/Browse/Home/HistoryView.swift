@@ -5,7 +5,7 @@ import SwiftUI
 /// pushed by a destination link doesn't navigate.
 struct HistoryRoute: Hashable {}
 
-/// Everything played or marked watched on this device or synced from Trakt, by day,
+/// Everything played or marked watched on this device or synced from the account, by day,
 /// newest first. Selecting an entry opens its title, where Play picks up from there.
 struct HistoryView: View {
     @Environment(LibraryStore.self) private var library
@@ -63,11 +63,12 @@ struct HistoryView: View {
         return days
     }
 
-    /// "Today", "Yesterday", "Saturday, October 24"; short drops the weekday, for card captions.
+    /// "Today", "Yesterday", "Tomorrow", "Saturday, October 24"; short drops the weekday, for card captions.
     static func dayTitle(_ date: Date, short: Bool = false) -> String {
         let calendar = Calendar.current
         if calendar.isDateInToday(date) { return "Today" }
         if calendar.isDateInYesterday(date) { return "Yesterday" }
+        if calendar.isDateInTomorrow(date) { return "Tomorrow" }
         var format = short ? Date.FormatStyle.dateTime.day().month(.abbreviated) : .dateTime.weekday(.wide).day().month(.wide)
         if !calendar.isDate(date, equalTo: .now, toGranularity: .year) {
             format = format.year()
@@ -89,7 +90,7 @@ struct HistoryCardLink: View {
         NavigationLink(value: MetaPreview(
             id: item.metaID, type: item.type, name: item.title, poster: item.poster, background: item.background
         )) {
-            WatchCard(entry: entry, detail: when)
+            WatchCard(item: item, progress: entry, detail: when)
         }
         #if os(tvOS)
         // Lifts just the still on focus, with the text below it, like the episode cards.
@@ -109,16 +110,17 @@ struct HistoryCardLink: View {
 /// Something started or watched, in History and Continue Watching. Laid out like the
 /// episode cards on a title's page, with the show's name added.
 struct WatchCard: View {
-    let entry: WatchProgress
-    /// After the episode in the caption: when it was watched, or how much is left.
+    let item: WatchItem
+    /// Nil for an episode that hasn't been started, which has no bar or checkmark to draw.
+    var progress: WatchProgress?
+    /// After the episode in the caption: when it was watched or airs, or how much is left.
     let detail: String
 
     var body: some View {
-        let item = entry.item
         VStack(alignment: .leading, spacing: 3) {
             // Stills are often missing, so a still that fails falls back to the backdrop, then the poster.
             Artwork(url: item.thumbnail ?? item.background, fallbacks: [item.background, item.poster].compactMap { $0 })
-                .overlay { WatchProgressBar(progress: entry) }
+                .overlay { if let progress { WatchProgressBar(progress: progress) } }
                 .aspectRatio(16 / 9, contentMode: .fit)
                 .clipShape(.rect(cornerRadius: Metrics.cardRadius))
                 #if os(tvOS)

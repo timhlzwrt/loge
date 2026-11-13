@@ -30,10 +30,6 @@ an immediate push. On leaving, the app asks the system for time to finish that p
 how much it gets depends on the operating system, so a suspended device may deliver
 its pending changes the next time it opens.
 
-While an account is connected, Trakt imports and scrobbling are paused so the
-same device's saved Trakt connection cannot mix another person's watch activity
-into this account. Trakt-only devices keep their existing behavior.
-
 ## Share setup with another person
 
 Use **Share setup**, select **Addons**, **Playback preferences**, and/or

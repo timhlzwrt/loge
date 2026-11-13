@@ -32,6 +32,8 @@ targets:
       properties:
         # Picture in Picture keeps playing once the app is in the background.
         UIBackgroundModes: [audio]
+        # Apple TV shows a title's Trailer button only when the YouTube app is there to play it.
+        LSApplicationQueriesSchemes: [youtube]
         # Read by Sparkle on macOS; the other platforms do not link the updater.
         SUFeedURL: https://tjh.li/loge/appcast.xml
         SUPublicEDKey: soQg67Hcc4FdzFXtjN/k8OKntRJSs7SACKnoK/xh7Oc=

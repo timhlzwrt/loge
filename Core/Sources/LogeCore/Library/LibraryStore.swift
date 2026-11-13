@@ -110,45 +110,6 @@ public final class LibraryStore {
         saveProgress()
     }
 
-    /// Progress reported by another device, as a fraction. Newer local progress wins.
-    /// Without a duration known here, `estimatedDuration` (the runtime) stands in.
-    public func mergeRemote(_ item: WatchItem, fraction: Double, estimatedDuration: Double, at date: Date) {
-        mergeRemote([RemoteProgress(item: item, fraction: fraction, estimatedDuration: estimatedDuration, date: date)])
-    }
-
-    /// One entry of `mergeRemote(_:)`'s batch.
-    struct RemoteProgress {
-        let item: WatchItem
-        let fraction: Double
-        let estimatedDuration: Double
-        let date: Date
-    }
-
-    /// Several remote entries in order, saved once: a Trakt pull can bring hundreds.
-    func mergeRemote(_ entries: [RemoteProgress]) {
-        var changed = false
-        for entry in entries {
-            changed = merge(entry.item, fraction: entry.fraction, estimatedDuration: entry.estimatedDuration, at: entry.date)
-                || changed
-        }
-        if changed { saveProgress() }
-    }
-
-    private func merge(_ item: WatchItem, fraction: Double, estimatedDuration: Double, at date: Date) -> Bool {
-        let local = progress[item.id]
-        guard local.map({ $0.updatedAt < date }) ?? true else { return false }
-        // Trakt goes on listing paused progress after it's removed here; only newer playback counts.
-        let removal = [playbackRemovals[item.id], playbackTitleRemovals[item.metaID]].compactMap { $0 }.max()
-        guard removal.map({ $0 < date }) ?? true else { return false }
-        let knownDuration = local.flatMap { $0.isEstimated == true ? nil : $0.duration }
-        let duration = knownDuration ?? estimatedDuration
-        guard duration.isFinite, duration > 0, fraction.isFinite else { return false }
-        setProgress(WatchProgress(
-            item: local?.item ?? item, position: min(max(fraction, 0), 1) * duration, duration: duration,
-            updatedAt: date, isEstimated: knownDuration == nil ? true : nil), for: item.id)
-        return true
-    }
-
     /// The one way an entry's progress changes. It supersedes the archived copy and any
     /// remote resume point; a removal is dated so sync doesn't bring the entry back.
     private func setProgress(_ entry: WatchProgress?, for id: String, removedAt date: Date? = nil) {
@@ -242,17 +203,31 @@ public final class LibraryStore {
     private func latestProgress(metaID: String) -> WatchProgress? {
         var latest: WatchProgress?
         for entries in [progress, playbackArchive] {
-            for entry in entries.values where entry.item.metaID == metaID {
-                if let current = latest {
-                    if entry.updatedAt < current.updatedAt { continue }
-                    if entry.updatedAt == current.updatedAt,
-                       (entry.item.season ?? 0, entry.item.episode ?? 0)
-                        <= (current.item.season ?? 0, current.item.episode ?? 0) { continue }
-                }
+            for entry in entries.values where entry.item.metaID == metaID && Self.isLater(entry, than: latest) {
                 latest = entry
             }
         }
         return latest
+    }
+
+    /// Episodes marked watched together share a time; the furthest along counts as the latest.
+    private static func isLater(_ entry: WatchProgress, than current: WatchProgress?) -> Bool {
+        guard let current else { return true }
+        if entry.updatedAt != current.updatedAt { return entry.updatedAt > current.updatedAt }
+        return (entry.item.season ?? 0, entry.item.episode ?? 0) > (current.item.season ?? 0, current.item.episode ?? 0)
+    }
+
+    /// The latest entry of every series with progress, most recently watched first. Removing a
+    /// series from Continue Watching forgets its progress, and so stops following it.
+    public var followedSeries: [WatchProgress] {
+        var latest: [String: WatchProgress] = [:]
+        for entries in [progress, playbackArchive] {
+            for entry in entries.values where entry.item.type == MediaType.series
+                && Self.isLater(entry, than: latest[entry.item.metaID]) {
+                latest[entry.item.metaID] = entry
+            }
+        }
+        return latest.values.sorted { ($0.updatedAt, $0.item.metaID) > ($1.updatedAt, $1.item.metaID) }
     }
 
     /// The episode after `id` in viewing order, if there is one.

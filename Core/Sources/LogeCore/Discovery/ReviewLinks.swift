@@ -2,9 +2,9 @@ import Foundation
 
 /// Stable title links; review text and scores require licensed provider access.
 public enum ReviewLinks {
-    public static func critics(imdbID: String) -> URL? {
+    public static func imdb(imdbID: String) -> URL? {
         guard isIMDbTitle(imdbID) else { return nil }
-        return URL(string: "https://www.imdb.com/title/\(imdbID)/externalreviews/")
+        return URL(string: "https://www.imdb.com/title/\(imdbID)/")
     }
 
     public static func letterboxd(imdbID: String, type: String) -> URL? {

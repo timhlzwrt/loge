@@ -100,11 +100,11 @@ struct FilmCollectionsTests {
     }
 
     @Test func reviewsUseStableValidatedIMDbIDs() {
-        #expect(ReviewLinks.critics(imdbID: "tt0816692")?.path() == "/title/tt0816692/externalreviews/")
+        #expect(ReviewLinks.imdb(imdbID: "tt0816692")?.path() == "/title/tt0816692/")
         #expect(ReviewLinks.letterboxd(imdbID: "tt0816692", type: "movie")?.host() == "letterboxd.com")
         #expect(ReviewLinks.letterboxd(imdbID: "tt0903747", type: "series") == nil)
         for id in ["nm123", "tt123/path", "https://example.org", ""] {
-            #expect(ReviewLinks.critics(imdbID: id) == nil)
+            #expect(ReviewLinks.imdb(imdbID: id) == nil)
             #expect(ReviewLinks.letterboxd(imdbID: id, type: "movie") == nil)
         }
     }

@@ -18,15 +18,16 @@ features, proposals, scope). History of individual changes is in git and the PRs
   (`loge`) builds for iOS, tvOS and macOS; `logeUITests` holds on-demand UI tests.
 - `Core/` — `LogeCore` Swift package, no UI, grouped by domain: Addons (protocol client,
   routing in user order, `AddonStore`, `StreamDetails`, `SourceSelection`), Library
-  (`LibraryStore`: progress, My List, history, remembered sources), Playback, Discovery,
-  TMDB, Trakt (`TraktChange` queue), Sync (`SyncedSettings`), plus `Keychain` and `Accent`.
+  (`LibraryStore`: progress, My List, history, remembered sources; `EpisodeSchedule`: new and
+  upcoming episodes of the series being watched), Playback, Discovery, TMDB, MDBList (the
+  Letterboxd and Rotten Tomatoes scores), Sync (`SyncedSettings`), plus `Keychain` and `Accent`.
   All persistence is `UserDefaults` because tvOS can purge app files.
 - `App/Browse/` — by screen: Components, Home, Details, Sources, People, Discovery.
 - `App/Player/` — `PlaybackSession` (owns the playback in progress, outliving the player
   screen for Picture in Picture), `MPVPlayer` (libmpv, AVFoundation video layer),
   `ScrubPreview` (a second, silent mpv for timeline thumbnails), `PlayerView`, controls and
   menus, `PictureInPicture`, `NowPlaying`, next-episode countdown, tvOS remote swipe reader.
-- `App/Settings/` — an index of pages: Sync, addons, Trakt, TMDB, accent; playback
+- `App/Settings/` — an index of pages: Sync, addons, TMDB, MDBList, accent; playback
   preferences inline; About (version, build commit, credits) and Data Sources, which holds
   all attribution rather than putting it under artwork.
 - `web/` — the project page for loge.tjh.li: static HTML/CSS in tjh.li's design, no scripts
@@ -88,9 +89,10 @@ main thread 60–100 ms, so for timing send arrow keys straight to the simulator
 app with macOS `sample <pid>`. The Apple TV is paired with Xcode for `devicectl` and crash
 logs; Instruments over the network to it drops after about a second.
 `--discovery-ui-test` with `-DISCOVERY_SCREEN <name>` opens a DEBUG fixture screen offline:
-`recommended`, `details`, `series`, `details-unmatched`, `details-busy`, `sources-folded|autoplay`
+`recommended`, `upcoming`, `details`, `details-collection`, `series`, `details-unmatched`,
+`details-busy`, `sources-folded|autoplay`
 (need `Tools/test-addon.py --port 8769 --many --delay 5`), `sources-empty(-sheet)`,
-`settings-review|failed`, `trakt-signin|keys`, `carousel-resume`. The playback fixture also takes
+`settings-review|failed`, `carousel-resume`. The playback fixture also takes
 `PLAYBACK_FIXTURE_NEXT=late`, `PLAYBACK_FIXTURE_SHORT_URL` and `?hang=`.
 
 ## Conventions
@@ -102,7 +104,7 @@ logs; Instruments over the network to it drops after about a second.
   don't ask for or schedule hardware checks, and name what a simulator can't establish (HDR,
   display matching, remote swipes, screen lock, physical cross-device handoff) as a limit.
   macOS has no simulator; report Mac runtime behaviour as unverified unless checked.
-- Reuse the existing tests and fixtures (`LibraryStoreTests`, `TraktTests`, `FlowTests`,
+- Reuse the existing tests and fixtures (`LibraryStoreTests`, `EpisodeScheduleTests`, `FlowTests`,
   `PlaybackRegressionTests`, `RemoteDriverTests`, `Tools/test-addon.py`, the playback
   fixtures) rather than creating another harness.
 - Platform differences use `#if os(...)` in place; sizes live in `Metrics`
@@ -124,18 +126,23 @@ stay out of this repo.
 
 Distributed as a SideStore source (each user signs with a free Apple ID; Apple TV via
 Sideloadly/atvloadly); no paid developer account. MPVKit player, vendored with an AVFoundation
-video output. Addons are added as manifest URLs. Cross-device sync is Trakt (user's own app
-keys) or the optional self-hosted account sync, never iCloud or a default hosted server; Trakt
-pauses while an account is connected. iPhone/iPad and Apple TV are equal main devices.
+video output. Addons are added as manifest URLs. Cross-device sync is the optional self-hosted
+account sync, never iCloud or a default hosted server; Trakt support was removed in November
+2026 (`RetiredTraktData` deletes its saved keys at launch). iPhone/iPad and Apple TV are equal main devices.
 Picture in Picture is required; downloads are out of scope; UI is English only for now.
 iPhone browsing is portrait-only (`AppDelegate`); the player turns. iPad has one window
 (`UIApplicationSupportsMultipleScenes` NO): every window would share the one `PlaybackSession`
 and present its player; the Mac has no New Window either. Destructive settings and library
-actions (addon removal, TMDB token, Trakt sign-out and keys, Sync disconnect, device revoke,
+actions (addon removal, TMDB token, MDBList key, Sync disconnect, device revoke,
 leaving a shared setup, deleting a list, marking a season unwatched) ask first. Dates and
 numbers use `Locale.interface` (en_US) to match the English UI; clock times follow the device.
 Person filmographies need TMDB: Cinemeta's search no longer names cast or directors, so
-without TMDB the page says so and shows the title it came from.
+without TMDB the page says so and shows the title it came from. TMDB is what makes the
+experience complete: without a token a title's page has no Cast & Crew at all, only the hint
+to connect it (trailers are the exception and work without). A title's scores sit in the
+header behind white marks of IMDb, Letterboxd and Rotten Tomatoes, the one place the app shows
+other brands' logos; the last two need the user's own MDBList key, and the review link rows
+they replaced are gone.
 
 ## Things that aren't obvious from the code
 
@@ -166,6 +173,18 @@ without TMDB the page says so and shows the title it came from.
 - Navigation is the four tabs (Home, My Lists, Search, Settings) with `.tabBarOnly`, no sidebar
   anywhere. Search has the search role except on iPhone, where the role would detach it from
   the one pill; iPad and Mac draw it as the magnifier at the pill's trailing end.
+- A series is followed while it has progress in the library: `EpisodeSchedule` looks up the 30
+  most recently watched, at most every six hours each. An episode aired since the one before
+  was finished shows in Continue Watching as "New episode"; the next unaired one in Upcoming.
+- Progress saved with `isEstimated` and a real fraction comes from the removed Trakt import;
+  it still resumes by fraction, so keep that path.
+- Trailers open on YouTube (addon `trailers`, or TMDB's list when connected); nothing in the
+  app can play them, and Apple TV has no browser.
+- `App/ScoreLogos.xcassets` holds the score marks as template SVGs: Letterboxd and Rotten
+  Tomatoes from Simple Icons, IMDb's plate from Wikimedia Commons with the lettering merged
+  into one even-odd path, because a template image keeps only alpha.
+- MDBList's key goes in the request's query, so its URLs never go into logs or errors. Its
+  routes end in a slash, which `URL.path` drops (the fixture matches without it).
 - Search's keyboard reappearing after going back is the system restoring a focused field;
   clearing focus on leaving doesn't stop it.
 
@@ -194,6 +213,8 @@ without TMDB the page says so and shows the title it came from.
 - The tvOS Home lag fix is measured in the simulator only (4K rendering still shows 90–170 ms
   frame gaps per move); keep simulator measurements comparable.
 - Unverified: playback and Picture in Picture on tvOS and macOS, HDR output, tvOS display
-  matching, swipe-to-scrub and the scrub preview on screen, live Trakt and physical
-  phone-to-Apple-TV handoff, Mac sources rows with AIOStreams' long names, the Search genre
+  matching, swipe-to-scrub and the scrub preview on screen, physical phone-to-Apple-TV
+  handoff, the Trailer button on Apple TV (shown only with the YouTube app installed, opened
+  by the undocumented `youtube://watch/<id>`), MDBList against the live service (built from
+  its published schema; no key was available), Mac sources rows with AIOStreams' long names, the Search genre
   pill and Watch Later row on Apple TV.

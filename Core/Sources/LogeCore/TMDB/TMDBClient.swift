@@ -32,6 +32,9 @@ public struct TMDBDetails: Sendable, Equatable {
     public var recommendations: [TMDBCreditTitle]
     /// The titles are TMDB's "similar" list, which it assembles from genres and keywords.
     public var recommendationsAreSimilar: Bool
+    public var trailerYouTubeID: String?
+    /// The film series this movie belongs to, for `TMDBClient.collection(id:)`.
+    public var collectionID: Int?
 
     public init(overview: String? = nil, posterURL: String? = nil, backgroundURL: String? = nil,
                 releaseInfo: String? = nil, runtime: String? = nil, genres: [String]? = nil,
@@ -41,7 +44,8 @@ public struct TMDBDetails: Sendable, Equatable {
                 seasonCount: Int? = nil, episodeCount: Int? = nil, rating: Double? = nil,
                 voteCount: Int? = nil, budget: Int? = nil, revenue: Int? = nil,
                 tmdbID: Int? = nil, recommendations: [TMDBCreditTitle] = [],
-                recommendationsAreSimilar: Bool = false) {
+                recommendationsAreSimilar: Bool = false, trailerYouTubeID: String? = nil,
+                collectionID: Int? = nil) {
         self.overview = overview
         self.posterURL = posterURL
         self.backgroundURL = backgroundURL
@@ -66,6 +70,21 @@ public struct TMDBDetails: Sendable, Equatable {
         self.tmdbID = tmdbID
         self.recommendations = recommendations
         self.recommendationsAreSimilar = recommendationsAreSimilar
+        self.trailerYouTubeID = trailerYouTubeID
+        self.collectionID = collectionID
+    }
+}
+
+/// A film series, such as a trilogy, with its films in release order.
+public struct TMDBCollection: Sendable, Equatable, Identifiable {
+    public var id: Int
+    public var name: String
+    public var titles: [TMDBCreditTitle]
+
+    public init(id: Int, name: String, titles: [TMDBCreditTitle]) {
+        self.id = id
+        self.name = name
+        self.titles = titles
     }
 }
 
@@ -171,10 +190,17 @@ public struct TMDBClient: Sendable {
         guard let id = match?.id, id > 0 else { throw TMDBError.notFound }
         let resource = type == MediaType.movie ? "movie" : "tv"
         let response: DetailsResponse = try await fetch("\(resource)/\(id)", query: [
-            .init(name: "append_to_response", value: "credits,recommendations,similar"),
+            .init(name: "append_to_response", value: "credits,recommendations,similar,videos"),
         ])
         guard response.id == id else { throw TMDBError.invalidResponse }
         return response.details(isMovie: type == MediaType.movie)
+    }
+
+    public func collection(id: Int) async throws -> TMDBCollection {
+        guard id > 0 else { throw TMDBError.notFound }
+        let response: CollectionResponse = try await fetch("collection/\(id)")
+        guard response.id == id, let collection = response.collection else { throw TMDBError.invalidResponse }
+        return collection
     }
 
     public func person(id: Int) async throws -> TMDBPersonDetails {

@@ -4,7 +4,7 @@
 
 **Status: pre-1.0.** This is a small, actively developed client. The priorities
 are reliable playback and clear cross-device behavior—not a list of promised
-release dates. This roadmap reflects the source as of **9 November 2026**.
+release dates. This roadmap reflects the source as of **12 November 2026**.
 
 ## Shipped
 
@@ -19,8 +19,11 @@ release dates. This roadmap reflects the source as of **9 November 2026**.
   available chapter/community skips and automatic next episodes.
 - [x] Continue Watching, episode resume, Up Next, Watch Later, custom lists
   and day-grouped viewing history.
-- [x] Trakt device-code sign-in, scrobbling, paused-progress import,
-  watched/unwatched updates, removals, and offline changes sent on reconnect.
+- [x] New episodes of followed series in Continue Watching, an Upcoming row with
+  air dates, trailers opened on YouTube, and the other films of a film series
+  on a movie's page (TMDB).
+- [x] Letterboxd and Rotten Tomatoes scores beside the IMDb rating on a title's
+  page, with the user's own MDBList key.
 - [x] Optional encrypted self-hosted accounts with progress, watched state,
   addons and preferences; offline merging, the newest position winning, and a
   choice when a title was removed on one device and played on another.
@@ -53,8 +56,8 @@ alone doesn't verify playback or Picture in Picture at runtime.
   unsupported cases as skipped, not passed.
 - [x] Test independent account stores for offline changes, reconnect, conflicting
   progress, explicit removals and sign-out. Exercise account connection and sharing
-  UI in simulators. Use controlled fixtures for Trakt responses; no physical
-  phone-to-TV handoff or live-provider check is a release prerequisite.
+  UI in simulators. No physical phone-to-TV handoff or live-provider check is a
+  release prerequisite.
 - [x] Cover fresh installs, browse-to-play and returning from playback on iPhone
   and iPad, including landscape. Use the existing tvOS remote driver for button-based
   focus/navigation checks, retaining screenshots. Don't treat those checks as
@@ -131,10 +134,11 @@ scrolls first. Keep measured regressions separate from speculative rewrites.
 ## Not in scope
 
 - Offline downloads, a torrent engine or built-in content hosting.
-- A default hosted sync backend or iCloud sync.
+- A default hosted sync backend or iCloud sync. Trakt was supported until
+  November 2026 and removed in favour of the self-hosted account.
 - Promised App Store distribution, notarization or Intel Mac support.
 - A server-side recommendation engine (recommendations are ranked on the device
-  from TMDB's suggestions) or Letterboxd account/rating integration.
+  from TMDB's suggestions) or Letterboxd account integration.
 - Interface localization is not scheduled; the UI is currently English.
 
 Watch Later/custom-list sync is **not implemented**. Any expansion of the

@@ -2,6 +2,9 @@ import LogeCore
 import SwiftUI
 
 struct HomeView: View {
+    @Environment(LibraryStore.self) private var library
+    @Environment(AddonStore.self) private var store
+    @Environment(EpisodeSchedule.self) private var schedule
     /// Replaced on pull-to-refresh, which rebuilds the rows so they load again.
     @State private var refreshID = UUID()
     /// Returning to Home runs `.task` again; its artwork is already cached by then.
@@ -21,11 +24,14 @@ struct HomeView: View {
         let sources = DiscoveryCatalogs.home
         #if os(tvOS)
         TVHome(sources: sources)
+            // On every return to Home: a series started since then is followed from here on.
+            .task { await schedule.refresh(for: library, addons: store) }
         #else
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 28) {
                 FeaturedCarousel(movies: sources[0], series: sources[1], playing: $playing, opening: $opening)
                 ContinueWatchingRow()
+                UpcomingRow()
                 MyListRow()
                 RecommendedRow()
                 // Genres follow the popular shelves, ahead of the narrower ones.
@@ -43,9 +49,12 @@ struct HomeView: View {
             prefetched = true
             await prefetchArtwork(of: sources)
         }
+        // On every return to Home: a series started since then is followed from here on.
+        .task { await schedule.refresh(for: library, addons: store) }
         .refreshable {
             // The spinner stays until every row's first page is fresh; then the rows rebuild from them.
             await CatalogCache.shared.expireAll()
+            await schedule.refresh(for: library, addons: store, force: true)
             await prefetchArtwork(of: sources)
             refreshID = UUID()
         }

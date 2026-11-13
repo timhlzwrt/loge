@@ -2,7 +2,6 @@ import LogeCore
 import SwiftUI
 
 struct EpisodesSection: View {
-    @Environment(TraktAccount.self) private var trakt
     let videos: [Video]
     let upNextID: String?
     /// The series' backdrop, shown for episodes without a still of their own.
@@ -92,9 +91,7 @@ struct EpisodesSection: View {
             .pickerStyle(.inline)
             Section {
                 Button("Mark Season as Watched", systemImage: "checkmark.circle") {
-                    let items = episodes.filter { $0.isReleased() }.map { route($0).item }
-                    library.markWatched(items)
-                    trakt.markWatched(items)
+                    library.markWatched(episodes.filter { $0.isReleased() }.map { route($0).item })
                 }
                 // Clears the progress of every episode in the season, so it asks first.
                 Button("Mark Season as Unwatched", systemImage: "eye.slash") {
@@ -125,7 +122,6 @@ struct EpisodesSection: View {
                             titleVisibility: .visible) {
             Button("Mark as Unwatched", role: .destructive) {
                 library.markUnwatched(episodes.map(\.id))
-                trakt.markUnwatched(episodes.map { route($0).item })
             }
         } message: {
             Text("Progress and watched marks for its episodes are removed.")
@@ -137,12 +133,10 @@ struct EpisodesSection: View {
         if library.isWatched(video.id) {
             Button("Mark as Unwatched", systemImage: "eye.slash") {
                 library.markUnwatched([video.id])
-                trakt.markUnwatched([route(video).item])
             }
         } else {
             Button("Mark as Watched", systemImage: "checkmark.circle") {
                 library.markWatched([route(video).item])
-                trakt.markWatched([route(video).item])
             }
         }
     }

@@ -5,8 +5,8 @@ import SwiftUI
 /// addon form and account keys don't make one long scroll.
 struct SettingsView: View {
     @Environment(AddonStore.self) private var store
-    @Environment(TraktAccount.self) private var trakt
     @Environment(TMDBAccount.self) private var tmdb
+    @Environment(MDBListAccount.self) private var mdblist
     @Environment(AccountSync.self) private var sync
     @AppStorage(Accent.storageKey) private var accent = Accent.white
 
@@ -29,14 +29,14 @@ struct SettingsView: View {
                 LabeledContent("Addons", value: addonSummary)
             }
             NavigationLink {
-                SettingsPage("Trakt") { TraktSection() }
-            } label: {
-                LabeledContent("Trakt", value: traktSummary)
-            }
-            NavigationLink {
                 SettingsPage("TMDB") { TMDBSection() }
             } label: {
                 LabeledContent("TMDB", value: tmdb.isConfigured ? "Connected" : "Off")
+            }
+            NavigationLink {
+                SettingsPage("MDBList") { MDBListSection() }
+            } label: {
+                LabeledContent("MDBList", value: mdblist.isConfigured ? "Connected" : "Off")
             }
         }
 
@@ -67,14 +67,6 @@ struct SettingsView: View {
         if sync.needsChoice { return "Needs review" }
         if sync.status == .failed { return "Couldn't sync" }
         return sync.displayName ?? "Connected"
-    }
-
-    private var traktSummary: String {
-        switch trakt.state {
-        case .signedIn(let username): trakt.isPaused ? "Paused" : username
-        case .awaitingApproval: "Signing in"
-        case .signedOut: "Off"
-        }
     }
 }
 

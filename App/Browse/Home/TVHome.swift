@@ -49,6 +49,7 @@ struct TVHome: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 24) {
                             ContinueWatchingRow(onFocus: focus.show)
+                            UpcomingRow(onFocus: focus.show)
                             MyListRow(onFocus: focus.show)
                             RecommendedRow(onFocus: focus.show)
                             ForEach(sources.prefix(3)) { source in

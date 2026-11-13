@@ -2,12 +2,12 @@ import LogeCore
 import SwiftUI
 
 struct MetaDetailView: View {
-    @Environment(TraktAccount.self) private var trakt
     let preview: MetaPreview
 
     @Environment(AddonStore.self) private var store
     @Environment(LibraryStore.self) private var library
     @Environment(TMDBAccount.self) private var tmdb
+    @Environment(MDBListAccount.self) private var mdblist
     @State private var state = LoadState.loading
     @State private var tmdbState = TMDBLoadState.disconnected
     @State private var loadAttempt = 0
@@ -16,6 +16,11 @@ struct MetaDetailView: View {
     @State private var retries = 0
     /// What the TMDB details on screen were loaded for, so returning to the page keeps them.
     @State private var tmdbLoadedKey: TMDBLoadKey?
+    @State private var collection: TMDBCollection?
+    @State private var scores: TitleScores?
+    /// Why the Letterboxd and Rotten Tomatoes scores are missing, when it's something to act on.
+    @State private var scoresFailure: String?
+    @Environment(\.openURL) private var openURL
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
@@ -80,6 +85,10 @@ struct MetaDetailView: View {
                     if !people.isEmpty {
                         PeopleRow(people: people, title: preview, staysInColumn: usesColumns)
                             .detailColumn(.side)
+                    }
+                    if let collection {
+                        CollectionRow(collection: collection, currentID: tmdbDetails?.tmdbID)
+                            .detailColumn(.full)
                     }
                     MoreLikeThisRow(titles: tmdbDetails?.recommendations ?? [],
                                     areSimilar: tmdbDetails?.recommendationsAreSimilar ?? false)
@@ -198,6 +207,35 @@ struct MetaDetailView: View {
                 _ = try? await tmdb.personDetails(id: id)
             }
         }
+        .task(id: "\(tmdb.revision):\(tmdbDetails?.collectionID ?? 0)") {
+            guard let id = tmdbDetails?.collectionID else {
+                collection = nil
+                return
+            }
+            // An extra row: without it the page is complete, so a failure leaves the page as
+            // it is rather than adding a third thing to retry.
+            if let loaded = try? await tmdb.collection(id: id) { collection = loaded }
+        }
+        .task(id: mdblist.revision) {
+            guard mdblist.isConfigured, isOnTMDB else {
+                scores = nil
+                scoresFailure = nil
+                return
+            }
+            do {
+                scores = try await mdblist.scores(imdbID: preview.id, type: preview.type)
+                scoresFailure = nil
+            } catch {
+                guard !Task.isCancelled else { return }
+                // A title MDBList doesn't have, or a moment without a connection, just leaves the
+                // IMDb rating on its own. A key that stopped working needs the user.
+                switch error as? MDBListError {
+                case .unauthorized: scoresFailure = "MDBList didn't accept the saved key. Check MDBList in Settings."
+                case .rateLimited: scoresFailure = "MDBList's requests for today are used up, so Letterboxd and Rotten Tomatoes scores are missing."
+                default: scoresFailure = nil
+                }
+            }
+        }
         // Stream addons such as AIOStreams take seconds to answer, so ask while the page is
         // being read; the sources screen picks up the same request.
         .task(id: play?.route.id) {
@@ -269,24 +307,31 @@ struct MetaDetailView: View {
         VStack(alignment: .leading, spacing: 20) {
             ProgressView("Loading details…")
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Text("Cast & Crew").font(.sectionTitle)
-            HStack(alignment: .top, spacing: Metrics.rowSpacing) {
-                ForEach(0..<4, id: \.self) { _ in
-                    VStack(spacing: 12) {
-                        Circle().fill(.white.opacity(0.06))
-                            .frame(width: Metrics.personSize, height: Metrics.personSize)
-                        RoundedRectangle(cornerRadius: 3).fill(.white.opacity(0.06))
-                            .frame(width: Metrics.personSize, height: 12)
+            // Stands in for a row that only comes with TMDB.
+            if tmdb.isConfigured {
+                Text("Cast & Crew").font(.sectionTitle)
+                HStack(alignment: .top, spacing: Metrics.rowSpacing) {
+                    ForEach(0..<4, id: \.self) { _ in
+                        VStack(spacing: 12) {
+                            Circle().fill(.white.opacity(0.06))
+                                .frame(width: Metrics.personSize, height: Metrics.personSize)
+                            RoundedRectangle(cornerRadius: 3).fill(.white.opacity(0.06))
+                                .frame(width: Metrics.personSize, height: 12)
+                        }
                     }
                 }
+                .accessibilityHidden(true)
             }
-            .accessibilityHidden(true)
         }
         .padding(.horizontal, Metrics.gutter)
         .clipped()
     }
 
+    /// Cast & Crew comes with TMDB: without a token the page leaves it out, rather than list
+    /// names that have no photos and lead to no filmography. With one, the addon's credits
+    /// stand in until TMDB's arrive, and for a title TMDB doesn't have.
     private func creditedPeople(fallback: [Person]) -> [Person] {
+        guard tmdb.isConfigured else { return [] }
         if case .loaded(let details) = tmdbState, !details.people.isEmpty { return details.creditedPeople }
         return fallback
     }
@@ -307,10 +352,13 @@ struct MetaDetailView: View {
                 Text("Loading TMDB details…")
             case .disconnected:
                 if !tmdb.isConfigured, isOnTMDB, hasDetails {
-                    Text("Connect TMDB in Settings for cast photos, reviews and recommendations.")
+                    Text("Connect TMDB in Settings for cast and crew, reviews and recommendations.")
                 }
             case .loaded:
                 EmptyView()
+            }
+            if let scoresFailure {
+                Text(scoresFailure)
             }
         }
         .font(.caption)
@@ -356,8 +404,7 @@ struct MetaDetailView: View {
         return VStack(alignment: heroAlignment, spacing: 12) {
             TitleLogo(logo: meta?.logo ?? preview.logo, name: preview.name, maxHeight: logoHeight)
                 .frame(maxWidth: logoWidth, alignment: Alignment(horizontal: heroAlignment, vertical: .center))
-            (meta?.infoLine ?? preview.infoLine)
-                .multilineTextAlignment(heroAlignment == .center ? .center : .leading)
+            facts(meta: meta)
             if !synopsisUnderButtons, let description {
                 Text(description)
                     .font(.synopsis)
@@ -365,7 +412,8 @@ struct MetaDetailView: View {
                     .lineLimit(synopsisLines)
                     .frame(maxWidth: synopsisWidth, alignment: .leading)
             }
-            buttons(play: play, saved: savedPreview(meta))
+            buttons(play: play, saved: savedPreview(meta),
+                    trailer: Self.trailerURL(youTubeID: tmdbDetails?.trailerYouTubeID ?? meta?.trailers?.youTubeID))
                 .padding(.top, 6)
             if synopsisUnderButtons, let description {
                 ExpandableText(text: description)
@@ -377,16 +425,34 @@ struct MetaDetailView: View {
         .padding(.horizontal, Metrics.gutter)
     }
 
+    /// Genres, year and runtime with the scores after them, or under them where one line
+    /// doesn't hold both: a phone with all three scores, or large text.
+    private func facts(meta: Meta?) -> some View {
+        let info = meta?.infoLine ?? preview.infoLine
+        let line = info.withoutRating.multilineTextAlignment(heroAlignment == .center ? .center : .leading)
+        let scores = ScoresLine(id: preview.id, type: preview.type, imdbRating: info.rating, scores: scores)
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: 14) {
+                line
+                scores
+            }
+            VStack(alignment: heroAlignment, spacing: 6) {
+                line
+                scores
+            }
+        }
+    }
+
     /// On a phone Play takes the full width and the other actions sit in a row beneath it;
     /// wider screens keep them on one line.
     @ViewBuilder
-    private func buttons(play: PlayAction?, saved: MetaPreview) -> some View {
+    private func buttons(play: PlayAction?, saved: MetaPreview, trailer: URL?) -> some View {
         if synopsisUnderButtons {
             VStack(spacing: 20) {
                 playButton(play)
                 // Icons differ in height, which large text makes visible; the captions stay level.
                 HStack(alignment: .lastTextBaseline, spacing: 0) {
-                    secondaryButtons(isBare: true, play: play, saved: saved)
+                    secondaryButtons(isBare: true, play: play, saved: saved, trailer: trailer)
                         .frame(maxWidth: .infinity)
                 }
             }
@@ -395,7 +461,9 @@ struct MetaDetailView: View {
                 playButton(play)
                 // No merging distance: the circles stay apart, as separate buttons.
                 GlassEffectContainer(spacing: 0) {
-                    HStack(alignment: .top, spacing: 16) { secondaryButtons(isBare: false, play: play, saved: saved) }
+                    HStack(alignment: .top, spacing: 16) {
+                        secondaryButtons(isBare: false, play: play, saved: saved, trailer: trailer)
+                    }
                 }
             }
         }
@@ -414,7 +482,7 @@ struct MetaDetailView: View {
     }
 
     @ViewBuilder
-    private func secondaryButtons(isBare: Bool, play: PlayAction?, saved: MetaPreview) -> some View {
+    private func secondaryButtons(isBare: Bool, play: PlayAction?, saved: MetaPreview, trailer: URL?) -> some View {
         MyListButton(isSaved: library.isSaved(preview.id), isBare: isBare) {
             library.toggleSaved(saved)
         }
@@ -431,6 +499,25 @@ struct MetaDetailView: View {
             // Voice Control users say what the caption shows.
             .accessibilityInputLabels(["Sources", "Choose a Source"])
         }
+        if let trailer {
+            Button("Watch Trailer", systemImage: "play.rectangle") { openURL(trailer) }
+                .buttonStyle(GlassIconButtonStyle(caption: "Trailer", isBare: isBare))
+                .help("Watch Trailer on YouTube")
+                .accessibilityInputLabels(["Trailer", "Watch Trailer"])
+                .accessibilityHint("Opens YouTube")
+        }
+    }
+
+    /// Trailers play on YouTube: its site, which opens the YouTube app where that's installed.
+    /// Apple TV has no browser, so there it's the app or no button.
+    private static func trailerURL(youTubeID: String?) -> URL? {
+        guard let youTubeID else { return nil }
+        #if os(tvOS)
+        guard let url = URL(string: "youtube://watch/\(youTubeID)"), UIApplication.shared.canOpenURL(url) else { return nil }
+        return url
+        #else
+        return URL(string: "https://www.youtube.com/watch?v=\(youTubeID)")
+        #endif
     }
 
     /// Movies only: a series is marked by season or episode.
@@ -440,12 +527,10 @@ struct MetaDetailView: View {
             if library.isWatched(preview.id) {
                 Button("Mark as Unwatched", systemImage: "eye.slash") {
                     library.markUnwatched([preview.id])
-                    trakt.markUnwatched([item])
                 }
             } else {
                 Button("Mark as Watched", systemImage: "checkmark.circle") {
                     library.markWatched([item])
-                    trakt.markWatched([item])
                 }
             }
         }
@@ -549,7 +634,7 @@ struct PlayAction {
             thumbnail: video?.thumbnail
         )
         let title = video.map { "\(name) · \(EpisodesSection.code(for: $0))" } ?? name
-        let runtime = TraktAccount.minutes(meta?.runtime ?? preview.runtime).map { $0 * 60 }
+        let runtime = Meta.minutes(inRuntime: meta?.runtime ?? preview.runtime).map { $0 * 60 }
         return SourcesRoute(item: item, title: title, autoplay: autoplay, runtime: runtime)
     }
 

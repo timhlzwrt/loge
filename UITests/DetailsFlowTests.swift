@@ -1,7 +1,7 @@
 #if os(iOS)
 import XCTest
 
-/// Details' Cast & Crew and Information against live Cinemeta, on request like `FlowTests`:
+/// Details without TMDB against live Cinemeta, on request like `FlowTests`:
 ///
 ///     TEST_RUNNER_UI_FLOWS=1 TEST_RUNNER_SCREENSHOT_DIR=/tmp/shots xcodebuild test \
 ///       -scheme loge -destination 'platform=iOS Simulator,name=iPhone 18 Pro' \
@@ -20,38 +20,18 @@ final class DetailsFlowTests: XCTestCase {
     }
 
     @MainActor
-    func testDirectorPageSaysTheFilmographyNeedsTMDB() {
-        // Without TMDB there's no filmography: Cinemeta's search no longer says who worked on what.
-        // TMDBFilmographyTests covers the TMDB filmography.
+    func testDetailsWithoutTMDBLeaveOutCastAndCrew() {
+        // Needs a simulator with no TMDB token saved. TMDBFilmographyTests covers the pages with one.
         open("Interstellar")
         screenshot("details-movie-top")
-        XCTAssertTrue(app.staticTexts["Cast & Crew"].waitForExistence(timeout: 15))
         app.swipeUp()
-        XCTAssertTrue(app.staticTexts["Information"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Information"].waitForExistence(timeout: 15))
         XCTAssertTrue(app.staticTexts["Awards"].exists)
-        screenshot("details-movie-credits")
-
-        person("Christopher Nolan").tap()
-        XCTAssertTrue(app.staticTexts["Filmography needs TMDB"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["Connect TMDB in Settings to list Christopher Nolan's films and series."].exists)
-        XCTAssertTrue(app.staticTexts["Credited on"].exists)
-        XCTAssertTrue(app.buttons["Interstellar"].exists)
-        // The name heads the page once, beside the statement, not again in the navigation bar.
-        XCTAssertEqual(app.staticTexts.matching(identifier: "Christopher Nolan").count, 1)
-        screenshot("person-director")
-    }
-
-    @MainActor
-    func testActorPageKeepsTheSeriesTheyWereFoundOn() {
-        open("Breaking Bad")
-        XCTAssertTrue(app.staticTexts["Cast & Crew"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.staticTexts["Cast & Crew"].exists)
         app.swipeUp()
-        screenshot("details-series-credits")
-
-        person("Bryan Cranston").tap()
-        XCTAssertTrue(app.staticTexts["Credited on"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.buttons["Breaking Bad"].exists)
-        screenshot("person-actor")
+        XCTAssertTrue(app.staticTexts["Connect TMDB in Settings for cast and crew, reviews and recommendations."]
+            .waitForExistence(timeout: 5))
+        screenshot("details-movie-information")
     }
 
     @MainActor
@@ -66,13 +46,6 @@ final class DetailsFlowTests: XCTestCase {
         let result = app.buttons[title].firstMatch
         XCTAssertTrue(result.waitForExistence(timeout: 20), "No search result for \(title)")
         result.tap()
-    }
-
-    @MainActor
-    private func person(_ name: String) -> XCUIElement {
-        let button = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", name)).firstMatch
-        XCTAssertTrue(button.waitForExistence(timeout: 5), "\(name) isn't in Cast & Crew")
-        return button
     }
 }
 #endif
