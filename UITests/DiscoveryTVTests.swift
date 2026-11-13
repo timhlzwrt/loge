@@ -395,7 +395,7 @@ final class DiscoveryTVTests: XCTestCase {
         waitForFocus(on: app.buttons["Play"])
         screenshot("tv-details-top")
         let remote = XCUIRemote.shared
-        for name in ["Add to Watch Later", "Save to a List", "Choose a Source"] {
+        for name in ["Add to Watch Later", "More"] {
             remote.press(.right)
             screenshot("tv-details-\(name.replacingOccurrences(of: " ", with: "-"))")
             waitForFocus(on: app.buttons[name])

@@ -20,7 +20,6 @@ struct MetaDetailView: View {
     @State private var scores: TitleScores?
     /// Why the Letterboxd and Rotten Tomatoes scores are missing, when it's something to act on.
     @State private var scoresFailure: String?
-    @Environment(\.openURL) private var openURL
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
@@ -90,11 +89,10 @@ struct MetaDetailView: View {
                         CollectionRow(collection: collection, currentID: tmdbDetails?.tmdbID)
                             .detailColumn(.full)
                     }
-                    MoreLikeThisRow(titles: tmdbDetails?.recommendations ?? [],
-                                    areSimilar: tmdbDetails?.recommendationsAreSimilar ?? false)
+                    MoreLikeThisRow(titles: tmdbDetails?.recommendations ?? [])
                         .detailColumn(.full)
                     ReviewsSection(preview: preview, pageRetries: retries, pageOffersRetry: offersRetry)
-                    InformationSection(meta: meta, details: tmdbDetails)
+                    InformationSection(meta: meta, details: tmdbDetails, people: people)
                         .detailColumn(.side)
                 } else if case .failed(let message) = state {
                     HStack {
@@ -255,7 +253,7 @@ struct MetaDetailView: View {
     }
 
     private var pageLayout: AnyLayout {
-        let spacing: CGFloat = 28
+        let spacing: CGFloat = 32
         return usesColumns
             ? AnyLayout(DetailColumnsLayout(sideTop: heroHeight - 160, spacing: spacing))
             : AnyLayout(VStackLayout(alignment: .leading, spacing: spacing))
@@ -399,25 +397,21 @@ struct MetaDetailView: View {
             .accessibilityHidden(true)
     }
 
+    /// The title and Play lead. The description follows with the facts and scores one size
+    /// down beneath it; on a phone that's under the buttons, so it doesn't push them down.
     private func hero(meta: Meta?, play: PlayAction?) -> some View {
-        let description = meta?.description ?? preview.description
-        return VStack(alignment: heroAlignment, spacing: 12) {
-            TitleLogo(logo: meta?.logo ?? preview.logo, name: preview.name, maxHeight: logoHeight)
+        VStack(alignment: heroAlignment, spacing: 20) {
+            TitleLogo(logo: meta?.logo ?? preview.logo, name: preview.name, maxHeight: logoHeight, restsOnLettering: true)
+                // As tall as the logo is, not as tall as it may be: a wide, low one otherwise
+                // floats in the middle of that room, far above the buttons.
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: logoWidth, alignment: Alignment(horizontal: heroAlignment, vertical: .center))
-            facts(meta: meta)
-            if !synopsisUnderButtons, let description {
-                Text(description)
-                    .font(.synopsis)
-                    .foregroundStyle(.white.opacity(0.88))
-                    .lineLimit(synopsisLines)
-                    .frame(maxWidth: synopsisWidth, alignment: .leading)
-            }
-            buttons(play: play, saved: savedPreview(meta),
-                    trailer: Self.trailerURL(youTubeID: tmdbDetails?.trailerYouTubeID ?? meta?.trailers?.youTubeID))
-                .padding(.top, 6)
-            if synopsisUnderButtons, let description {
-                ExpandableText(text: description)
-                    .padding(.top, 6)
+            if synopsisUnderButtons {
+                buttons(meta: meta, play: play)
+                about(meta: meta)
+            } else {
+                about(meta: meta)
+                buttons(meta: meta, play: play)
             }
         }
         .frame(maxWidth: .infinity, alignment: Alignment(horizontal: heroAlignment, vertical: .bottom))
@@ -425,48 +419,78 @@ struct MetaDetailView: View {
         .padding(.horizontal, Metrics.gutter)
     }
 
+    private func about(meta: Meta?) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let description = meta?.description ?? preview.description {
+                if synopsisUnderButtons {
+                    ExpandableText(text: description)
+                } else {
+                    Text(description)
+                        .font(.synopsis)
+                        .foregroundStyle(.white.opacity(0.88))
+                        .lineLimit(synopsisLines)
+                        .frame(maxWidth: synopsisWidth, alignment: .leading)
+                }
+            }
+            facts(meta: meta)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     /// Genres, year and runtime with the scores after them, or under them where one line
-    /// doesn't hold both: a phone with all three scores, or large text.
+    /// doesn't hold both, as with large text.
     private func facts(meta: Meta?) -> some View {
         let info = meta?.infoLine ?? preview.infoLine
-        let line = info.withoutRating.multilineTextAlignment(heroAlignment == .center ? .center : .leading)
+        let line = info.quiet
         let scores = ScoresLine(id: preview.id, type: preview.type, imdbRating: info.rating, scores: scores)
         return ViewThatFits(in: .horizontal) {
             HStack(spacing: 14) {
                 line
                 scores
             }
-            VStack(alignment: heroAlignment, spacing: 6) {
+            VStack(alignment: .leading, spacing: 6) {
                 line
                 scores
             }
         }
     }
 
-    /// On a phone Play takes the full width and the other actions sit in a row beneath it;
-    /// wider screens keep them on one line.
-    @ViewBuilder
-    private func buttons(play: PlayAction?, saved: MetaPreview, trailer: URL?) -> some View {
-        if synopsisUnderButtons {
-            VStack(spacing: 20) {
-                playButton(play)
-                // Icons differ in height, which large text makes visible; the captions stay level.
-                HStack(alignment: .lastTextBaseline, spacing: 0) {
-                    secondaryButtons(isBare: true, play: play, saved: saved, trailer: trailer)
-                        .frame(maxWidth: .infinity)
+    /// Play with Watch Later and More. A phone centres the three under its title, Play in the
+    /// middle and a size down; wider screens start with Play, at the leading edge.
+    private func buttons(meta: Meta?, play: PlayAction?) -> some View {
+        let saved = savedPreview(meta)
+        let watchLater = MyListButton(isSaved: library.isSaved(preview.id)) {
+            library.toggleSaved(saved)
+        }
+        .contextMenu { SaveToMenu(title: saved) }
+        let more = TitleMoreMenu(
+            title: saved,
+            trailer: Self.trailerURL(youTubeID: tmdbDetails?.trailerYouTubeID ?? meta?.trailers?.youTubeID),
+            chooseSource: play.map { play in
+                {
+                    var route = play.route
+                    route.autoplay = false
+                    choosingSource = route
                 }
-            }
-        } else {
-            HStack(alignment: .top, spacing: 16) {
-                playButton(play)
-                // No merging distance: the circles stay apart, as separate buttons.
-                GlassEffectContainer(spacing: 0) {
-                    HStack(alignment: .top, spacing: 16) {
-                        secondaryButtons(isBare: false, play: play, saved: saved, trailer: trailer)
-                    }
+            },
+            movie: preview.type == MediaType.series ? nil : play?.route.item)
+        // No merging distance: the circles stay apart, as separate buttons.
+        return GlassEffectContainer(spacing: 0) {
+            // From the top: on Apple TV a focused circle has its name under it, which would
+            // otherwise push Play down to stay centred.
+            HStack(alignment: .top, spacing: synopsisUnderButtons ? 12 : 16) {
+                if synopsisUnderButtons {
+                    watchLater
+                    playButton(play)
+                    more
+                } else {
+                    playButton(play)
+                    watchLater
+                    more
                 }
             }
         }
+        .controlSize(synopsisUnderButtons ? .small : .regular)
     }
 
     @ViewBuilder
@@ -474,37 +498,15 @@ struct MetaDetailView: View {
         if let play {
             NavigationLink(value: play.route) {
                 Label(play.label, systemImage: "play.fill")
-                    .frame(maxWidth: synopsisUnderButtons ? .infinity : nil)
+                    // 172 pt with the button's own padding: room for "Resume S2, E10", so the
+                    // circles beside it sit in the same place on every title.
+                    .frame(minWidth: synopsisUnderButtons ? 128 : nil)
             }
             .buttonStyle(PrimaryButtonStyle())
-            .contextMenu { watchedActions(play.route.item) }
-        }
-    }
-
-    @ViewBuilder
-    private func secondaryButtons(isBare: Bool, play: PlayAction?, saved: MetaPreview, trailer: URL?) -> some View {
-        MyListButton(isSaved: library.isSaved(preview.id), isBare: isBare) {
-            library.toggleSaved(saved)
-        }
-        .contextMenu { SaveToMenu(title: saved) }
-        ListsMenu(title: saved, isBare: isBare)
-        if let play {
-            Button("Choose a Source", systemImage: "list.bullet") {
-                var route = play.route
-                route.autoplay = false
-                choosingSource = route
+            .contextMenu {
+                // Movies only: a series is marked by season or episode.
+                if preview.type != MediaType.series { WatchedMarkButton(item: play.route.item) }
             }
-            .buttonStyle(GlassIconButtonStyle(caption: "Sources", isBare: isBare))
-            .help("Choose a Source")
-            // Voice Control users say what the caption shows.
-            .accessibilityInputLabels(["Sources", "Choose a Source"])
-        }
-        if let trailer {
-            Button("Watch Trailer", systemImage: "play.rectangle") { openURL(trailer) }
-                .buttonStyle(GlassIconButtonStyle(caption: "Trailer", isBare: isBare))
-                .help("Watch Trailer on YouTube")
-                .accessibilityInputLabels(["Trailer", "Watch Trailer"])
-                .accessibilityHint("Opens YouTube")
         }
     }
 
@@ -520,22 +522,6 @@ struct MetaDetailView: View {
         #endif
     }
 
-    /// Movies only: a series is marked by season or episode.
-    @ViewBuilder
-    private func watchedActions(_ item: WatchItem) -> some View {
-        if preview.type != MediaType.series {
-            if library.isWatched(preview.id) {
-                Button("Mark as Unwatched", systemImage: "eye.slash") {
-                    library.markUnwatched([preview.id])
-                }
-            } else {
-                Button("Mark as Watched", systemImage: "checkmark.circle") {
-                    library.markWatched([item])
-                }
-            }
-        }
-    }
-
     #if os(tvOS)
     private let heroAlignment = HorizontalAlignment.leading
     /// Short enough for the first row below, episodes or cast, to show under the buttons.
@@ -548,8 +534,8 @@ struct MetaDetailView: View {
     #elseif os(macOS)
     private let heroAlignment = HorizontalAlignment.leading
     private let heroHeight: CGFloat = 420
-    private let logoHeight: CGFloat = 110
-    private let logoWidth: CGFloat = 360
+    private let logoHeight: CGFloat = 130
+    private let logoWidth: CGFloat = 480
     private let synopsisWidth: CGFloat = 540
     private let synopsisLines = 3
     private let synopsisUnderButtons = false
@@ -561,8 +547,10 @@ struct MetaDetailView: View {
     private var heroHeight: CGFloat {
         verticalSizeClass == .compact ? 300 : horizontalSizeClass == .regular ? 500 : 400
     }
-    private var logoHeight: CGFloat { isWide ? 100 : 80 }
-    private var logoWidth: CGFloat { isWide ? 360 : 260 }
+    /// The title is the one large thing in the hero. A phone gives it the full text width; a
+    /// short landscape screen has no room for a tall one.
+    private var logoHeight: CGFloat { verticalSizeClass == .compact ? 100 : 130 }
+    private var logoWidth: CGFloat { isWide ? 480 : .infinity }
     private let synopsisWidth: CGFloat = 620
     /// iPad's larger text would otherwise show less of the synopsis, with no way to read the rest.
     private let synopsisLines = 4
@@ -573,7 +561,6 @@ struct MetaDetailView: View {
 
 private struct MyListButton: View {
     let isSaved: Bool
-    let isBare: Bool
     let toggle: () -> Void
 
     var body: some View {
@@ -581,14 +568,11 @@ private struct MyListButton: View {
             Label(title, systemImage: isSaved ? "checkmark" : "plus")
                 .contentTransition(.symbolEffect(.replace))
         }
-        .buttonStyle(GlassIconButtonStyle(caption: caption, isBare: isBare))
+        .buttonStyle(GlassIconButtonStyle(caption: isSaved ? "Saved" : "Watch Later"))
         .help(title)
-        // Voice Control users say what the caption shows.
-        .accessibilityInputLabels([caption, title])
     }
 
     private var title: String { isSaved ? "Remove from Watch Later" : "Add to Watch Later" }
-    private var caption: String { isSaved ? "Saved" : "Watch Later" }
 }
 
 /// viewer left off: the unfinished episode, else the one after the last finished, else the first.

@@ -10,11 +10,11 @@ struct ScoresLine: View {
     let imdbRating: String?
     let scores: TitleScores?
     #if os(iOS)
-    @ScaledMetric(relativeTo: .footnote) private var markHeight: CGFloat = 14
+    @ScaledMetric(relativeTo: .footnote) private var markHeight: CGFloat = 12
     #elseif os(tvOS)
-    private let markHeight: CGFloat = 24
+    private let markHeight: CGFloat = 21
     #else
-    private let markHeight: CGFloat = 13
+    private let markHeight: CGFloat = 11
     #endif
 
     private struct Score: Identifiable {
@@ -69,7 +69,7 @@ struct ScoresLine: View {
                     #endif
                 }
             }
-            // Over artwork, like the line of facts beside it.
+            // The wide layouts draw this over artwork, like the line of facts beside it.
             .shadow(color: .black.opacity(0.5), radius: 6)
         }
     }
@@ -83,7 +83,7 @@ struct ScoresLine: View {
             Text(score.value)
                 .font(.metaLine.weight(.semibold))
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(.white.opacity(0.85))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(score.spoken)
     }

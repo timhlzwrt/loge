@@ -1,7 +1,8 @@
 import LogeCore
 import SwiftUI
 
-/// The one accent-coloured call to action on a screen: Play or Resume.
+/// The one accent-coloured call to action on a screen: Play or Resume. On iPhone and iPad
+/// `.controlSize(.small)` draws it a size down, for a title page's centred row.
 struct PrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         StyledLabel(configuration: configuration)
@@ -11,6 +12,8 @@ struct PrimaryButtonStyle: ButtonStyle {
         let configuration: Configuration
         #if os(tvOS)
         @Environment(\.isFocused) private var isFocused
+        #elseif os(iOS)
+        @Environment(\.controlSize) private var controlSize
         #endif
 
         var body: some View {
@@ -37,8 +40,9 @@ struct PrimaryButtonStyle: ButtonStyle {
         private let height: CGFloat = 36
         private let font = Font.system(size: 14, weight: .semibold)
         #else
-        private let height: CGFloat = 50
-        private let font = Font.headline
+        // 44 pt is as small as a button stays comfortable to tap.
+        private var height: CGFloat { controlSize == .small ? 44 : 50 }
+        private var font: Font { controlSize == .small ? .subheadline.weight(.semibold) : .headline }
         #endif
     }
 
@@ -53,42 +57,30 @@ struct PrimaryButtonStyle: ButtonStyle {
     }
 }
 
-/// Round, icon-only Liquid Glass buttons beside the primary one: Watch Later, Choose a Source.
+/// Round, icon-only Liquid Glass buttons beside the primary one: Watch Later, More.
 /// Drawn rather than using the `.glass` button style, which pads the circle beyond the
-/// primary button's height.
+/// primary button's height. They follow `.controlSize(.small)` as that button does.
 struct GlassIconButtonStyle: ButtonStyle {
-    /// A short name under the icon on iPhone and iPad, and while focused on Apple TV.
-    /// The Mac names these on hover.
+    /// A short name under the icon while focused on Apple TV. Elsewhere the icons stand
+    /// alone, and the Mac names them on hover.
     var caption: String?
-    /// Just the icon, no circle: a phone's row under a full-width Play, where a line of
-    /// bubbles beneath the capsule looked busy.
-    var isBare = false
 
     func makeBody(configuration: Configuration) -> some View {
-        StyledLabel(configuration: configuration, caption: caption, isBare: isBare)
+        StyledLabel(configuration: configuration, caption: caption)
     }
 
     private struct StyledLabel: View {
         let configuration: Configuration
         let caption: String?
-        let isBare: Bool
         #if os(tvOS)
         @Environment(\.isFocused) private var isFocused
+        #elseif os(iOS)
+        @Environment(\.controlSize) private var controlSize
         #endif
 
         @ViewBuilder
         var body: some View {
-            #if os(iOS)
-            if let caption {
-                VStack(spacing: 6) {
-                    icon
-                    IconCaption(text: caption)
-                }
-                .contentShape(.rect)
-            } else {
-                icon
-            }
-            #elseif os(tvOS)
+            #if os(tvOS)
             if let caption {
                 VStack(spacing: 12) {
                     icon
@@ -107,22 +99,7 @@ struct GlassIconButtonStyle: ButtonStyle {
             #endif
         }
 
-        @ViewBuilder
         private var icon: some View {
-            if isBare {
-                configuration.label
-                    .labelStyle(.iconOnly)
-                    .font(.title2)
-                    .foregroundStyle(.white)
-                    // Grows with large text instead of running into the caption.
-                    .frame(minHeight: 30)
-                    .opacity(configuration.isPressed ? 0.5 : 1)
-            } else {
-                glassCircle
-            }
-        }
-
-        private var glassCircle: some View {
             configuration.label
                 .labelStyle(.iconOnly)
                 .font(font)
@@ -149,29 +126,11 @@ struct GlassIconButtonStyle: ButtonStyle {
         private let size: CGFloat = 36
         private let font = Font.system(size: 14, weight: .semibold)
         #else
-        private let size: CGFloat = 50
-        private let font = Font.title3.weight(.semibold)
+        private var size: CGFloat { controlSize == .small ? 44 : 50 }
+        private var font: Font { controlSize == .small ? .body.weight(.semibold) : .title3.weight(.semibold) }
         #endif
     }
 }
-
-#if os(iOS)
-/// The name under a `GlassIconButtonStyle` icon; the button itself keeps its fuller spoken name.
-struct IconCaption: View {
-    let text: String
-
-    var body: some View {
-        Text(text)
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-            .fixedSize()
-            // Three of these share a phone's width; beyond this they'd run together.
-            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-            .accessibilityHidden(true)
-    }
-}
-#endif
 
 extension View {
     /// Artwork tiles that open something: tvOS lifts them as focus cards, elsewhere they respond

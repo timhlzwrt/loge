@@ -324,69 +324,7 @@ struct MyListView: View {
     }
 }
 
-/// Puts a title on the user's own lists, or starts a new list with it.
-struct ListsMenu: View {
-    let title: MetaPreview
-    var isBare = false
-
-    @Environment(LibraryStore.self) private var library
-    @State private var isNaming = false
-    @State private var name = ""
-
-    var body: some View {
-        styledMenu
-            .help("Save to a List")
-            // Voice Control users say what the caption shows.
-            .accessibilityInputLabels(["Lists", "Save to a List"])
-            .alert("New List", isPresented: $isNaming) {
-                TextField("Name", text: $name)
-                Button("Create") {
-                    library.toggle(title, inList: library.createList(named: name))
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("\(title.name) goes on it.")
-            }
-    }
-
-    /// A menu's glass circle centres itself on all of its label, which would put it over a
-    /// caption inside, so that caption goes below. A bare icon has no circle and keeps its
-    /// caption inside, where tapping the word opens the menu too.
-    @ViewBuilder
-    private var styledMenu: some View {
-        #if os(iOS)
-        if isBare {
-            menu.buttonStyle(GlassIconButtonStyle(caption: "Lists", isBare: true))
-        } else {
-            VStack(spacing: 6) {
-                menu.buttonStyle(GlassIconButtonStyle())
-                IconCaption(text: "Lists")
-            }
-        }
-        #elseif os(tvOS)
-        menu.buttonStyle(GlassIconButtonStyle(caption: "Lists", isBare: isBare))
-        #else
-        menu.buttonStyle(GlassIconButtonStyle(isBare: isBare))
-        #endif
-    }
-
-    private var menu: some View {
-        Menu {
-            ListMembershipActions(title: title)
-            Button("New List…", systemImage: "plus") {
-                name = ""
-                isNaming = true
-            }
-        } label: {
-            // Not a bulleted list: "Choose a Source" sits beside it with one.
-            Label("Save to a List", systemImage: "rectangle.stack.badge.plus")
-        }
-        .menuIndicator(.hidden)
-        .accessibilityLabel("Save to a List")
-    }
-}
-
-/// A poster's long press uses the same memberships as the detail page's list button.
+/// A poster's long press uses the same memberships as the details page's More menu.
 struct SaveToMenu: View {
     let title: MetaPreview
 
@@ -397,7 +335,7 @@ struct SaveToMenu: View {
     }
 }
 
-private struct ListMembershipActions: View {
+struct ListMembershipActions: View {
     let title: MetaPreview
     @Environment(LibraryStore.self) private var library
 

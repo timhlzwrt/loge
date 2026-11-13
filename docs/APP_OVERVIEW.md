@@ -47,11 +47,14 @@ navigation destinations.
 - `CatalogRow.swift` and `CatalogGridView.swift`: poster rows and paginated
   grids, with genre filtering when the addon advertises it.
 - `MetaDetailView.swift`: title details, seasons, episode cards, watched
-  actions and next episode selection. Cast & Crew shows only with TMDB connected;
-  the addon's credits then stand in while TMDB's load or when it has none. A Trailer
-  button opens YouTube (the addon's trailer, or TMDB's when connected; on Apple TV
-  only with the YouTube app installed), and a movie in a TMDB collection lists that
-  film series in release order.
+  actions and next episode selection. The hero is the title and Play, with Watch Later
+  and a More menu (`TitleMoreMenu`: trailer, sources, lists, watched mark) beside it,
+  centred on a phone with Play in the middle;
+  the description follows with genre, year, runtime and the scores one size down.
+  Cast & Crew shows only with TMDB connected; the addon's credits then stand in while
+  TMDB's load or when it has none. Watch Trailer opens YouTube (the addon's trailer,
+  or TMDB's when connected; on Apple TV only with the YouTube app installed), and a
+  movie in a TMDB collection lists that film series in release order.
 - `PersonView.swift`: person details and role-filtered TMDB filmographies when
   connected. Without TMDB it says a filmography needs TMDB and shows the title the
   person was opened from: Cinemeta's search no longer names cast or directors. That
