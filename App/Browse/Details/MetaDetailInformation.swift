@@ -5,6 +5,8 @@ import SwiftUI
 struct InformationSection: View {
     let meta: Meta
     let details: TMDBDetails?
+    /// Those the page credits, for who directed and wrote it.
+    var people: [Person] = []
     #if os(tvOS)
     @FocusState private var isFocused: Bool
     #endif
@@ -59,6 +61,10 @@ struct InformationSection: View {
     /// Runtime, year and rating are already in the meta line; the line shows only the first genres.
     private var facts: [(label: String, value: String)] {
         var facts: [(label: String, value: String)] = []
+        for (role, one, several) in [(Person.Role.director, "Director", "Directors"), (.writer, "Writer", "Writers")] {
+            let names = people.filter { $0.roles.contains(role) }.map(\.name)
+            if !names.isEmpty { facts.append((names.count == 1 ? one : several, names.joined(separator: ", "))) }
+        }
         if let genres = meta.genres, !genres.isEmpty {
             facts.append(("Genres", genres.joined(separator: ", ")))
         }
@@ -108,7 +114,7 @@ struct InformationSection: View {
     }
 }
 
-/// A description clamped to two lines, with "More" under it when it overflows.
+/// A description clamped to four lines, with "More" under it when it overflows.
 struct ExpandableText: View {
     let text: String
     @State private var isExpanded = false
@@ -124,13 +130,13 @@ struct ExpandableText: View {
                 Text(text)
                     .font(.synopsis)
                     .foregroundStyle(.white.opacity(0.88))
-                    .lineLimit(isExpanded ? nil : 2)
+                    .lineLimit(isExpanded ? nil : 4)
                     // Otherwise the hero's stack squeezes the expanded text back to a few lines.
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { shownHeight = $0 }
                     .background(alignment: .top) {
-                        // The unclamped text, measured to tell whether two lines cut it short.
+                        // The unclamped text, measured to tell whether four lines cut it short.
                         Text(text)
                             .font(.synopsis)
                             .fixedSize(horizontal: false, vertical: true)

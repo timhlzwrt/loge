@@ -4,13 +4,18 @@ import SwiftUI
 /// "Movie · 2014" and the person's roles on it, under a credit's name.
 struct CreditMetaLines: View {
     let title: TMDBCreditTitle
+    var showsMediaType = true
     var roleLineLimit: Int?
 
     var body: some View {
-        Text([title.type == MediaType.series ? "Series" : "Movie", title.releaseDate.map { String($0.prefix(4)) }]
-            .compactMap { $0 }.joined(separator: " · "))
-            .font(.metaLine)
-            .foregroundStyle(.secondary)
+        let mediaType = title.type == MediaType.series ? "Series" : "Movie"
+        let metadata = [showsMediaType ? mediaType : nil, title.releaseDate.map { String($0.prefix(4)) }]
+            .compactMap { $0 }.joined(separator: " · ")
+        if !metadata.isEmpty {
+            Text(metadata)
+                .font(.metaLine)
+                .foregroundStyle(.secondary)
+        }
         if !title.roles.isEmpty {
             Text(title.roles.joined(separator: ", "))
                 .font(.metaLine)

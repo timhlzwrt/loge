@@ -25,6 +25,7 @@ enum Metrics {
     static let posterRadius: CGFloat = 21
     /// Cast & Crew circles.
     static let personSize: CGFloat = 150
+    static let personTileWidth: CGFloat = 195
     /// The narrowest column of the details' Information grid.
     static let infoColumnWidth: CGFloat = 300
     /// Under portrait artwork that lifts on focus: at 8 the lifted image covered the name's first line.
@@ -41,6 +42,7 @@ enum Metrics {
     static let cardRadius: CGFloat = 12
     static let posterRadius: CGFloat = 10
     static let personSize: CGFloat = 76
+    static let personTileWidth: CGFloat = 99
     static let infoColumnWidth: CGFloat = 180
     static let liftedCaptionSpacing: CGFloat = 8
     #else
@@ -57,7 +59,9 @@ enum Metrics {
     static let headerSpacing: CGFloat = 12
     static let cardRadius: CGFloat = 14
     static let posterRadius: CGFloat = 12
-    static let personSize: CGFloat = isPad ? 96 : 76
+    static let personSize: CGFloat = isPad ? 96 : 92
+    /// A phone shows three portraits and the edge of a fourth, which says the row scrolls.
+    static let personTileWidth: CGFloat = isPad ? 125 : 106
     static let infoColumnWidth: CGFloat = isPad ? 200 : 150
     static let liftedCaptionSpacing: CGFloat = 8
     #endif
@@ -119,21 +123,21 @@ extension View {
 
 extension Font {
     #if os(tvOS)
-    static let sectionTitle = Font.system(size: 33, weight: .bold)
+    static let sectionTitle = Font.system(size: 31, weight: .semibold)
     static let metaLine = Font.system(size: 23, weight: .medium)
     static let synopsis = Font.system(size: 24)
     static let cardTitle = Font.system(size: 25, weight: .bold)
     static let episodeCaption = Font.system(size: 17, weight: .semibold)
     static let episodeTitle = Font.system(size: 21, weight: .semibold)
     #elseif os(macOS)
-    static let sectionTitle = Font.system(size: 19, weight: .bold)
+    static let sectionTitle = Font.system(size: 17, weight: .semibold)
     static let metaLine = Font.system(size: 13, weight: .medium)
     static let synopsis = Font.system(size: 14)
     static let cardTitle = Font.system(size: 14, weight: .bold)
     static let episodeCaption = Font.caption.weight(.semibold)
     static let episodeTitle = Font.headline
     #else
-    static let sectionTitle = Font.title2.bold()
+    static let sectionTitle = Font.title3.weight(.semibold)
     static let metaLine = Font.footnote.weight(.medium)
     /// Further from the screen than a phone, an iPad reads long text at the system's body size.
     @MainActor static let synopsis = Metrics.isPhone ? Font.subheadline : Font.body
@@ -204,16 +208,23 @@ struct TitleLogo: View {
     let logo: String?
     let name: String
     let maxHeight: CGFloat
+    /// Lets sparkle or glow under the lettering hang into the space below, so what follows
+    /// keeps its distance from the letters rather than from the faintest pixel.
+    var restsOnLettering = false
+    @State private var height: CGFloat = 0
 
     var body: some View {
         RemoteImage(url: logo) { phase in
             switch phase {
             case .success(let image):
-                Image(LogoTrim.trimmed(image, url: logo), scale: 1, label: Text(name))
+                let trimmed = LogoTrim.trimmed(image, url: logo)
+                Image(trimmed.image, scale: 1, label: Text(name))
                     .renderingMode(LogoTone.isDark(image, url: logo) ? .template : .original)
                     .resizable().scaledToFit()
                     .foregroundStyle(.white)
                     .frame(maxHeight: maxHeight)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
+                    .padding(.bottom, restsOnLettering ? -trimmed.faintBottom * height : 0)
             case .failure:
                 nameText
             default:
@@ -275,23 +286,35 @@ private enum LogoTone {
 /// under it; drawn without them, the logo lines up with the info line.
 @MainActor
 private enum LogoTrim {
+    /// A logo without its transparent margins, and how much of its height at the bottom is
+    /// only faint decoration under the lettering.
+    final class Trimmed {
+        let image: CGImage
+        let faintBottom: CGFloat
+
+        init(image: CGImage, faintBottom: CGFloat) {
+            self.image = image
+            self.faintBottom = faintBottom
+        }
+    }
+
     /// A crop keeps the whole original alive, so these are let go like the artwork they came from.
-    private static let results: NSCache<NSString, CGImage> = {
-        let cache = NSCache<NSString, CGImage>()
+    private static let results: NSCache<NSString, Trimmed> = {
+        let cache = NSCache<NSString, Trimmed>()
         cache.countLimit = 100
         return cache
     }()
 
-    static func trimmed(_ image: CGImage, url: String?) -> CGImage {
+    static func trimmed(_ image: CGImage, url: String?) -> Trimmed {
         if let url, let known = results.object(forKey: url as NSString) { return known }
-        let trimmed = crop(image) ?? image
+        let trimmed = crop(image) ?? Trimmed(image: image, faintBottom: 0)
         if let url { results.setObject(trimmed, forKey: url as NSString) }
         return trimmed
     }
 
     /// Finds the visible part on a small copy, then crops the full image to it, a little wider
     /// so antialiased edges aren't cut.
-    private static func crop(_ image: CGImage) -> CGImage? {
+    private static func crop(_ image: CGImage) -> Trimmed? {
         let width = 96
         let height = Int((Double(image.height) / Double(image.width) * Double(width)).rounded())
         guard image.width > 0, (1...1_000).contains(height) else { return nil }
@@ -306,20 +329,41 @@ private enum LogoTrim {
         }
         guard drawn else { return nil }
         var minX = width, maxX = -1, minY = height, maxY = -1
+        // Rows with something solid in them: lettering, as opposed to sparkle and glow, which
+        // this small copy averages down to faint pixels.
+        var solidRows = IndexSet()
         for y in 0..<height {
-            for x in 0..<width where pixels[(y * width + x) * 4 + 3] > 8 {
-                minX = min(minX, x); maxX = max(maxX, x)
-                minY = min(minY, y); maxY = max(maxY, y)
+            for x in 0..<width {
+                let alpha = pixels[(y * width + x) * 4 + 3]
+                if alpha > 8 {
+                    minX = min(minX, x); maxX = max(maxX, x)
+                    minY = min(minY, y); maxY = max(maxY, y)
+                }
+                if alpha > 128 { solidRows.insert(y) }
             }
         }
-        // Nothing visible, or already tight: nothing to gain.
-        guard maxX >= 0, minX > 1 || maxX < width - 2 || minY > 1 || maxY < height - 2 else { return nil }
+        guard maxX >= 0 else { return nil }
+        let faintBottom = faintBottom(solidRows: solidRows, visibleRows: minY...maxY)
+        // Already tight: nothing to crop.
+        guard minX > 1 || maxX < width - 2 || minY > 1 || maxY < height - 2 else {
+            return faintBottom > 0 ? Trimmed(image: image, faintBottom: faintBottom) : nil
+        }
         let scale = Double(image.width) / Double(width)
         let rect = CGRect(
             x: Double(minX - 1) * scale, y: Double(minY - 1) * scale,
             width: Double(maxX - minX + 3) * scale, height: Double(maxY - minY + 3) * scale
         ).integral.intersection(CGRect(x: 0, y: 0, width: image.width, height: image.height))
-        return image.cropping(to: rect)
+        return image.cropping(to: rect).map { Trimmed(image: $0, faintBottom: faintBottom) }
+    }
+
+    /// The share of the visible height below the last solid row. Nothing for a logo that is
+    /// faint throughout, such as hairline lettering, which has no solid part to rest on; and
+    /// never more than a third, so a wrong reading can't push a logo far into what follows.
+    private static func faintBottom(solidRows: IndexSet, visibleRows: ClosedRange<Int>) -> CGFloat {
+        guard let first = solidRows.first, let last = solidRows.last else { return 0 }
+        let visible = CGFloat(visibleRows.count)
+        guard CGFloat(last - first + 1) >= visible * 0.3 else { return 0 }
+        return min(CGFloat(visibleRows.upperBound - last) / visible, 1 / 3)
     }
 }
 
@@ -329,6 +373,8 @@ struct InfoLine: View {
     let genres: [String]?
     let runtime: String?
     let rating: String?
+    /// Under a description rather than over artwork: secondary, and without the rating.
+    var isQuiet = false
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
@@ -349,14 +395,14 @@ struct InfoLine: View {
         // over busy backdrops too.
         return line
             .font(.metaLine)
-            .foregroundStyle(.white.opacity(0.78))
+            .foregroundStyle(.white.opacity(isQuiet ? 0.6 : 0.78))
             .shadow(color: .black.opacity(0.5), radius: 6)
             .lineLimit(2)
     }
 
-    /// The same facts with the rating left to a `ScoresLine`.
-    var withoutRating: InfoLine {
-        InfoLine(releaseInfo: releaseInfo, genres: genres, runtime: runtime, rating: nil)
+    /// The same facts with the rating left to a `ScoresLine` beside them.
+    var quiet: InfoLine {
+        InfoLine(releaseInfo: releaseInfo, genres: genres, runtime: runtime, rating: nil, isQuiet: true)
     }
 
     /// One genre on a phone, where the line has to fit under a centred title.

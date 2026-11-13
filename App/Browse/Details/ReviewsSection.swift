@@ -38,7 +38,6 @@ struct ReviewsSection: View {
                 }
                 #endif
                 if isOnTMDB {
-                    Text("TMDB member reviews").font(.metaLine).foregroundStyle(.secondary)
                     ForEach(Array(reviews.prefix(showsAll ? reviews.count : previewCount))) { review in
                         ReviewPreview(review: review)
                         Divider()

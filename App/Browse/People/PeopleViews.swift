@@ -4,6 +4,7 @@ import SwiftUI
 /// Credits can lack an IMDb ID, so these tiles never expose the library's save actions.
 struct TMDBCreditTile: View {
     let title: TMDBCreditTitle
+    var showsMediaType = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.liftedCaptionSpacing) {
@@ -24,7 +25,7 @@ struct TMDBCreditTile: View {
             .hoverEffect(.highlight)
             #endif
             Text(title.name).font(.cardTitle).lineLimit(2)
-            CreditMetaLines(title: title, roleLineLimit: 2)
+            CreditMetaLines(title: title, showsMediaType: showsMediaType, roleLineLimit: 2)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .contentShape(.rect)
@@ -172,7 +173,7 @@ struct PersonTile: View {
             }
             captions
         }
-        .frame(width: Metrics.personSize * 1.3)
+        .frame(width: Metrics.personTileWidth)
         .contentShape(.rect)
         .accessibilityElement()
         .accessibilityLabel([person.name, person.character, roles].compactMap { $0 }.joined(separator: ", "))
@@ -184,13 +185,15 @@ struct PersonTile: View {
             Text(person.name)
                 .font(Self.nameFont)
                 .lineLimit(2)
-            if let character = person.character {
+            // A phone has room for the name: who they play is on their page, and who directed
+            // and wrote it is in Information.
+            if let character = person.character, !Metrics.isPhone {
                 Text(character)
                     .font(Self.roleFont)
                     .foregroundStyle(.secondary)
                     .lineLimit(showsPortrait ? 1 : 2)
             }
-            if let roles {
+            if let roles, !Metrics.isPhone {
                 Text(roles)
                     .font(Self.roleFont)
                     .foregroundStyle(.secondary)
@@ -204,7 +207,7 @@ struct PersonTile: View {
             ZStack(alignment: .top) {
                 VStack(spacing: 2) {
                     Text(verbatim: "A\nA").font(Self.nameFont)
-                    Text(verbatim: "A").font(Self.roleFont)
+                    if !Metrics.isPhone { Text(verbatim: "A").font(Self.roleFont) }
                 }
                 .hidden()
                 lines

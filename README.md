@@ -42,7 +42,7 @@ binary dependencies and what has—and has not—been tested on OS 26.
 - **Artwork-led Home:** popular films and series, IMDb favourites, Letterboxd
   lists, genres, festival winners and directors.
 - **Title details:** seasons, episodes, Up Next, watched actions, the IMDb
-  rating, and a Trailer button that opens the trailer on YouTube. With a TMDB
+  rating, and the trailer, which opens on YouTube from the More menu. With a TMDB
   token, cast and crew, and for a film that belongs to a series its other films
   in release order. With an MDBList key, the Letterboxd score and Rotten
   Tomatoes' Tomatometer beside the IMDb rating; each score opens the title on

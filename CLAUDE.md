@@ -139,10 +139,16 @@ numbers use `Locale.interface` (en_US) to match the English UI; clock times foll
 Person filmographies need TMDB: Cinemeta's search no longer names cast or directors, so
 without TMDB the page says so and shows the title it came from. TMDB is what makes the
 experience complete: without a token a title's page has no Cast & Crew at all, only the hint
-to connect it (trailers are the exception and work without). A title's scores sit in the
-header behind white marks of IMDb, Letterboxd and Rotten Tomatoes, the one place the app shows
-other brands' logos; the last two need the user's own MDBList key, and the review link rows
-they replaced are gone.
+to connect it (trailers are the exception and work without). A title's page leads with the
+title and Play, with Watch Later and a More menu (trailer, sources, lists, watched mark)
+beside it. A phone centres the three, Play in the middle at a fixed 172 pt and a size down
+(`.controlSize(.small)`); wider screens start with Play. The description follows, and under it, one size down, genre, year, runtime and
+the scores. The scores stand behind white marks of IMDb, Letterboxd and Rotten Tomatoes, the
+one place the app shows other brands' logos; the last two need the user's own MDBList key, and
+the review link rows they replaced are gone. Rows on that page have a heading and no caption
+under it. Section headings share a smaller semibold style across the app (20 pt on iOS).
+More Like This and film collections show only the year below poster titles; filmography
+keeps Movie/Series labels because it can mix both.
 
 ## Things that aren't obvious from the code
 
@@ -160,11 +166,16 @@ they replaced are gone.
 - Festival and genre tiles push by value; a view-built destination left the links inside dead.
 - Home's artwork prefetch uses plain data tasks, not a task group (suspected Release crash).
   An optimizer bug once lost a task group's result in Release builds, so test Release too.
-- Don't add `minimumScaleFactor` to `IconCaption`; the row then lays the icons out at half size.
 - iPad details switch between `DetailColumnsLayout` and a `VStackLayout` under `AnyLayout`,
   so rotating keeps the chosen season and loaded reviews.
 - The phone hero shows the portrait poster: a title near the top of a poster reads twice with
   the logo, and that can't be detected.
+- The title's logo is `fixedSize` vertically on the details page: `TitleLogo` otherwise takes
+  all the height it is allowed and a wide, low logo floats far above Play. With
+  `restsOnLettering` it also lets sparkle or glow under the letters hang into the gap below
+  (`LogoTrim` measures it; never cropped, and at most a third of the logo's height).
+- A phone's Cast & Crew shows three portraits and the edge of a fourth (`personTileWidth`) with
+  names only; who directed and wrote a title is in Information on every platform.
 - The Mac player window is a principal window, since an associated one can't go full screen.
 - The iOS timeline is a `Slider` to accessibility (10 s steps, spoken position), so FlowTests
   drag it rather than tap it.
@@ -214,7 +225,7 @@ they replaced are gone.
   frame gaps per move); keep simulator measurements comparable.
 - Unverified: playback and Picture in Picture on tvOS and macOS, HDR output, tvOS display
   matching, swipe-to-scrub and the scrub preview on screen, physical phone-to-Apple-TV
-  handoff, the Trailer button on Apple TV (shown only with the YouTube app installed, opened
+  handoff, Watch Trailer on Apple TV (in the More menu only with the YouTube app installed, opened
   by the undocumented `youtube://watch/<id>`), MDBList against the live service (built from
   its published schema; no key was available), Mac sources rows with AIOStreams' long names, the Search genre
   pill and Watch Later row on Apple TV.
