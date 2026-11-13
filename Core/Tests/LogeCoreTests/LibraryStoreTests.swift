@@ -41,6 +41,26 @@ struct LibraryStoreTests {
         #expect(store.resumePosition(for: "tt1") == nil)
     }
 
+    @Test func aMomentOfPlaybackIsWorthKeepingOnlyForWhatsAlreadyTracked() {
+        let store = LibraryStore(defaults: defaults)
+        #expect(!store.recordsProgress(for: movie.id, at: 10))
+        #expect(store.recordsProgress(for: movie.id, at: LibraryStore.minimumResumePosition))
+        store.record(movie, position: 600, duration: 5000, at: t0)
+        #expect(store.recordsProgress(for: movie.id, at: 10))
+    }
+
+    /// Libraries saved while Trakt was supported hold progress it reported as a percentage.
+    @Test func progressSavedAsAPercentageResumesByFractionUntilPlayedHere() throws {
+        let saved = WatchProgress(item: movie, position: 3000, duration: 6000, updatedAt: t0, isEstimated: true)
+        defaults.set(try JSONEncoder().encode([movie.id: saved]), forKey: "watchProgress")
+        let store = LibraryStore(defaults: defaults)
+
+        #expect(store.estimatedFraction(for: movie.id) == 0.5)
+        #expect(store.continueWatching.count == 1)
+        store.record(movie, position: 600, duration: 5000, at: t0 + 60)
+        #expect(store.estimatedFraction(for: movie.id) == nil)
+    }
+
     @Test func continueWatchingShowsLatestEntryPerTitle() {
         let store = LibraryStore(defaults: defaults)
         store.record(episode(1, 1), position: 1000, duration: 2000, at: t0)
@@ -50,17 +70,31 @@ struct LibraryStoreTests {
         #expect(store.continueWatching.map(\.item.id) == ["tt9:1:2", "tt1"])
     }
 
-    @Test func inProgressUsesTheLatestEpisodeRatherThanOlderUnfinishedOnes() {
+    @Test func inProgressUsesTheLatestEpisodeRatherThanOlderUnfinishedOnes() throws {
         let store = LibraryStore(defaults: defaults)
         #expect(!store.isInProgress(metaID: "tt9"))
         store.record(episode(1, 1), position: 300, duration: 2000, at: t0)
         #expect(store.isInProgress(metaID: "tt9"))
         store.record(episode(1, 2), position: 1990, duration: 2000, at: t0 + 1)
         #expect(!store.isInProgress(metaID: "tt9"))
-        store.mergeRemote(episode(1, 3), fraction: 0.001, estimatedDuration: 2000, at: t0 + 2)
+        // Another device's first seconds of the next episode aren't worth resuming either.
+        var snapshot = store.playbackSyncSnapshot
+        snapshot.entries["tt9:1:3"] = WatchProgress(item: episode(1, 3), position: 2, duration: 2000, updatedAt: t0 + 2)
+        try store.applyPlaybackSyncSnapshot(snapshot)
         #expect(!store.isInProgress(metaID: "tt9"))
         store.record(episode(1, 3), position: 300, duration: 2000, at: t0 + 3)
         #expect(store.isInProgress(metaID: "tt9"))
+    }
+
+    @Test func followedSeriesAreTheLatestEntryOfEachSeriesMostRecentFirst() {
+        let store = LibraryStore(defaults: defaults)
+        let other = WatchItem(id: "tt8:2:1", type: "series", metaID: "tt8", title: "Other", season: 2, episode: 1)
+        store.record(movie, position: 600, duration: 6000, at: t0 + 30)
+        store.record(other, position: 600, duration: 2000, at: t0)
+        // Marked together, a season's episodes share a time: the last one is where the viewer is.
+        store.markWatched([episode(1, 1), episode(1, 3), episode(1, 2)], at: t0 + 10)
+
+        #expect(store.followedSeries.map(\.item.id) == ["tt9:1:3", "tt8:2:1"])
     }
 
     @Test func upNextResumesOrAdvances() {

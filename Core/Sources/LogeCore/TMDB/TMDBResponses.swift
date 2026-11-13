@@ -39,6 +39,10 @@ struct DetailsResponse: Decodable {
     let revenue: Int?
     let recommendations: TitlePageResponse?
     let similar: TitlePageResponse?
+    let videos: VideosResponse?
+    let belongs_to_collection: CollectionReference?
+
+    struct CollectionReference: Decodable { let id: Int? }
 
     func details(isMovie: Bool) -> TMDBDetails {
         let date = fullDate(isMovie ? release_date : first_air_date)
@@ -75,7 +79,9 @@ struct DetailsResponse: Decodable {
             rating: rating, voteCount: vote_count.flatMap { $0 >= 0 ? $0 : nil },
             budget: isMovie ? budget.flatMap { $0 > 0 ? $0 : nil } : nil,
             revenue: isMovie ? revenue.flatMap { $0 > 0 ? $0 : nil } : nil,
-            tmdbID: id, recommendations: recommended.titles, recommendationsAreSimilar: recommended.areSimilar)
+            tmdbID: id, recommendations: recommended.titles, recommendationsAreSimilar: recommended.areSimilar,
+            trailerYouTubeID: videos?.trailerYouTubeID,
+            collectionID: isMovie ? belongs_to_collection?.id.flatMap { $0 > 0 ? $0 : nil } : nil)
     }
 
     private func recommended(isMovie: Bool) -> (titles: [TMDBCreditTitle], areSimilar: Bool) {
@@ -100,8 +106,8 @@ struct TitlePageResponse: Decodable {
     }
     let results: [Result]?
 
-    func titles(isMovie: Bool, excluding excludedID: Int) -> [TMDBCreditTitle] {
-        var seen: Set<Int> = [excludedID]
+    func titles(isMovie: Bool, excluding excludedID: Int? = nil) -> [TMDBCreditTitle] {
+        var seen = Set([excludedID].compactMap { $0 })
         return (results ?? []).compactMap { result in
             guard let id = result.id, id > 0, seen.insert(id).inserted,
                   let name = nonempty(isMovie ? result.title : result.name) else { return nil }
@@ -112,6 +118,40 @@ struct TitlePageResponse: Decodable {
                 overview: nonempty(result.overview),
                 releaseDate: fullDate(isMovie ? result.release_date : result.first_air_date))
         }
+    }
+}
+
+struct VideosResponse: Decodable {
+    struct Video: Decodable {
+        let key: String?
+        let site: String?
+        let type: String?
+        let official: Bool?
+    }
+    let results: [Video]?
+
+    /// The studio's own trailer if TMDB lists one, then any trailer, then a teaser.
+    var trailerYouTubeID: String? {
+        let onYouTube = (results ?? []).filter { $0.site == "YouTube" && youTubeVideoID($0.key) != nil }
+        let pick = onYouTube.first { $0.type == "Trailer" && $0.official == true }
+            ?? onYouTube.first { $0.type == "Trailer" }
+            ?? onYouTube.first { $0.type == "Teaser" }
+        return pick?.key
+    }
+}
+
+/// A film series, such as a trilogy: TMDB's "collection".
+struct CollectionResponse: Decodable {
+    let id: Int
+    let name: String?
+    let parts: [TitlePageResponse.Result]?
+
+    /// In release order; films without a date yet come last, in TMDB's order.
+    var collection: TMDBCollection? {
+        guard let name = nonempty(name) else { return nil }
+        let titles = TitlePageResponse(results: parts).titles(isMovie: true)
+        let dated = titles.filter { $0.releaseDate != nil }.sorted { ($0.releaseDate ?? "") < ($1.releaseDate ?? "") }
+        return TMDBCollection(id: id, name: name, titles: dated + titles.filter { $0.releaseDate == nil })
     }
 }
 

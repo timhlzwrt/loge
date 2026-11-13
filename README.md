@@ -41,8 +41,12 @@ binary dependencies and what has—and has not—been tested on OS 26.
 
 - **Artwork-led Home:** popular films and series, IMDb favourites, Letterboxd
   lists, genres, festival winners and directors.
-- **Title details:** seasons, episodes, Up Next, cast and crew, watched actions,
-  and IMDb ratings with their source and scale.
+- **Title details:** seasons, episodes, Up Next, watched actions, the IMDb
+  rating, and a Trailer button that opens the trailer on YouTube. With a TMDB
+  token, cast and crew, and for a film that belongs to a series its other films
+  in release order. With an MDBList key, the Letterboxd score and Rotten
+  Tomatoes' Tomatometer beside the IMDb rating; each score opens the title on
+  its site.
 - **People and festivals:** TMDB-backed portraits and filmographies, role
   filters, member reviews, and dated festival editions with award filters.
   TMDB features require your own read access token.
@@ -51,6 +55,9 @@ binary dependencies and what has—and has not—been tested on OS 26.
   the ranking happens on your device; TMDB sees only the title lookups.
 - **Your library:** Continue Watching, Watch Later, custom lists and history
   grouped by day. Search includes recent queries.
+- **New and upcoming episodes:** for series you are watching, an episode that
+  has come out since you finished the one before appears in Continue Watching,
+  and an Upcoming row on Home lists the next air dates.
 
 ### Choose a source, not a mystery filename
 
@@ -83,15 +90,9 @@ and preferences between your devices. Separate accounts can share selected setup
 categories without sharing viewing progress. Payloads are encrypted on-device;
 there is **no default hosted service**. [Set up private sync →](docs/SYNC.md)
 
-**Trakt** is an alternative for paused progress, playback scrobbling and
-watched/unwatched updates. It is paused while a self-hosted account is connected,
-so two services do not compete over your watch activity.
-[Connect Trakt or TMDB →](docs/INSTALLATION.md#optional-accounts)
-
 **What stays local:** Watch Later, custom lists and remembered stream selections
-are not synchronized by either service. Trakt does not carry addon configuration
-or preferences and does not import your full watched history. Both services keep
-changes made offline on the device and send them on reconnect.
+are not synchronized. Changes made offline stay on the device and are sent on
+reconnect.
 
 ## Install and start watching
 
@@ -115,7 +116,7 @@ Gatekeeper, updates and troubleshooting.
 
 **First run:** open **Settings → Addons**, install your provider's configured
 `/manifest.json` URL, open a title, and choose **Sources**. Built-in catalogs do
-not imply that a playable source is available. No loge, Trakt or TMDB account is
+not imply that a playable source is available. No loge or TMDB account is
 required for basic browsing and playback.
 
 ## Screenshots
@@ -142,7 +143,8 @@ is in the public domain, so no third-party artwork appears.
 - **English interface only.** Audio and subtitle language preferences are separate.
 - **Recommendations and filmographies need a TMDB token.** Without one, Home has only
   its discovery feeds and a person's page lists only the title it was opened from.
-  Letterboxd links/lists do not mean Letterboxd ratings or account sync are integrated.
+  Letterboxd and Rotten Tomatoes scores need an MDBList key; there is no Letterboxd
+  account sync.
 
 ### Testing scope
 

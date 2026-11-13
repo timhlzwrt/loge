@@ -80,8 +80,48 @@ public struct Meta: Codable, Sendable, Equatable, Identifiable {
     public var links: [MetaLink]?
     /// Episodes for series; absent or empty for movies.
     public var videos: [Video]?
+    public var trailers: MetaTrailers?
 
     public var releaseDate: Date? { released.flatMap(isoDate) }
+
+    /// Minutes in a runtime such as "45 min" or "2h 16min".
+    public static func minutes(inRuntime runtime: String?) -> Double? {
+        guard let runtime else { return nil }
+        let hours = runtime.firstMatch(of: /(\d+)\s*h/).flatMap { Double($0.1) } ?? 0
+        let minutes = runtime.firstMatch(of: /(\d+)\s*min/).flatMap { Double($0.1) } ?? 0
+        let total = hours * 60 + minutes
+        return total > 0 ? total : nil
+    }
+}
+
+/// A title's trailers, by YouTube video ID. An extra: a shape this doesn't know reads as no
+/// trailers rather than failing the title's details.
+public struct MetaTrailers: Codable, Sendable, Equatable {
+    struct Entry: Codable, Sendable, Equatable {
+        var source: String?
+        /// `Trailer` or `Clip`.
+        var type: String?
+    }
+    var entries: [Entry]
+
+    public init(from decoder: any Decoder) throws {
+        entries = (try? [Entry](from: decoder)) ?? []
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        try entries.encode(to: encoder)
+    }
+
+    /// The first trailer, ahead of any clips.
+    public var youTubeID: String? {
+        entries.filter { $0.type == "Trailer" }.lazy.compactMap { youTubeVideoID($0.source) }.first
+    }
+}
+
+/// The ID as it goes into a YouTube link, or nil for anything that isn't one.
+func youTubeVideoID(_ value: String?) -> String? {
+    guard let value, value.wholeMatch(of: /[A-Za-z0-9_-]{11}/) != nil else { return nil }
+    return value
 }
 
 public struct MetaLink: Codable, Sendable, Equatable {

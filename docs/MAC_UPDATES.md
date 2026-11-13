@@ -20,8 +20,7 @@ through Apple's Developer ID key rotation.
 
 Release builds are signed with loge's own self-signed certificate ("loge Mac signing").
 The Keychain recognises an app by its signature: an ad-hoc signed app is a new app with
-every update, so macOS asked for the password again for each saved sign-in (Trakt, TMDB,
-sync). With the same certificate on every build, "Always Allow" once is enough. It does not
+every update, so macOS asked for the password again for each saved sign-in (TMDB, sync). With the same certificate on every build, "Always Allow" once is enough. It does not
 change Gatekeeper, which still needs Open Anyway on the first launch.
 
 The certificate and its key live in the encrypted Actions secrets

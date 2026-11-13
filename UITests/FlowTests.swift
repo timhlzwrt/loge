@@ -777,19 +777,6 @@ final class FlowTests: XCTestCase {
         app.buttons["Close"].tap()
     }
 
-    @MainActor
-    func testTraktSettings() {
-        openTab("Settings")
-        let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Trakt'")).firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout: 5), "No Trakt row in Settings")
-        row.tap()
-        let keys = app.textFields["Client ID"]
-        let signedIn = app.staticTexts["Signed in as"]
-        let signIn = app.buttons["Sign In"]
-        XCTAssertTrue(keys.waitForExistence(timeout: 5) || signedIn.exists || signIn.exists, "No Trakt section")
-        screenshot("settings-trakt")
-    }
-
     // MARK: Helpers
 
     /// Chooses the short local-addon fixture explicitly, independent of remembered sources.

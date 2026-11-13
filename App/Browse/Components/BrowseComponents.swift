@@ -354,6 +354,11 @@ struct InfoLine: View {
             .lineLimit(2)
     }
 
+    /// The same facts with the rating left to a `ScoresLine`.
+    var withoutRating: InfoLine {
+        InfoLine(releaseInfo: releaseInfo, genres: genres, runtime: runtime, rating: nil)
+    }
+
     /// One genre on a phone, where the line has to fit under a centred title.
     private var genreCount: Int {
         #if os(iOS)

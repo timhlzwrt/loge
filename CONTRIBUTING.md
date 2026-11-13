@@ -72,7 +72,7 @@ See the maintainer's [testing scope](ROADMAP.md#a-note-from-the-maintainer).
 ## Protect private configuration
 
 Never commit configured addon manifest URLs, stream URLs with credentials,
-Trakt/TMDB tokens, sync connection codes, recovery keys or signing private keys.
+TMDB tokens, MDBList keys, sync connection codes, recovery keys or signing private keys.
 Use synthetic fixtures and redact screenshot/log contents before sharing them.
 Do not dump app preferences to diagnose a problem: they can contain addon credentials.
 

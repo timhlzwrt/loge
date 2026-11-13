@@ -98,6 +98,8 @@ struct DataSourcesView: View {
             Section {
                 source("Cinemeta", "Catalogs, search, title details, artwork and IMDb ratings.",
                        url: "https://www.stremio.com")
+                source("MDBList", "Letterboxd and Rotten Tomatoes scores on a title's page, once connected.",
+                       url: "https://mdblist.com")
                 source("Letterboxd via Stremboxd", "Popular and all-time lists on Home and in genres.",
                        url: "https://letterboxd.com")
                 source("Wikidata", "Recorded historical festival winners and selected directors’ films. Records may be incomplete.",
@@ -120,8 +122,6 @@ struct DataSourcesView: View {
             Section {
                 source("TheIntroDB", "Intro, recap and credits timings for the skip buttons.",
                        url: "https://theintrodb.org")
-                source("Trakt", "Watch progress and history, when signed in.",
-                       url: "https://trakt.tv")
                 Text("Streams and subtitles come from the addons you install.")
                     .foregroundStyle(.secondary)
             } header: { SettingsHeader("Playback") }

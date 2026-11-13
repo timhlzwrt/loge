@@ -18,6 +18,10 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>youtube</string>
+	</array>
 	<key>SUFeedURL</key>
 	<string>https://tjh.li/loge/appcast.xml</string>
 	<key>SUPublicEDKey</key>

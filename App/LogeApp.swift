@@ -11,10 +11,11 @@ struct LogeApp: App {
     #endif
     @State private var addonStore: AddonStore
     @State private var library: LibraryStore
-    @State private var trakt: TraktAccount
     @State private var tmdb: TMDBAccount
+    @State private var mdblist: MDBListAccount
     @State private var playback: PlaybackSession
     @State private var accountSync: AccountSync
+    @State private var schedule = EpisodeSchedule()
     /// Here rather than in `RootView`, so the Mac's menu commands can switch tabs.
     @State private var selectedTab = RootTab.home
     /// Coming back from Control Center or a system sheet isn't a return to the app.
@@ -27,15 +28,19 @@ struct LogeApp: App {
         // UI checks use a temporary file and memory-only account; no credential enters launch logs or Keychain.
         if ProcessInfo.processInfo.arguments.contains("--discovery-ui-test") {
             _tmdb = State(initialValue: TMDBAccount(temporaryReadAccessToken: "offline-ui-fixture", session: DiscoveryFixture.session))
+            _mdblist = State(initialValue: MDBListAccount(temporaryAPIKey: "offline-ui-fixture", session: DiscoveryFixture.session))
         } else if ProcessInfo.processInfo.arguments.contains("--tmdb-ui-test"),
            let path = ProcessInfo.processInfo.environment["TMDB_TEST_TOKEN_FILE"],
            let token = try? String(contentsOfFile: path, encoding: .utf8) {
             _tmdb = State(initialValue: TMDBAccount(temporaryReadAccessToken: token))
+            _mdblist = State(initialValue: MDBListAccount())
         } else {
             _tmdb = State(initialValue: TMDBAccount())
+            _mdblist = State(initialValue: MDBListAccount())
         }
         #else
         _tmdb = State(initialValue: TMDBAccount())
+        _mdblist = State(initialValue: MDBListAccount())
         #endif
         let defaults: UserDefaults
         #if DEBUG
@@ -44,6 +49,7 @@ struct LogeApp: App {
         #else
         defaults = .standard
         #endif
+        RetiredTraktData.remove()
         let addonStore = AddonStore(defaults: defaults)
         let library = LibraryStore(defaults: defaults)
         _addonStore = State(initialValue: addonStore)
@@ -54,9 +60,7 @@ struct LogeApp: App {
         #endif
         _accountSync = State(initialValue: accountSync)
         _library = State(initialValue: library)
-        let trakt = TraktAccount(library: library, addons: addonStore)
-        _trakt = State(initialValue: trakt)
-        let playback = PlaybackSession(library: library, addons: addonStore, trakt: trakt, accountSync: accountSync)
+        let playback = PlaybackSession(library: library, addons: addonStore, accountSync: accountSync)
         accountSync.beforeProfileChange = { [weak playback] in playback?.end() }
         _playback = State(initialValue: playback)
         #if os(macOS)
@@ -81,9 +85,10 @@ struct LogeApp: App {
                 .environment(addonStore)
                 .environment(library)
                 .environment(playback)
-                .environment(trakt)
                 .environment(tmdb)
+                .environment(mdblist)
                 .environment(accountSync)
+                .environment(schedule)
                 .preferredColorScheme(.dark)
                 // White unless the user picks another accent: artwork carries the colour.
                 .tint(accent.color)
@@ -101,16 +106,15 @@ struct LogeApp: App {
                     if ProcessInfo.processInfo.arguments.contains("--discovery-ui-test")
                         || ProcessInfo.processInfo.arguments.contains("--playback-ui-test") { return }
                     #endif
-                    trakt.sendPendingOnReconnect()
                     // Alongside, so an unreachable sync server doesn't hold up the addons; a sync
                     // that changes them refreshes them itself.
                     let addons = addonStore
                     async let manifests: Void = addons.refreshManifests()
                     await accountSync.sync()
                     await manifests
-                    // Needs the addons to look up titles started on other devices.
-                    await trakt.pullProgress()
                     await library.fillMissingArtwork(from: addonStore)
+                    // After the sync, which may bring series followed on another device.
+                    await schedule.refresh(for: library, addons: addonStore)
                 }
                 .onChange(of: scenePhase) { _, newPhase in
                     if newPhase == .background {
@@ -133,7 +137,7 @@ struct LogeApp: App {
                     #endif
                     Task {
                         await accountSync.sync()
-                        await trakt.pullProgress()
+                        await schedule.refresh(for: library, addons: addonStore)
                     }
                 }
         }
@@ -166,7 +170,6 @@ struct LogeApp: App {
                 // The sources sheet opened from the player needs them, and can add an addon.
                 .environment(addonStore)
                 .environment(library)
-                .environment(trakt)
                 .environment(tmdb)
                 .environment(accountSync)
                 .frame(minWidth: 640, minHeight: 360)
@@ -195,7 +198,6 @@ struct LogeApp: App {
                 do { try await Task.sleep(for: .milliseconds(200)) } catch { break }
             }
             await accountSync.sync()
-            await trakt.sendPending()
             time.end()
         }
         #endif

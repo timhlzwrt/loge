@@ -1,17 +1,34 @@
 import LogeCore
 import SwiftUI
 
-/// Unfinished movies and episodes, most recent first. Selecting one goes straight
-/// to its sources, and playback resumes where it stopped.
+/// Unfinished movies and episodes, and episodes that came out since their series was last
+/// watched, most recent first. Selecting one goes straight to its sources, and playback
+/// resumes where it stopped.
 struct ContinueWatchingRow: View {
     var onFocus: (MetaPreview) -> Void = { _ in }
 
     @Environment(LibraryStore.self) private var library
-    @Environment(TraktAccount.self) private var trakt
+    @Environment(EpisodeSchedule.self) private var schedule
     @FocusState private var isFirstFocused: Bool
 
+    fileprivate struct Entry: Identifiable {
+        let item: WatchItem
+        /// Nil for a new episode, which hasn't been started.
+        let progress: WatchProgress?
+        /// When it was last played, or when it aired.
+        let date: Date
+
+        var id: String { item.id }
+    }
+
+    private var entries: [Entry] {
+        let watching = library.continueWatching.map { Entry(item: $0.item, progress: $0, date: $0.updatedAt) }
+        let new = schedule.newEpisodes(in: library).map { Entry(item: $0.item, progress: nil, date: $0.date) }
+        return (watching + new).sorted { $0.date > $1.date }
+    }
+
     var body: some View {
-        let entries = library.continueWatching
+        let entries = entries
         if !entries.isEmpty {
             VStack(alignment: .leading, spacing: Metrics.headerSpacing) {
                 Text("Continue Watching")
@@ -19,9 +36,9 @@ struct ContinueWatchingRow: View {
                     .padding(.horizontal, Metrics.gutter)
                 HorizontalShelf("Continue Watching") {
                     LazyHStack(alignment: .top, spacing: Metrics.rowSpacing) {
-                        ForEach(entries, id: \.item.id) { entry in
+                        ForEach(entries) { entry in
                             #if os(tvOS)
-                            if entry.item.id == entries.first?.item.id {
+                            if entry.id == entries.first?.id {
                                 card(entry).focused($isFirstFocused)
                             } else {
                                 card(entry)
@@ -46,7 +63,7 @@ struct ContinueWatchingRow: View {
         }
     }
 
-    private func card(_ entry: WatchProgress) -> some View {
+    private func card(_ entry: Entry) -> some View {
         NavigationLink(value: SourcesRoute(item: entry.item, title: title(for: entry.item), autoplay: true)) {
             ContinueWatchingCard(entry: entry)
                 #if os(tvOS)
@@ -68,7 +85,6 @@ struct ContinueWatchingRow: View {
                 poster: entry.item.poster, background: entry.item.background))
             Button("Remove from Continue Watching", systemImage: "eye.slash") {
                 library.removeFromContinueWatching(metaID: entry.item.metaID)
-                trakt.removeFromContinueWatching(entry.item)
             }
         }
     }
@@ -78,19 +94,17 @@ struct ContinueWatchingRow: View {
     }
 }
 
-/// A watch card that says how much is left.
+/// A watch card that says how much is left, or that the episode is new.
 private struct ContinueWatchingCard: View {
-    let entry: WatchProgress
+    let entry: ContinueWatchingRow.Entry
 
     var body: some View {
-        WatchCard(entry: entry, detail: "\(minutesLeft) min left")
+        let minutesLeft = entry.progress.map { max(Int(($0.duration - $0.position) / 60), 1) }
+        WatchCard(item: entry.item, progress: entry.progress,
+                  detail: minutesLeft.map { "\($0) min left" } ?? "New episode")
             .frame(width: Metrics.cardWidth)
             .accessibilityLabel(accessibilityTitle)
-            .accessibilityValue("\(minutesLeft) minutes left")
-    }
-
-    private var minutesLeft: Int {
-        max(Int((entry.duration - entry.position) / 60), 1)
+            .accessibilityValue(minutesLeft.map { "\($0) minutes left" } ?? "New episode")
     }
 
     /// "Lanterns, S1 E2, Trust Fall".

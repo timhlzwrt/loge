@@ -91,6 +91,26 @@ struct AddonClientTests {
         #expect(pilot.displayTitle == "Pilot")
     }
 
+    @Test func readsTheTrailerAndToleratesOtherShapes() throws {
+        let meta = try decodeFixture("cinemeta-meta-series", as: MetaResponse.self).meta
+        #expect(meta.trailers?.youTubeID == "VFkjBy2b50Q")
+
+        func trailer(_ trailers: String) throws -> String? {
+            let json = #"{"meta":{"id":"tt1","type":"movie","name":"Movie","trailers":\#(trailers)}}"#
+            return try JSONDecoder().decode(MetaResponse.self, from: Data(json.utf8)).meta.trailers?.youTubeID
+        }
+        #expect(try trailer(#"[{"source":"clip0000001","type":"Clip"},{"source":"trailer0001","type":"Trailer"}]"#) == "trailer0001")
+        // Not a video ID, so it can't be put into a link.
+        #expect(try trailer(#"[{"source":"x&list=evil","type":"Trailer"}]"#) == nil)
+        #expect(try trailer(#"["trailer0001"]"#) == nil)
+        #expect(try trailer(#"{"source":"trailer0001"}"#) == nil)
+    }
+
+    @Test(arguments: [("45 min", 45.0), ("2h 16min", 136.0), ("1h", 60.0), ("unknown", nil), (nil, nil)] as [(String?, Double?)])
+    func readsRuntimes(_ runtime: String?, _ minutes: Double?) {
+        #expect(Meta.minutes(inRuntime: runtime) == minutes)
+    }
+
     @Test func decodesStreams() throws {
         let streams = try decodeFixture("streams", as: StreamsResponse.self).streams
 

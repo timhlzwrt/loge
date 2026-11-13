@@ -19,7 +19,7 @@ public enum TMDBAccountError: Error, LocalizedError, Equatable, Sendable {
     }
 }
 
-/// A device-local API credential, separate from the user's movie library and Trakt login.
+/// A device-local API credential, separate from the user's movie library.
 @MainActor @Observable
 public final class TMDBAccount {
     public private(set) var isConfigured = false
@@ -34,6 +34,7 @@ public final class TMDBAccount {
     @ObservationIgnored private var detailsCache = TMDBResponseCache<TMDBTitleKey, TMDBDetails>(capacity: 128, lifetime: .seconds(1_800))
     @ObservationIgnored private var peopleCache = TMDBResponseCache<Int, TMDBPersonDetails>(capacity: 32, lifetime: .seconds(3_600))
     @ObservationIgnored private var identityCache = TMDBResponseCache<TMDBIdentityKey, String?>(capacity: 256, lifetime: .seconds(3_600))
+    @ObservationIgnored private var collectionCache = TMDBResponseCache<Int, TMDBCollection>(capacity: 32, lifetime: .seconds(3_600))
 
     @ObservationIgnored private var directorCache = TMDBResponseCache<String, [TMDBPopularDirector]>(capacity: 1, lifetime: .seconds(3_600))
     @ObservationIgnored private var reviewCache = TMDBResponseCache<TMDBReviewKey, TMDBReviewPage>(capacity: 64, lifetime: .seconds(1_800))
@@ -81,6 +82,15 @@ public final class TMDBAccount {
         try Task.checkCancellation()
         guard self.revision == revision else { throw CancellationError() }
         return person
+    }
+
+    public func collection(id: Int) async throws -> TMDBCollection {
+        guard let client else { throw TMDBError.unauthorized }
+        let revision = revision
+        let collection = try await collectionCache.value(for: id) { try await client.collection(id: id) }
+        try Task.checkCancellation()
+        guard self.revision == revision else { throw CancellationError() }
+        return collection
     }
 
     public func imdbID(tmdbID: Int, type: String) async throws -> String? {
@@ -183,6 +193,7 @@ public final class TMDBAccount {
         detailsCache = TMDBResponseCache(capacity: 128, lifetime: .seconds(1_800))
         peopleCache = TMDBResponseCache(capacity: 32, lifetime: .seconds(3_600))
         identityCache = TMDBResponseCache(capacity: 256, lifetime: .seconds(3_600))
+        collectionCache = TMDBResponseCache(capacity: 32, lifetime: .seconds(3_600))
         directorCache = TMDBResponseCache(capacity: 1, lifetime: .seconds(3_600))
         reviewCache = TMDBResponseCache(capacity: 64, lifetime: .seconds(1_800))
     }

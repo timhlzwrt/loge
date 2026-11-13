@@ -56,9 +56,18 @@ public struct WatchProgress: Codable, Sendable, Equatable {
     public var position: Double
     public var duration: Double
     public var updatedAt: Date
-    /// From another device, which only reports a percentage: `duration` is the title's
-    /// runtime until the file is played here. Nil rather than false in older saved data.
+    /// `duration` stands in until the file is played here: marked watched without playing,
+    /// or saved by an older build from a service that only reported a percentage. Nil
+    /// rather than false in older saved data.
     public var isEstimated: Bool?
+
+    public init(item: WatchItem, position: Double, duration: Double, updatedAt: Date, isEstimated: Bool? = nil) {
+        self.item = item
+        self.position = position
+        self.duration = duration
+        self.updatedAt = updatedAt
+        self.isEstimated = isEstimated
+    }
 
     public var fraction: Double {
         duration > 0 ? min(position / duration, 1) : 0

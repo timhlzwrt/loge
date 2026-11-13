@@ -26,13 +26,11 @@ final class PlaybackSession {
 
     @ObservationIgnored private let library: LibraryStore
     @ObservationIgnored private let addons: AddonStore
-    @ObservationIgnored private let trakt: TraktAccount
     @ObservationIgnored private let accountSync: AccountSync?
     @ObservationIgnored private var episodes: [Video] = []
     @ObservationIgnored private var isLookingUpNext = false
     @ObservationIgnored private var lastRecordedPosition: Double = 0
     @ObservationIgnored private var hasRememberedSource = false
-    @ObservationIgnored private var hasReportedStart = false
     @ObservationIgnored private var nowPlaying: NowPlaying?
     /// Found while the file opens; mpv can only add them once it's open.
     @ObservationIgnored private var externalSubtitles: Task<[ExternalSubtitle], Never>?
@@ -56,10 +54,9 @@ final class PlaybackSession {
     @ObservationIgnored private var displayActivity: NSObjectProtocol?
     #endif
 
-    init(library: LibraryStore, addons: AddonStore, trakt: TraktAccount, accountSync: AccountSync? = nil) {
+    init(library: LibraryStore, addons: AddonStore, accountSync: AccountSync? = nil) {
         self.library = library
         self.addons = addons
-        self.trakt = trakt
         self.accountSync = accountSync
     }
 
@@ -125,7 +122,6 @@ final class PlaybackSession {
         guard let player else { return }
         recordConnectionSpeed()
         recordProgress()
-        scrobble(.stop)
         tasks.forEach { $0.cancel() }
         tasks = []
         choosingSource = nil
@@ -180,7 +176,6 @@ final class PlaybackSession {
             recordProgress()
             // Skipping the credits shouldn't leave the episode looking unfinished.
             library.markWatched([item])
-            trakt.scrobble(.stop, item, progress: 100)
         }
         // The alternatives were for the episode that just ended.
         fallbacks = []
@@ -214,8 +209,6 @@ final class PlaybackSession {
             if pictureInPicture.isPossible && player?.status == .playing { return }
             #endif
         }
-        // mpv reports the pause asynchronously, which can be too late to send before suspension.
-        scrobble(.pause)
         player?.pause()
         player?.setVideoEnabled(false)
     }
@@ -246,7 +239,6 @@ final class PlaybackSession {
         next = nil
         isLookingUpNext = false
         hasRememberedSource = false
-        hasReportedStart = false
         lastRecordedPosition = 0
         let defaults = UserDefaults.standard
         let audio = defaults.string(forKey: PlaybackPreferences.audioKey) ?? PlaybackPreferences.defaultAudioLanguage
@@ -308,7 +300,6 @@ final class PlaybackSession {
             guard position >= target - 1 else { return }
             estimatedResumePosition = nil
             estimatedResumeFraction = nil
-            if player?.status == .playing { scrobble(.start) }
         }
         if needsEstimatedSeek && player?.duration != nil {
             needsEstimatedSeek = false
@@ -317,12 +308,7 @@ final class PlaybackSession {
         // Often enough that a crash or force-quit loses little, rarely enough not to churn storage.
         if abs(position - lastRecordedPosition) >= 10 {
             recordProgress(flushSync: false)
-            if let item = current?.item, let progress = reportableProgress(for: item) {
-                trakt.keepProgress(item, progress: progress)
-            }
         }
-        // Held back while sampling a source; see `reportableProgress`.
-        if !hasReportedStart && player?.status == .playing { scrobble(.start) }
         lookUpNextIfDue()
     }
 
@@ -362,10 +348,8 @@ final class PlaybackSession {
         switch status {
         case .playing:
             rememberSource()
-            scrobble(.start)
         case .paused:
             recordProgress()
-            scrobble(.pause)
         case .ended:
             if openedPastEnd, let player, let duration = player.duration {
                 // Not watched: nothing played. Near the end, as close as this file allows, and
@@ -389,22 +373,6 @@ final class PlaybackSession {
         }
     }
 
-    /// Lets Trakt follow along; the account keeps its completion threshold aligned with the library.
-    private func scrobble(_ action: TraktClient.ScrobbleAction) {
-        guard let item = current?.item, let progress = reportableProgress(for: item) else { return }
-        hasReportedStart = action == .start
-        trakt.scrobble(action, item, progress: progress)
-    }
-
-    /// 0–100, once playback is worth telling Trakt about. Sampling a source isn't saved here, and
-    /// reporting it would cost another device its position: a pause replaces that position, and
-    /// a start removes it.
-    private func reportableProgress(for item: WatchItem) -> Double? {
-        guard estimatedResumeFraction == nil, !openedPastEnd, let player, let duration = player.duration, duration > 0,
-              library.recordsProgress(for: item.id, at: player.position) else { return nil }
-        return player.position / duration * 100
-    }
-
     /// Progress from another device is a percentage; now that the real duration is known,
     /// go to the exact spot.
     private func seekToEstimatedProgress() -> Bool {
@@ -415,12 +383,11 @@ final class PlaybackSession {
         estimatedResumePosition = target
         player.seek(to: target) { [weak self] in
             // Or until playback restarts anywhere else: a seek back made before this one landed
-            // replaces it, and waiting for the target would hold back saving and scrobbling
-            // until playback passed it again. A new file has cleared the target already.
+            // replaces it, and waiting for the target would hold back saving until playback
+            // passed it again. A new file has cleared the target already.
             guard let self, estimatedResumePosition == target else { return }
             estimatedResumePosition = nil
             estimatedResumeFraction = nil
-            if player.status == .playing { scrobble(.start) }
         }
         return true
     }

@@ -109,35 +109,21 @@ See [Private sync](SYNC.md) for server deployment, joining devices, expiring
 invitations, conflicts and recovery keys. Save the recovery key securely.
 Watch Later, custom lists and remembered stream URLs remain local.
 
-### Trakt playback progress
-
-1. Create your own application at [Trakt applications](https://trakt.tv/oauth/applications)
-   with redirect URI `urn:ietf:wg:oauth:2.0:oob`.
-2. Under **Settings → Trakt**, enter its **Client ID** and **Client Secret**,
-   then select **Save**.
-3. Select **Sign In**, open the displayed verification URL and enter the code.
-4. Connect the same Trakt account on the other device. Pause/close playback on
-   the first device, then use **Sync Now** on the second if needed.
-
-loge imports paused progress on launch/foreground and sends scrobbles and
-watched/unwatched updates. Recent completed plays clear stale unfinished
-entries without overwriting newer local rewatches. Removing a title from Continue
-Watching clears its paused progress on Trakt, and other devices drop it at their next
-sync unless something newer was played. Changes made offline stay on the device and
-go out on reconnect, except that a position older than another device's isn't sent.
-Signing out discards what hasn't been sent. Matching requires IMDb
-identifiers; addon-only identifiers may not sync. It does not import your full
-Trakt watched history or sync lists/settings/addons.
-
-**A connected self-hosted account pauses Trakt imports and scrobbling.** Choose
-the same sync mode on the devices you want to hand off between.
-
 ### TMDB metadata
 
 Open **Settings → TMDB → Connect TMDB** and paste the **API Read Access Token**
 from your [TMDB API settings](https://www.themoviedb.org/settings/api). Use the
 read access token, not the API key. loge checks it before storing it in Keychain.
 On Apple TV, your phone's Apple TV Remote keyboard can enter the token.
+
+### MDBList scores
+
+Open **Settings → MDBList → Connect MDBList** and paste the **API key** from
+[MDBList's preferences](https://mdblist.com/preferences/), under API Access. A free
+account's key allows 1,000 requests a day, one for each title opened; a title's scores
+are then kept for six hours. loge checks the key before storing it in Keychain. With
+it, a title's page shows the Letterboxd score and Rotten Tomatoes' Tomatometer beside
+the IMDb rating.
 
 ## Troubleshooting
 
@@ -148,9 +134,9 @@ On Apple TV, your phone's Apple TV Remote keyboard can enter the token.
   links and info hashes need a provider/service that resolves them first.
 - **Buffering:** try a smaller file or lower bitrate. Recommendations depend on
   a download-speed measurement from prior playback; a fresh device may have none.
-- **Different Continue Watching on two devices:** confirm the same account and
-  sync mode, save progress by pausing/closing, then request sync. Check pending
-  conflicts in Settings → Sync and the Trakt limits above.
+- **Different Continue Watching on two devices:** confirm the same account, save
+  progress by pausing/closing, then request sync. Check pending conflicts in
+  Settings → Sync.
 - **No subtitles in PiP:** this is a current renderer limitation, not a setting.
 - **App stops opening after a week:** refresh its iOS/tvOS signature through your
   sideloading tool. Deleting loge can remove local library data and is not needed

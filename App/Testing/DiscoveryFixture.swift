@@ -59,6 +59,19 @@ enum DiscoveryFixture {
                 .background(Color.canvas)
                 .navigationTitle("Library")
             }
+        // A new episode beside something half-watched, and two series with an episode still to air.
+        case "upcoming":
+            ScrollView {
+                VStack(alignment: .leading, spacing: 40) {
+                    ContinueWatchingRow()
+                    UpcomingRow()
+                }
+                .padding(.vertical, 24)
+            }
+            .environment(upcoming.library)
+            .environment(upcoming.schedule)
+            .background(Color.canvas)
+            .navigationTitle("Upcoming")
         case "recommended":
             HomeView()
                 .environment(recommendationLibrary)
@@ -67,6 +80,9 @@ enum DiscoveryFixture {
                 .environment(sourceLibrary)
         case "series":
             MetaDetailView(preview: MetaPreview(id: "tt0903747", type: "series", name: "Breaking Bad"))
+        // The middle film of a trilogy.
+        case "details-collection":
+            MetaDetailView(preview: MetaPreview(id: "tt0468569", type: "movie", name: "The Dark Knight"))
         // TMDB has no match for this title, and TMDB is rate limiting for the next.
         case "details-unmatched":
             MetaDetailView(preview: MetaPreview(id: "tt0062622", type: "movie", name: "2001: A Space Odyssey"))
@@ -80,11 +96,9 @@ enum DiscoveryFixture {
         // fold, and while they're awaited, autoplay waiting for a remembered source they don't list.
         case "sources-folded", "sources-autoplay", "sources-empty", "sources-empty-sheet":
             SourcesFixture(screen: screenName ?? "")
-        // States that need a sync server or a Trakt account, in stores kept apart from the app's.
+        // States that need a sync server, in stores kept apart from the app's.
         case "settings-review", "settings-failed":
             SettingsView().accountFixture()
-        case "trakt-signin", "trakt-keys":
-            SettingsPage("Trakt") { TraktSection() }.accountFixture()
         // The first featured series, started at S2, E3: its carousel page says where Play resumes.
         case "carousel-resume":
             CarouselResumeFixture()
@@ -216,6 +230,39 @@ enum DiscoveryFixture {
         }.joined(separator: ",")
     }
 
+    private static let upcoming: (library: LibraryStore, schedule: EpisodeSchedule) = {
+        let suite = "loge.discovery-upcoming-fixture"
+        let defaults = UserDefaults(suiteName: suite) ?? .standard
+        defaults.removePersistentDomain(forName: suite)
+        let library = LibraryStore(defaults: defaults)
+        let schedule = EpisodeSchedule()
+        let day: TimeInterval = 24 * 60 * 60
+        // Each series' first episode was watched to the end; the days are when its episodes air.
+        let series: [(id: String, name: String, backdrop: String, watched: Double, airs: [Double])] = [
+            ("tt0903747", "Breaking Bad", "/tsRy63Mu5cu8etL1X7ZLyf7UP1M.jpg", -3, [-8, -1, 6]),
+            ("tt3032476", "Better Call Saul", "/rfxryDIv8huejujg4JueDJx8zCz.jpg", -2, [-6, 1, 8]),
+        ]
+        for show in series {
+            let item = WatchItem(id: "\(show.id):1:1", type: "series", metaID: show.id, title: show.name, season: 1, episode: 1,
+                                 background: "https://image.tmdb.org/t/p/w1280\(show.backdrop)")
+            library.record(item, position: 2_690, duration: 2_700, at: .now + show.watched * day)
+            let videos = show.airs.enumerated().map { index, days in
+                #"{"id":"\#(show.id):1:\#(index + 1)","title":"Episode \#(index + 1)","season":1,"episode":\#(index + 1),"#
+                    + #""released":"\#((Date.now + days * day).ISO8601Format())"}"#
+            }
+            do {
+                schedule.showForTesting(try JSONDecoder().decode([Video].self, from: Data("[\(videos.joined(separator: ","))]".utf8)),
+                                        of: show.id)
+            } catch {
+                assertionFailure("Couldn't decode the upcoming fixture's episodes: \(error)")
+            }
+        }
+        library.record(WatchItem(id: "tt2543164", type: "movie", metaID: "tt2543164", title: "Arrival",
+                                 background: "https://image.tmdb.org/t/p/w1280/8MUZz7oPXQftFTslZpRP3CVMOoq.jpg"),
+                       position: 2_900, duration: 6_960, at: .now - 2 * day)
+        return (library, schedule)
+    }()
+
     private static let library: LibraryStore? = {
         let suite = "loge.discovery-library-fixture"
         guard let defaults = UserDefaults(suiteName: suite) else { return nil }
@@ -299,32 +346,25 @@ private struct CarouselResumeFixture: View {
 private extension View {
     func accountFixture() -> some View {
         let stores = DiscoveryFixture.accountStores
-        return environment(stores.addons).environment(stores.library).environment(stores.sync).environment(stores.trakt)
+        return environment(stores.addons).environment(stores.library).environment(stores.sync)
     }
 }
 
 extension DiscoveryFixture {
-    /// One account state: a review pending with Trakt paused by the account, a failed sync
-    /// beside a Trakt sign-in in progress, the sign-in code alone, or saved keys before signing in.
-    static let accountStores: (addons: AddonStore, library: LibraryStore, sync: AccountSync, trakt: TraktAccount) = {
+    /// One account state: a review pending, or a failed sync.
+    static let accountStores: (addons: AddonStore, library: LibraryStore, sync: AccountSync) = {
         let suite = "loge.account-states-fixture"
         let defaults = UserDefaults(suiteName: suite) ?? .standard
         defaults.removePersistentDomain(forName: suite)
         let addons = AddonStore(defaults: defaults)
         let library = LibraryStore(defaults: defaults)
         let sync = AccountSync(addons: addons, library: library, defaults: defaults, temporaryConnection: true)
-        let trakt: TraktAccount
         if screenName == "settings-review" {
             sync.showForTesting(status: .choosingInitialSetup, needsChoice: true)
-            // An account's library is active, which is what pauses Trakt.
-            library.activateProfile(id: "ui-fixture")
-            trakt = TraktAccount(library: library, addons: addons, defaults: defaults, showing: .signedIn(username: "ui-fixture"))
         } else {
-            if screenName == "settings-failed" { sync.showForTesting(status: .failed, needsChoice: false) }
-            trakt = TraktAccount(library: library, addons: addons, defaults: defaults,
-                                 showing: screenName == "trakt-keys" ? .signedOut : .awaitingApproval(.uiFixture))
+            sync.showForTesting(status: .failed, needsChoice: false)
         }
-        return (addons, library, sync, trakt)
+        return (addons, library, sync)
     }()
 }
 
@@ -397,9 +437,31 @@ private final class DiscoveryFixtureProtocol: URLProtocol, @unchecked Sendable {
                   }
                 }
                 """#
+        // MDBList. `URL.path` drops the trailing slash its routes end in.
+        case "/imdb/movie/tt0816692":
+            body = #"{"ratings":[{"source":"tomatoes","value":73,"url":"/m/interstellar_2014"},{"source":"letterboxd","value":4.4}]}"#
+        case "/imdb/movie/tt0468569":
+            body = #"{"ratings":[{"source":"tomatoes","value":94,"url":"/m/the_dark_knight"},{"source":"letterboxd","value":4.5}]}"#
         case "/3/find/tt0816692": body = #"{"movie_results":[{"id":157336}],"tv_results":[]}"#
         case "/3/find/tt0903747": body = #"{"movie_results":[],"tv_results":[{"id":1396}]}"#
         case "/3/find/tt0062622": body = #"{"movie_results":[],"tv_results":[]}"#
+        case "/3/find/tt0468569": body = #"{"movie_results":[{"id":155}],"tv_results":[]}"#
+        case "/3/movie/155":
+            body = #"""
+                {"id":155,"title":"The Dark Knight","release_date":"2008-07-16","runtime":152,"status":"Released",
+                 "poster_path":"/qJ2tW6WMUDux911r6m7haRef0WH.jpg","backdrop_path":"/dqK9Hag1054tghRQSqLSfrkvQnA.jpg",
+                 "belongs_to_collection":{"id":263,"name":"The Dark Knight Collection"},
+                 "videos":{"results":[{"key":"EXeTwQWrcwY","site":"YouTube","type":"Trailer","official":true}]}}
+                """#
+        case "/3/movie/155/reviews":
+            body = #"{"id":155,"page":1,"total_pages":0,"total_results":0,"results":[]}"#
+        case "/3/collection/263":
+            body = #"""
+                {"id":263,"name":"The Dark Knight Collection","parts":[
+                  {"id":155,"title":"The Dark Knight","release_date":"2008-07-16","poster_path":"/qJ2tW6WMUDux911r6m7haRef0WH.jpg"},
+                  {"id":49026,"title":"The Dark Knight Rises","release_date":"2012-07-16","poster_path":"/9NyCuhyvFKTqGRLcr4r8fWXnu9v.jpg"},
+                  {"id":272,"title":"Batman Begins","release_date":"2005-06-10","poster_path":"/b3UIToGx8JIpRqUTGkaoyaNLuU3.jpg"}]}
+                """#
         case "/3/find/tt2543164":
             status = 429
             body = #"{"status_code":25,"status_message":"Your request count is over the allowed limit."}"#
@@ -419,6 +481,7 @@ private final class DiscoveryFixtureProtocol: URLProtocol, @unchecked Sendable {
                  "production_countries":[{"iso_3166_1":"GB","name":"United Kingdom"},{"iso_3166_1":"US","name":"United States of America"}],
                  "production_companies":[{"name":"Legendary Pictures"},{"name":"Syncopy"},{"name":"Lynda Obst Productions"}],
                  "poster_path":"/yQvGrMoipbRoddT0ZR8tPoR7NfX.jpg","backdrop_path":"/8sNiAPPYU14PUepFNeSNGUTiHW.jpg",
+                 "videos":{"results":[{"key":"zSWdZVtXT7E","site":"YouTube","type":"Trailer","official":true}]},
                  "credits":{"cast":[\#(cast.joined(separator: ","))],
                             "crew":[{"id":525,"name":"Christopher Nolan","department":"Directing","job":"Director","profile_path":"/xuAIuYSmsUzKlUMBFGVZaWsY3DZ.jpg"},
                                     {"id":525,"name":"Christopher Nolan","department":"Writing","job":"Writer","profile_path":"/xuAIuYSmsUzKlUMBFGVZaWsY3DZ.jpg"},

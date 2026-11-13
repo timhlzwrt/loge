@@ -69,6 +69,28 @@ struct TMDBClientTests {
         #expect(series.recommendations.first?.releaseDate == "2020-02-02")
     }
 
+    @Test func picksTheOfficialYouTubeTrailerThenATeaser() async throws {
+        let movie = try await client().details(imdbID: "tt0000042", type: "movie")
+        // Not the Vimeo one, the clip, the unofficial trailer listed first, or a key that isn't a video ID.
+        #expect(movie.trailerYouTubeID == "official001")
+        #expect(movie.collectionID == 9)
+        let teaser = try await client("teaserOnly").details(imdbID: "tt0000042", type: "movie")
+        #expect(teaser.trailerYouTubeID == "teaser00001")
+        #expect(teaser.collectionID == nil)
+        let series = try await client().details(imdbID: "tt0000084", type: "series")
+        #expect(series.trailerYouTubeID == nil)
+    }
+
+    @Test func collectionListsItsFilmsInReleaseOrderWithUndatedOnesLast() async throws {
+        let collection = try await client().collection(id: 9)
+        #expect(collection.name == "The Trilogy Collection")
+        #expect(collection.titles.map(\.name) == ["First", "Second", "Third", "Announced"])
+        #expect(collection.titles.map(\.type) == Array(repeating: "movie", count: 4))
+        #expect(collection.titles[2].posterURL == "https://image.tmdb.org/t/p/w500/third.jpg")
+        await #expect(throws: TMDBError.invalidResponse) { try await client("collectionWrongID").collection(id: 9) }
+        await #expect(throws: TMDBError.notFound) { try await client().collection(id: 0) }
+    }
+
     @Test func similarTitlesStandInOnlyWhenThereAreNoRecommendations() async throws {
         let details = try await client("onlySimilar").details(imdbID: "tt0000042", type: "movie")
         #expect(details.recommendations.map(\.name) == ["Similar"])
@@ -301,7 +323,7 @@ private final class TMDBProtocol: StubURLProtocol, @unchecked Sendable {
             default: body = #"{"movie_results":[{"id":42}],"tv_results":[{"id":84}]}"#
             }
         case "/3/movie/42", "/3/tv/84":
-            guard components.queryItems?.contains(.init(name: "append_to_response", value: "credits,recommendations,similar")) == true else {
+            guard components.queryItems?.contains(.init(name: "append_to_response", value: "credits,recommendations,similar,videos")) == true else {
                 client?.urlProtocol(self, didFailWithError: URLError(.badURL))
                 return
             }
@@ -311,10 +333,24 @@ private final class TMDBProtocol: StubURLProtocol, @unchecked Sendable {
                 body = "{}"
             } else if scenario == "onlySimilar" {
                 body = #"{"id":42,"recommendations":{"results":[]},"similar":{"results":[{"id":61,"title":"Similar"}]}}"#
+            } else if scenario == "teaserOnly" {
+                body = #"{"id":42,"videos":{"results":[{"key":"teaser00001","site":"YouTube","type":"Teaser"},{"key":"clip0000001","site":"YouTube","type":"Clip"}]}}"#
             } else if scenario == "unrated" {
                 body = #"{"id":42,"vote_average":0,"vote_count":0,"budget":0,"revenue":-1}"#
             } else {
                 body = components.path == "/3/movie/42" ? Self.movie : Self.series
+            }
+        case "/3/collection/9":
+            switch scenario {
+            case "collectionWrongID": body = #"{"id":8,"name":"Other","parts":[]}"#
+            default: body = #"""
+                {"id":9,"name":" The Trilogy Collection ","parts":[
+                  {"id":3,"title":"Third","release_date":"2012-07-16","poster_path":"/third.jpg"},
+                  {"id":4,"title":"Announced","release_date":""},
+                  {"id":1,"title":"First","release_date":"2005-06-10"},
+                  {"id":42,"title":"Second","release_date":"2008-07-16"},
+                  {"id":1,"title":"Repeat"},{"id":null,"title":"No ID"}]}
+                """#
             }
         case "/3/person/5":
             guard components.queryItems?.contains(.init(name: "append_to_response", value: "combined_credits")) == true else {
@@ -367,6 +403,13 @@ private final class TMDBProtocol: StubURLProtocol, @unchecked Sendable {
      "vote_average":7.4,"vote_count":180,"budget":12000000,"revenue":25000000,
      "last_air_date":"2025-01-01","number_of_seasons":9,"number_of_episodes":99,
      "release_date":"2024-03-01","runtime":169,"genres":[{"name":"Drama"},{"name":" "},{"name":null}],
+     "belongs_to_collection":{"id":9,"name":"The Trilogy Collection"},
+     "videos":{"results":[
+        {"key":"vimeo000001","site":"Vimeo","type":"Trailer","official":true},
+        {"key":"clip0000001","site":"YouTube","type":"Clip","official":true},
+        {"key":"fanmade0001","site":"YouTube","type":"Trailer","official":false},
+        {"key":"not a video id","site":"YouTube","type":"Trailer","official":true},
+        {"key":"official001","site":"YouTube","type":"Trailer","official":true}]},
      "credits":{"cast":[
         {"id":1,"name":"Alex","character":"The lead","profile_path":null},
         {"id":2,"name":"Alex","character":" ","profile_path":"https://other.example/image.jpg"},

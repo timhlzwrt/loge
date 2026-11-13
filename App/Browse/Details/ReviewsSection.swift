@@ -1,7 +1,8 @@
 import LogeCore
 import SwiftUI
 
-/// TMDB member reviews, with the existing external sources retained for critics and Letterboxd.
+/// TMDB member reviews. Without TMDB there's no section: the scores in the header link to
+/// IMDb and Letterboxd, which used to be listed here as two rows of their own.
 struct ReviewsSection: View {
     let preview: MetaPreview
     var showsAll = false
@@ -23,17 +24,9 @@ struct ReviewsSection: View {
 
     private var requestKey: String { "\(tmdb.revision):\(preview.type):\(preview.id)" }
 
-    /// The Apple TV can't open the external links, so without TMDB it has nothing to show here.
-    private var hasContent: Bool {
-        #if os(tvOS)
-        tmdb.isConfigured
-        #else
-        true
-        #endif
-    }
-
     var body: some View {
-        if let critics = ReviewLinks.critics(imdbID: preview.id), hasContent {
+        // TMDB is asked by IMDb ID.
+        if tmdb.isConfigured, ReviewLinks.imdb(imdbID: preview.id) != nil {
             VStack(alignment: .leading, spacing: Metrics.headerSpacing) {
                 #if os(tvOS)
                 // Also on the pushed list: the TV draws a page title over the content as it scrolls.
@@ -44,7 +37,7 @@ struct ReviewsSection: View {
                     Text("Reviews").font(.sectionTitle)
                 }
                 #endif
-                if tmdb.isConfigured && isOnTMDB {
+                if isOnTMDB {
                     Text("TMDB member reviews").font(.metaLine).foregroundStyle(.secondary)
                     ForEach(Array(reviews.prefix(showsAll ? reviews.count : previewCount))) { review in
                         ReviewPreview(review: review)
@@ -62,7 +55,7 @@ struct ReviewsSection: View {
                         #if os(tvOS)
                         NavigationLink("All reviews") { ReviewListView(preview: preview) }
                         #else
-                        // A row with a chevron, like the review links under it, rather than bare text.
+                        // A row with a chevron rather than bare text.
                         NavigationLink { ReviewListView(preview: preview) } label: {
                             HStack {
                                 Text("All reviews")
@@ -85,38 +78,16 @@ struct ReviewsSection: View {
                         Text("No English member reviews on TMDB yet.")
                             .font(.metaLine).foregroundStyle(.secondary)
                     }
-                }
-                #if os(tvOS)
-                // Without it the TV's section would be a bare heading: it has no links to show.
-                if tmdb.isConfigured && !isOnTMDB {
+                } else {
+                    // Rather than a bare heading.
                     Text("TMDB has no member reviews for this title.")
                         .font(.metaLine).foregroundStyle(.secondary)
                 }
-                // Typed-out addresses are only an extra beside reviews, never a section of their own.
-                if !reviews.isEmpty {
-                    Text("External review sources for your phone or computer:")
-                        .foregroundStyle(.secondary)
-                    Text("Critics · imdb.com/title/\(preview.id)/externalreviews")
-                        .font(.subheadline)
-                    if ReviewLinks.letterboxd(imdbID: preview.id, type: preview.type) != nil {
-                        Text("Letterboxd · letterboxd.com/imdb/\(preview.id)")
-                            .font(.subheadline)
-                    }
-                }
-                #else
-                VStack(spacing: 0) {
-                    reviewLink("Critic reviews", source: "IMDb", destination: critics)
-                    if let letterboxd = ReviewLinks.letterboxd(imdbID: preview.id, type: preview.type) {
-                        Divider()
-                        reviewLink("Member reviews", source: "Letterboxd", destination: letterboxd)
-                    }
-                }
-                #endif
             }
             .readingWidth()
             .padding(.horizontal, Metrics.gutter)
             #if os(tvOS)
-            // The links sit at the left; without this, Down from the end of a row above skips them.
+            // "All reviews" sits at the left; without this, Down from the end of a row above skips it.
             .focusSection()
             #endif
             .task(id: requestKey) {
@@ -166,29 +137,6 @@ struct ReviewsSection: View {
             }
         }
     }
-
-    #if !os(tvOS)
-    /// A row whose arrow says it leaves the app, in place of an underlined link and a note.
-    private func reviewLink(_ title: String, source: String, destination: URL) -> some View {
-        Link(destination: destination) {
-            HStack {
-                Text(title)
-                    .foregroundStyle(.white.opacity(0.88))
-                Spacer()
-                Text(source)
-                    .foregroundStyle(.secondary)
-                Image(systemName: "arrow.up.right")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-            .font(.synopsis)
-            .frame(minHeight: 48)
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .accessibilityHint("Opens \(source) in your browser")
-    }
-    #endif
 }
 
 /// A review's first lines, with "Read review" only when they leave some of it out.

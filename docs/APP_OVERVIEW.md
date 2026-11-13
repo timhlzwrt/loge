@@ -6,9 +6,9 @@ identifier so existing installations keep their data.
 
 ## Application and data flow
 
-`App/LogeApp.swift` creates six observable, main-actor owners and injects them
-through the SwiftUI environment: `AddonStore`, `LibraryStore`, `TraktAccount`,
-`PlaybackSession`, `TMDBAccount` and `AccountSync`. Each browsing tab has its own
+`App/LogeApp.swift` creates seven observable, main-actor owners and injects them
+through the SwiftUI environment: `AddonStore`, `LibraryStore`, `EpisodeSchedule`,
+`PlaybackSession`, `TMDBAccount`, `MDBListAccount` and `AccountSync`. Each browsing tab has its own
 navigation stack. Movies, series, catalog grids and source lists use typed
 navigation destinations.
 
@@ -32,14 +32,12 @@ navigation destinations.
 5. `PlaybackSession` opens a `PlaybackRequest`, owns the player lifecycle and
    persists progress. `LibraryStore` supplies Continue Watching, My List,
    watched status, remembered sources and Up Next.
-6. `TraktAccount` signs in with a device code, scrobbles playback and imports
-   remote playback progress. Startup pulls progress after manifest refresh, and
-   returning to the app pulls again. Recent completed plays clear unfinished
-   local entries using their watch timestamps; newer local rewatches win.
+6. `EpisodeSchedule` looks up the episode lists of the series being watched (those with
+   progress, the 30 most recent, each at most every six hours) and works out from the
+   library which episode is new since the last one was finished and which airs next.
 7. `AccountSync` optionally connects to the self-hosted account gateway, carrying
    encrypted progress, watched state, addon setup and preferences. Separate shared
-   setup categories never include private viewing progress. Trakt imports and
-   scrobbling pause while an account is connected. See [Private sync](SYNC.md).
+   setup categories never include private viewing progress. See [Private sync](SYNC.md).
 
 ## Screens and platform behavior
 
@@ -49,17 +47,22 @@ navigation destinations.
 - `CatalogRow.swift` and `CatalogGridView.swift`: poster rows and paginated
   grids, with genre filtering when the addon advertises it.
 - `MetaDetailView.swift`: title details, seasons, episode cards, watched
-  actions and next episode selection.
+  actions and next episode selection. Cast & Crew shows only with TMDB connected;
+  the addon's credits then stand in while TMDB's load or when it has none. A Trailer
+  button opens YouTube (the addon's trailer, or TMDB's when connected; on Apple TV
+  only with the YouTube app installed), and a movie in a TMDB collection lists that
+  film series in release order.
 - `PersonView.swift`: person details and role-filtered TMDB filmographies when
   connected. Without TMDB it says a filmography needs TMDB and shows the title the
-  person was opened from: Cinemeta's search no longer names cast or directors.
+  person was opened from: Cinemeta's search no longer names cast or directors. That
+  state is only left for a page still open when TMDB is disconnected.
 - `SourcesView.swift`: source selection, autoplay and fallback candidates. Resolution
   groups retain addon order for ties, with cached-first, bitrate and file-size
   sorting plus a reported-bitrate cap; unknown rates stay visible.
 - `SearchView.swift`: debounced search across built-in movie/series feeds and local
   recent searches.
 - `App/Settings`: addon installation/order/removal, playback preferences,
-  self-hosted sync/sharing, Trakt/TMDB connections and the Mac updater.
+  self-hosted sync/sharing, the TMDB and MDBList connections and the Mac updater.
 
 The shared visual language lives in `App/Browse/Components`: charcoal canvas,
 white controls, artwork-led hierarchy, platform-specific `Metrics` and font
@@ -87,18 +90,19 @@ to a 50 GB per-episode limit for series only, based on explicit video-file sizes
 Movies and manual source choices are unrestricted. See
 [playback performance](PLAYBACK_PERFORMANCE.md) for behavior and diagnostics.
 
-IMDb scores supplied by Cinemeta are labelled with their source and ten-point
-scale. Movie details on iOS/Mac link to Letterboxd using its documented IMDb-ID
-redirect. Letterboxd ratings are not fetched: its API is request-only and the
-user chose IMDb scores plus Letterboxd links. Home's shelves are managed
+A title's page shows its scores behind each site's mark (`ScoresLine`): IMDb's from
+Cinemeta, and with an MDBList key the Letterboxd average (out of 5) and Rotten Tomatoes'
+Tomatometer, which neither site offers through an open API of its own. On iOS and Mac
+each score opens the title there: IMDb and Letterboxd by IMDb ID, Rotten Tomatoes by the
+address MDBList supplies. Elsewhere, such as Home, the IMDb score stays text with its
+ten-point scale. Home's shelves are managed
 discovery feeds, not recommendations inferred from viewing history.
 
 ## Persistence and privacy
 
 Library data, installed addon configuration and playback preferences use
 UserDefaults because tvOS may purge app files. Progress history is bounded to
-500 entries. Trakt keys and tokens use Keychain; the username is stored in
-UserDefaults. This means installed addon configuration is sensitive local
+500 entries. The TMDB token, MDBList key and sync credentials use Keychain. This means installed addon configuration is sensitive local
 preference data, not Keychain-protected data.
 
 Never copy a configured stream-addon manifest URL into docs, logs, screenshots
@@ -133,8 +137,6 @@ preferences while diagnosing a failure.
   source cancellation also prevents delayed autoplay and fallback changes.
 - Preserve binary file-size units when comparing sources, so GiB and GB sort
   according to their actual byte counts.
-- Look up unavailable title metadata once per Trakt progress pull, even when
-  several paused episodes belong to that title.
 
 These changes reduce wasted work and bound retained state. No frame-rate,
 memory or launch-time improvement is claimed without profiling.
@@ -157,9 +159,8 @@ old subtitle work cannot attach to a replacement file.
 The [roadmap](../ROADMAP.md) tracks simulator/automated-test priorities and proposed
 features. Real-device testing isn't planned because of maintainer time constraints.
 
-- Extend controlled Trakt transport tests for handoff-related progress changes,
-  shared token refresh and sign-out invalidation. The self-hosted account syncs
-  playback and setup separately; keep its ownership boundaries explicit in tests.
+- The self-hosted account syncs playback and setup separately; keep its ownership
+  boundaries explicit in tests.
 - Exercise subtitle sizing, supported Picture in Picture flows and
   background/foreground playback in simulators. Simulator checks cannot establish
   hardware decoder, HDR or physical Siri Remote touch behavior.
