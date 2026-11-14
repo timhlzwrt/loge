@@ -212,27 +212,44 @@ struct TitleLogo: View {
     /// keeps its distance from the letters rather than from the faintest pixel.
     var restsOnLettering = false
     @State private var height: CGFloat = 0
+    @State private var prepared: (url: String, trimmed: LogoTrim.Trimmed)?
 
     var body: some View {
         RemoteImage(url: logo) { phase in
             switch phase {
             case .success(let image):
-                let trimmed = LogoTrim.trimmed(image, url: logo)
-                Image(trimmed.image, scale: 1, label: Text(name))
-                    .renderingMode(LogoTone.isDark(image, url: logo) ? .template : .original)
-                    .resizable().scaledToFit()
-                    .foregroundStyle(.white)
-                    .frame(maxHeight: maxHeight)
-                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
-                    .padding(.bottom, restsOnLettering ? -trimmed.faintBottom * height : 0)
+                if let logo, let trimmed = prepared?.url == logo ? prepared?.trimmed : LogoTrim.cached(logo) {
+                    let drawn = Image(trimmed.image, scale: 1, label: Text(name))
+                        .renderingMode(trimmed.isDark ? .template : .original)
+                        .resizable().scaledToFit()
+                        .foregroundStyle(.white)
+                        .frame(maxHeight: maxHeight)
+                    if restsOnLettering {
+                        drawn
+                            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
+                            .padding(.bottom, -trimmed.faintBottom * height)
+                    } else {
+                        drawn
+                    }
+                } else {
+                    // Measured off the main thread: on tvOS each focus move can bring a new logo.
+                    placeholder.task(id: logo) {
+                        guard let logo else { return }
+                        prepared = (logo, await LogoTrim.prepare(image, url: logo))
+                    }
+                }
             case .failure:
                 nameText
             default:
-                // Reserve the space so the layout doesn't jump when the logo arrives.
-                Color.clear.frame(height: maxHeight)
+                placeholder
             }
         }
         .frame(maxHeight: maxHeight)
+    }
+
+    /// Reserves the space so the layout doesn't jump when the logo arrives.
+    private var placeholder: some View {
+        Color.clear.frame(height: maxHeight)
     }
 
     private var nameText: some View {
@@ -245,19 +262,8 @@ struct TitleLogo: View {
 
 /// Tells apart logos with dark lettering, made for light backgrounds, which vanish on the
 /// dark canvas and are drawn in white instead. Opaque images have no shape to recolour.
-@MainActor
 private enum LogoTone {
-    private static var results: [String: Bool] = [:]
-
-    /// Measured once per logo, as a title's logo redraws with every focus move on tvOS.
-    static func isDark(_ image: CGImage, url: String?) -> Bool {
-        if let url, let known = results[url] { return known }
-        let dark = measure(image)
-        if let url { results[url] = dark }
-        return dark
-    }
-
-    private static func measure(_ image: CGImage) -> Bool {
+    static func isDark(_ image: CGImage) -> Bool {
         let side = 24
         var pixels = [UInt8](repeating: 0, count: side * side * 4)
         let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
@@ -286,15 +292,17 @@ private enum LogoTone {
 /// under it; drawn without them, the logo lines up with the info line.
 @MainActor
 private enum LogoTrim {
-    /// A logo without its transparent margins, and how much of its height at the bottom is
-    /// only faint decoration under the lettering.
-    final class Trimmed {
+    /// A logo without its transparent margins, how much of its height at the bottom is
+    /// only faint decoration under the lettering, and whether it's drawn in white.
+    final class Trimmed: Sendable {
         let image: CGImage
         let faintBottom: CGFloat
+        let isDark: Bool
 
-        init(image: CGImage, faintBottom: CGFloat) {
+        init(image: CGImage, faintBottom: CGFloat, isDark: Bool) {
             self.image = image
             self.faintBottom = faintBottom
+            self.isDark = isDark
         }
     }
 
@@ -305,16 +313,24 @@ private enum LogoTrim {
         return cache
     }()
 
-    static func trimmed(_ image: CGImage, url: String?) -> Trimmed {
-        if let url, let known = results.object(forKey: url as NSString) { return known }
-        let trimmed = crop(image) ?? Trimmed(image: image, faintBottom: 0)
-        if let url { results.setObject(trimmed, forKey: url as NSString) }
+    static func cached(_ url: String) -> Trimmed? {
+        results.object(forKey: url as NSString)
+    }
+
+    /// Measured once per logo, as a title's logo redraws with every focus move on tvOS.
+    static func prepare(_ image: CGImage, url: String) async -> Trimmed {
+        if let known = cached(url) { return known }
+        let trimmed = await Task.detached(priority: .userInitiated) {
+            let isDark = LogoTone.isDark(image)
+            return crop(image, isDark: isDark) ?? Trimmed(image: image, faintBottom: 0, isDark: isDark)
+        }.value
+        results.setObject(trimmed, forKey: url as NSString)
         return trimmed
     }
 
     /// Finds the visible part on a small copy, then crops the full image to it, a little wider
     /// so antialiased edges aren't cut.
-    private static func crop(_ image: CGImage) -> Trimmed? {
+    nonisolated private static func crop(_ image: CGImage, isDark: Bool) -> Trimmed? {
         let width = 96
         let height = Int((Double(image.height) / Double(image.width) * Double(width)).rounded())
         guard image.width > 0, (1...1_000).contains(height) else { return nil }
@@ -346,20 +362,20 @@ private enum LogoTrim {
         let faintBottom = faintBottom(solidRows: solidRows, visibleRows: minY...maxY)
         // Already tight: nothing to crop.
         guard minX > 1 || maxX < width - 2 || minY > 1 || maxY < height - 2 else {
-            return faintBottom > 0 ? Trimmed(image: image, faintBottom: faintBottom) : nil
+            return faintBottom > 0 ? Trimmed(image: image, faintBottom: faintBottom, isDark: isDark) : nil
         }
         let scale = Double(image.width) / Double(width)
         let rect = CGRect(
             x: Double(minX - 1) * scale, y: Double(minY - 1) * scale,
             width: Double(maxX - minX + 3) * scale, height: Double(maxY - minY + 3) * scale
         ).integral.intersection(CGRect(x: 0, y: 0, width: image.width, height: image.height))
-        return image.cropping(to: rect).map { Trimmed(image: $0, faintBottom: faintBottom) }
+        return image.cropping(to: rect).map { Trimmed(image: $0, faintBottom: faintBottom, isDark: isDark) }
     }
 
     /// The share of the visible height below the last solid row. Nothing for a logo that is
     /// faint throughout, such as hairline lettering, which has no solid part to rest on; and
     /// never more than a third, so a wrong reading can't push a logo far into what follows.
-    private static func faintBottom(solidRows: IndexSet, visibleRows: ClosedRange<Int>) -> CGFloat {
+    nonisolated private static func faintBottom(solidRows: IndexSet, visibleRows: ClosedRange<Int>) -> CGFloat {
         guard let first = solidRows.first, let last = solidRows.last else { return 0 }
         let visible = CGFloat(visibleRows.count)
         guard CGFloat(last - first + 1) >= visible * 0.3 else { return 0 }

@@ -24,13 +24,10 @@ public final class EpisodeSchedule {
     /// Air dates change rarely, and every refresh asks for each series' whole episode list.
     static let lifetime: TimeInterval = 6 * 60 * 60
 
-    private struct Episodes {
-        /// In viewing order, without specials.
-        var videos: [Video]
-        var fetchedAt: Date
-    }
-
-    private var episodes: [String: Episodes] = [:]
+    /// Each series' episodes in viewing order, without specials. Written only when they
+    /// change: Continue Watching and Upcoming on Home are rebuilt from them.
+    private var episodes: [String: [Video]] = [:]
+    @ObservationIgnored private var fetchedAt: [String: Date] = [:]
     /// Being looked up, so overlapping refreshes (launch and Home appearing) ask once.
     @ObservationIgnored private var inFlight = Set<String>()
 
@@ -39,7 +36,8 @@ public final class EpisodeSchedule {
     #if DEBUG
     /// UI checks show a series' schedule without the network.
     public func showForTesting(_ videos: [Video], of metaID: String) {
-        episodes[metaID] = Episodes(videos: LibraryStore.playOrder(videos), fetchedAt: .now)
+        episodes[metaID] = LibraryStore.playOrder(videos)
+        fetchedAt[metaID] = .now
     }
     #endif
 
@@ -63,15 +61,20 @@ public final class EpisodeSchedule {
     func refresh(for library: LibraryStore, force: Bool = false, at now: Date = .now,
                  lookup: (_ id: String) async -> Meta?) async {
         let followed = library.followedSeries.prefix(Self.maximumSeries).map(\.item.metaID)
-        episodes = episodes.filter { followed.contains($0.key) }
+        if episodes.keys.contains(where: { !followed.contains($0) }) {
+            episodes = episodes.filter { followed.contains($0.key) }
+        }
+        fetchedAt = fetchedAt.filter { followed.contains($0.key) }
         for id in followed where !inFlight.contains(id) {
-            if !force, let known = episodes[id], now.timeIntervalSince(known.fetchedAt) < Self.lifetime { continue }
+            if !force, let known = fetchedAt[id], now.timeIntervalSince(known) < Self.lifetime { continue }
             guard !Task.isCancelled else { return }
             inFlight.insert(id)
             let meta = await lookup(id)
             inFlight.remove(id)
             guard let meta else { continue }
-            episodes[id] = Episodes(videos: LibraryStore.playOrder(meta.videos ?? []), fetchedAt: now)
+            let videos = LibraryStore.playOrder(meta.videos ?? [])
+            fetchedAt[id] = now
+            if episodes[id] != videos { episodes[id] = videos }
         }
     }
 
@@ -79,7 +82,7 @@ public final class EpisodeSchedule {
     /// before, newest first: what Continue Watching has no entry for yet.
     public func newEpisodes(in library: LibraryStore, at now: Date = .now) -> [ScheduledEpisode] {
         library.followedSeries.compactMap { latest -> ScheduledEpisode? in
-            guard latest.isFinished, let videos = episodes[latest.item.metaID]?.videos,
+            guard latest.isFinished, let videos = episodes[latest.item.metaID],
                   let index = videos.firstIndex(where: { $0.id == latest.item.id }), index + 1 < videos.count,
                   let date = videos[index + 1].releaseDate, date > latest.updatedAt, !(date > now) else { return nil }
             return ScheduledEpisode(item: latest.item.episode(videos[index + 1]), date: date)
@@ -90,7 +93,7 @@ public final class EpisodeSchedule {
     /// The next episode of each series that hasn't aired yet, soonest first.
     public func upcoming(in library: LibraryStore, at now: Date = .now) -> [ScheduledEpisode] {
         library.followedSeries.compactMap { latest -> ScheduledEpisode? in
-            guard let next = episodes[latest.item.metaID]?.videos.first(where: { !$0.isReleased(asOf: now) }),
+            guard let next = episodes[latest.item.metaID]?.first(where: { !$0.isReleased(asOf: now) }),
                   let date = next.releaseDate else { return nil }
             return ScheduledEpisode(item: latest.item.episode(next), date: date)
         }

@@ -24,6 +24,10 @@ struct LogeApp: App {
     @AppStorage(Accent.storageKey) private var accent = Accent.white
 
     init() {
+        // Artwork is fetched through the shared session; the default cache is too
+        // small to keep a screen of posters, so scrolling back re-downloads them. Set first:
+        // the accounts below create the shared session, which may keep the cache it started with.
+        URLCache.shared = URLCache(memoryCapacity: 64 * 1024 * 1024, diskCapacity: 512 * 1024 * 1024)
         #if DEBUG
         // UI checks use a temporary file and memory-only account; no credential enters launch logs or Keychain.
         if ProcessInfo.processInfo.arguments.contains("--discovery-ui-test") {
@@ -66,10 +70,6 @@ struct LogeApp: App {
         #if os(macOS)
         _appUpdater = StateObject(wrappedValue: AppUpdater(beforeRelaunch: { [weak playback] in playback?.end() }))
         #endif
-
-        // Artwork is fetched through the shared session; the default cache is too
-        // small to keep a screen of posters, so scrolling back re-downloads them.
-        URLCache.shared = URLCache(memoryCapacity: 64 * 1024 * 1024, diskCapacity: 512 * 1024 * 1024)
     }
 
     var body: some Scene {
