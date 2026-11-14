@@ -164,6 +164,8 @@ keeps Movie/Series labels because it can mix both.
 - On tvOS the remote surface stands aside while the panel or Up Next has focus; lying under
   their buttons it steals focus from them.
 - Festival and genre tiles push by value; a view-built destination left the links inside dead.
+- tvOS Home's rows are a `LazyVStack`, so a row may not exist yet: the header is filled from
+  the first catalog in `TVHome`'s task, and loading rows keep the loaded row's height.
 - Home's artwork prefetch uses plain data tasks, not a task group (suspected Release crash).
   An optimizer bug once lost a task group's result in Release builds, so test Release too.
 - iPad details switch between `DetailColumnsLayout` and a `VStackLayout` under `AnyLayout`,
@@ -221,8 +223,10 @@ keeps Movie/Series labels because it can mix both.
 - Top Shelf is on hold: atvloadly installs the extension and its App Group
   (`group.li.tjh.MediaApp.<team ID>`, read from the embedded profile), but tvOS never launches
   it; the reason is only in the Apple TV's live log (branch `claude/top-shelf-test`).
-- The tvOS Home lag fix is measured in the simulator only (4K rendering still shows 90–170 ms
-  frame gaps per move); keep simulator measurements comparable.
+- tvOS Home performance is measured in the simulator only (Release, Apple TV 4K, keys sent to
+  the simulator rather than XCUIRemote): about 40 ms of main-thread work per move along a row
+  and 140 ms between rows, down from 75 and 250 before the rows went lazy. Keep measurements
+  comparable.
 - Unverified: playback and Picture in Picture on tvOS and macOS, HDR output, tvOS display
   matching, swipe-to-scrub and the scrub preview on screen, physical phone-to-Apple-TV
   handoff, Watch Trailer on Apple TV (in the More menu only with the YouTube app installed, opened

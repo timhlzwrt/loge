@@ -405,7 +405,6 @@ public final class AccountSync {
                 needsChoice = true
                 status = .choosingPlayback
             }
-            try saveBaselines()
         }
     }
 
@@ -1001,12 +1000,18 @@ public final class AccountSync {
         })
     }
 
+    static let retiredEndpointSyncRemovedKey = "retiredEndpointSyncRemoved"
+
     /// The single-user endpoint sync this replaced kept a server password and recovery key
-    /// in Keychain; remove them rather than leave secrets nothing reads.
-    private static func removeRetiredEndpointSync(defaults: UserDefaults) {
-        try? Keychain.remove(service: "li.tjh.MediaApp.configuration-sync", account: "connection")
+    /// in Keychain; remove them rather than leave secrets nothing reads. Marked done once that
+    /// worked, so later launches skip the Keychain call before the first frame.
+    static func removeRetiredEndpointSync(defaults: UserDefaults) {
+        guard !defaults.bool(forKey: retiredEndpointSyncRemovedKey) else { return }
         defaults.removeObject(forKey: "configurationSyncBaseline")
         defaults.removeObject(forKey: "configurationSyncDate")
+        guard (try? Keychain.remove(service: "li.tjh.MediaApp.configuration-sync", account: "connection")) != nil
+        else { return }
+        defaults.set(true, forKey: retiredEndpointSyncRemovedKey)
     }
 }
 

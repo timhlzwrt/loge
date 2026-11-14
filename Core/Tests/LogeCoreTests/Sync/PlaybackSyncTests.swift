@@ -169,8 +169,26 @@ struct PlaybackSyncTests {
         restored.record(item(), position: 450, duration: 900, at: t0 + 1)
         #expect(restored.estimatedFraction(for: "movie") == nil)
         #expect(restored.progress["movie"]?.duration == 900)
+        #expect(LibraryStore(defaults: defaults).estimatedFraction(for: "movie") == nil)
+        // Later records during playback save only progress; the cleared fraction stays cleared.
+        restored.record(item(), position: 460, duration: 900, at: t0 + 2)
+        let reloaded = LibraryStore(defaults: defaults)
+        #expect(reloaded.progress["movie"]?.position == 460)
+        #expect(reloaded.estimatedFraction(for: "movie") == nil)
         restored.markUnwatched(["movie"])
         #expect(restored.estimatedFraction(for: "movie") == nil)
+    }
+
+    @Test func applyingTheSnapshotAlreadyHeldChangesNothing() throws {
+        let defaults = defaults()
+        let store = LibraryStore(defaults: defaults)
+        store.record(item(), position: 300, duration: 600, at: t0)
+        // Stands in for the saved progress, so a save would show as it being replaced.
+        defaults.set(Data("unchanged".utf8), forKey: "watchProgress")
+        try store.applyPlaybackSyncSnapshot(store.playbackSyncSnapshot)
+        #expect(defaults.data(forKey: "watchProgress") == Data("unchanged".utf8))
+        try store.applyPlaybackSyncSnapshot(.init(entries: ["other": entry("other")]))
+        #expect(defaults.data(forKey: "watchProgress") != Data("unchanged".utf8))
     }
 
     @Test func invalidIncomingSnapshotIsRejectedBeforeChangingLibrary() {

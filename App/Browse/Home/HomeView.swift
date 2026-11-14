@@ -91,10 +91,14 @@ struct HomeView: View {
 /// rather than a task group: opening anything from Home cancels its task, and a Release
 /// crash on the iPhone (a group child finishing after its group was gone) followed opening
 /// a festival while this was likely still running.
+@MainActor
 func prefetch(_ urls: [String?]) {
-    for url in Set(urls.compactMap { $0 }).compactMap(URL.init(string:)) {
+    for url in Set(urls.compactMap { $0 }).compactMap(URL.init(string:)) where ArtworkCache.cached(url) == nil {
         // Only warms the cache: the view that shows the image handles a failure.
-        URLSession.shared.dataTask(with: url).resume()
+        let task = URLSession.shared.dataTask(with: url)
+        // Behind the posters already on screen, which load at the same time.
+        task.priority = URLSessionTask.lowPriority
+        task.resume()
     }
 }
 
@@ -111,6 +115,6 @@ func prefetchArtwork(of sources: [CatalogSource]) async {
         // Focus usually enters a row at its start, which fills the screen with its backdrop.
         urls += metas.prefix(2).map(\.featuredBackground)
         #endif
-        prefetch(urls)
+        await prefetch(urls)
     }
 }

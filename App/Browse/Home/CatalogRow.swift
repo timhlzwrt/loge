@@ -15,8 +15,6 @@ struct CatalogRow: View {
     var takesFocusWhenLoaded = false
     /// Called with whichever poster has focus; drives the tvOS home header.
     var onFocus: (MetaPreview) -> Void = { _ in }
-    /// Called with the first item once loaded, for the tvOS home header before anything has focus.
-    var onFirstLoaded: (MetaPreview) -> Void = { _ in }
     /// Called with the number of results once loading finishes, or -1 on failure.
     var onLoaded: (Int) -> Void = { _ in }
 
@@ -61,9 +59,6 @@ struct CatalogRow: View {
                 try Task.checkCancellation()
                 items = .success(metas)
                 onLoaded(metas.count)
-                if let first = metas.first {
-                    onFirstLoaded(first)
-                }
             } catch is CancellationError {
                 // Scrolled away or the query changed; the next task reloads.
             } catch {
@@ -174,6 +169,11 @@ struct CatalogRow: View {
             }
         }
         .padding(.horizontal, Metrics.gutter)
+        #if os(tvOS)
+        // As tall as the loaded row: a lazy Home rebuilds rows scrolled back to, and a row
+        // growing above the focused one after the scroll settled shifted everything down.
+        .padding(.vertical, 20)
+        #endif
         .accessibilityLabel("Loading \(source.title)")
     }
 }
@@ -256,14 +256,24 @@ struct PosterTile: View {
 
     var body: some View {
         let progress = library.progress[meta.id]
-        ZStack {
-            Color.white.opacity(0.06)
-            // Shown underneath, so titles whose artwork is missing or fails still read.
-            TitleCard(name: meta.name)
-            if meta.poster != nil {
-                Artwork(url: meta.poster)
+        Color.white.opacity(0.06)
+            .overlay {
+                RemoteImage(url: meta.poster) { phase in
+                    if case .success(let image) = phase {
+                        Image(decorative: image, scale: 1).resizable().scaledToFill()
+                    } else {
+                        // Titles whose artwork is missing or fails still read. Only then, rather
+                        // than under every poster: rows build many tiles at once on tvOS.
+                        ZStack {
+                            TitleCard(name: meta.name)
+                            if meta.poster != nil {
+                                // Artwork's placeholder, which the title showed through while loading.
+                                Color.white.opacity(0.06)
+                            }
+                        }
+                    }
+                }
             }
-        }
         .overlay(alignment: .bottom) {
             // Movies only: a series' progress belongs to its episodes.
             if let progress {

@@ -47,17 +47,15 @@ struct TVHome: View {
                     .padding(.bottom, 40)
                 ScrollViewReader { proxy in
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 24) {
+                        // Lazy: building every row at once made each focus move dirty all of them.
+                        LazyVStack(alignment: .leading, spacing: 24) {
                             ContinueWatchingRow(onFocus: focus.show)
                             UpcomingRow(onFocus: focus.show)
                             MyListRow(onFocus: focus.show)
                             RecommendedRow(onFocus: focus.show)
                             ForEach(sources.prefix(3)) { source in
                                 CatalogRow(source: source, page: sources, isPrimary: source == sources.first,
-                                           onFocus: focus.show, onFirstLoaded: { first in
-                                    // Only an empty header: focus may already be on Continue Watching.
-                                    if source == sources.first, focus.title == nil { focus.show(first) }
-                                })
+                                           onFocus: focus.show)
                             }
                             GenreRow(onFocus: focus.show)
                             ForEach(sources.dropFirst(3)) { source in
@@ -93,6 +91,13 @@ struct TVHome: View {
         }
         .background(Color.canvas)
         .task {
+            // Fills the header before anything has focus. Not from the row: the lazy stack may
+            // not build it until focus moves down. Catalog requests are shared, so this loads once.
+            // A failed catalog shows its error in its own row.
+            if focus.title == nil, let first = try? await sources.first?.items(varyingFrom: sources).first,
+               focus.title == nil { // Focus may have reached Continue Watching meanwhile.
+                focus.show(first)
+            }
             guard !prefetched else { return }
             prefetched = true
             await prefetchArtwork(of: sources)
@@ -206,7 +211,6 @@ struct TVHomeHeader: View {
         VStack(alignment: .leading, spacing: 14) {
             TitleLogo(logo: focused.logo, name: focused.name, maxHeight: 140)
                 .frame(maxWidth: 600, alignment: .leading)
-                .id(focused.id)
             focused.infoLine
             if let description = focused.description {
                 Text(description)

@@ -83,6 +83,9 @@ public final class LibraryStore {
 
     /// Validate everything before replacing progress. Private sources and lists are unaffected.
     public func applyPlaybackSyncSnapshot(_ snapshot: PlaybackSyncSnapshot) throws {
+        // Most syncs bring nothing new; replacing progress anyway would redraw every view that
+        // reads it and write it all to storage again.
+        guard snapshot != playbackSyncSnapshot else { return }
         let snapshot = try snapshot.validated()
         let previous = playbackSyncSnapshot.entries
         remoteResumeFractions = remoteResumeFractions.filter { snapshot.entries[$0.key]?.isFinished == false }
@@ -106,8 +109,11 @@ public final class LibraryStore {
     public func record(_ item: WatchItem, position: Double, duration: Double, at date: Date = .now) {
         guard duration.isFinite, duration > 0, position.isFinite, position >= 0,
               recordsProgress(for: item.id, at: position) else { return }
+        // Playback records every 10 s. Once its entry exists, nothing else it would save changes.
+        let changesOnlyProgress = progress[item.id] != nil && playbackArchive[item.id] == nil
+            && playbackRemovals[item.id] == nil && remoteResumeFractions[item.id] == nil
         setProgress(WatchProgress(item: item, position: position, duration: duration, updatedAt: date), for: item.id)
-        saveProgress()
+        if changesOnlyProgress { save(progress, forKey: Self.progressKey) } else { saveProgress() }
     }
 
     /// The one way an entry's progress changes. It supersedes the archived copy and any
