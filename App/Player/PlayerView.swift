@@ -50,8 +50,12 @@ struct PlayerView: View {
     @FocusState private var skipFocused: Bool
     @FocusState private var nextFocus: NextEpisodeOverlay.Focus?
     @State private var scrubStart: Double?
-    /// Info, Subtitles and Audio, shown by swiping down.
-    @State private var isPanelShown = false
+    /// Subtitles, Audio and More beside the title, reached by swiping down, and the menu open above them.
+    @FocusState private var buttonFocus: PlayerControls.FocusedButton?
+    /// Set and cleared with the moves to and from the buttons: cleared focus alone was taken
+    /// straight back by the button that had it.
+    @State private var buttonsActive = false
+    @State private var openPanel: PlayerPanel.Tab?
     #endif
     #if os(macOS)
     @Environment(\.appearsActive) private var windowIsActive
@@ -110,6 +114,27 @@ struct PlayerView: View {
                     failure(message)
                 } else {
                     if controlsVisible {
+                        #if os(tvOS)
+                        PlayerControls(
+                            title: current.title,
+                            item: current.item,
+                            player: player,
+                            pictureInPicture: session.pictureInPicture,
+                            scrubPosition: $scrubPosition,
+                            scrubPreview: scrubPreview?.image,
+                            isMenuOpen: $isMenuOpen,
+                            adjustingTiming: $adjustingTiming,
+                            onClose: closePlayback,
+                            onChooseSource: chooseSource,
+                            onPlaybackInfo: { showsPlaybackInfo = true },
+                            onInteract: showControls,
+                            isFullScreen: isFullScreen,
+                            onToggleFullScreen: toggleFullScreen,
+                            openPanel: $openPanel,
+                            buttonFocus: $buttonFocus
+                        )
+                        .transition(.opacity)
+                        #else
                         PlayerControls(
                             title: current.title,
                             item: current.item,
@@ -127,19 +152,14 @@ struct PlayerView: View {
                             onToggleFullScreen: toggleFullScreen
                         )
                         .transition(.opacity)
+                        #endif
                     }
                     PositionDependent {
-                        if let skip = player.availableSkip, player.status != .ended {
+                        // An open menu on Apple TV rises over the offer's corner.
+                        if let skip = player.availableSkip, player.status != .ended, !panelIsShown {
                             skipOffer(skip, player: player)
                         }
                     }
-                    #if os(tvOS)
-                    if isPanelShown {
-                        PlayerPanel(title: current.title, player: player, onInteract: showControls,
-                                    onChooseSource: chooseSource)
-                            .transition(.opacity)
-                    }
-                    #endif
                     PositionDependent {
                         if let next = offeredNext(player) {
                             #if os(tvOS)
@@ -186,8 +206,7 @@ struct PlayerView: View {
             adjustingTiming = nil
             #if os(tvOS)
             scrubStart = nil
-            // A source chosen from the panel has done what the panel was opened for.
-            isPanelShown = false
+            openPanel = nil
             #endif
             showControls()
         }
@@ -199,6 +218,14 @@ struct PlayerView: View {
             }
             scrubPreview?.show(position)
         }
+        #if os(tvOS)
+        // A held preview nobody comes back to is let go, leaving the picture where it was.
+        .task(id: scrubStart == nil ? scrubPosition : nil) {
+            guard scrubStart == nil, scrubPosition != nil else { return }
+            do { try await Task.sleep(for: .seconds(5)) } catch { return }
+            scrubPosition = nil
+        }
+        #endif
         .task(id: scrubPosition == nil) {
             // Kept for a while after a scrub, since reopening the file takes a moment and
             // scrubs tend to come in a row; then its connection and decoder are let go.
@@ -236,22 +263,39 @@ struct PlayerView: View {
         }
         #if os(tvOS)
         .onPlayPauseCommand {
-            if let player { togglePlayback(player) }
+            if let player, !commitScrub(player) { togglePlayback(player) }
         }
         .onMoveCommand { direction in
             // A swipe that scrubs shouldn't also jump 10 seconds.
             guard scrubStart == nil else { return }
+            // With a preview held, clicks on the edges move it rather than the picture.
+            if let held = scrubPosition, let duration = player?.duration {
+                switch direction {
+                case .left: scrubPosition = max(held - 10, 0)
+                case .right: scrubPosition = min(held + 10, duration)
+                default: break
+                }
+                showControls()
+                return
+            }
             switch direction {
             // An offer holds focus for as long as it shows, which shouldn't stop these working.
             case .left where surfaceFocused || skipFocused: player?.seek(by: -10)
             case .right where surfaceFocused || skipFocused: player?.seek(by: 10)
             // During the credits Up Next sits below Skip Credits, and Play Now was otherwise out of
             // reach until the episode had ended.
-            case .down where skipFocused && !isPanelShown && player.flatMap(offeredNext) != nil:
+            case .down where skipFocused && !controlsHaveFocus && player.flatMap(offeredNext) != nil:
                 nextFocus = .play
-            case .down where (surfaceFocused || skipFocused) && !isPanelShown: isPanelShown = true
+            case .down where (surfaceFocused || skipFocused) && !controlsHaveFocus:
+                buttonsActive = true
+                // A moment later, once the controls are back if they were hidden.
+                Task { buttonFocus = .menu(.subtitles) }
+            // Up from the buttons with no menu open goes back to the picture, or to an offer above them.
+            case .up where buttonsActive && openPanel == nil:
+                if player?.availableSkip != nil { skipFocused = true }
+                buttonsActive = false
             // The offers sit on top of the surface, so the focus engine can't move to them by itself.
-            case .up where surfaceFocused && !isPanelShown:
+            case .up where surfaceFocused && !controlsHaveFocus:
                 guard let player else { break }
                 if player.availableSkip != nil {
                     skipFocused = true
@@ -263,38 +307,56 @@ struct PlayerView: View {
             }
             showControls()
         }
-        // Menu closes the panel first; without it, Menu leaves the player as usual.
+        // Menu closes the open menu, then leaves the buttons; after that it leaves the player as usual.
         .onExitCommand {
-            if isPanelShown {
-                isPanelShown = false
+            if scrubPosition != nil {
+                scrubStart = nil
+                scrubPosition = nil
+            } else if let openPanel {
+                self.openPanel = nil
+                buttonFocus = .menu(openPanel)
+            } else if buttonsActive {
+                buttonsActive = false
             } else if nextFocus != nil && player?.status != .ended {
                 focusSurface()
             } else {
                 closePlayback()
             }
         }
-        .onChange(of: isPanelShown) { _, shown in
-            isMenuOpen = shown
-            if !shown { surfaceFocused = true }
+        .onChange(of: openPanel != nil) { _, open in isMenuOpen = open }
+        .onChange(of: buttonFocus) { _, focused in
+            // Moving along the buttons with a menu open shows the next one's, as tabs would.
+            if openPanel != nil {
+                if case .menu(let tab) = focused { openPanel = tab } else if focused == .sources { openPanel = nil }
+            }
+            showControls()
+        }
+        // The picture takes focus back once the buttons and their menu let it go. A moment
+        // later: the surface stands aside until then, and an offer may have taken it meanwhile.
+        .onChange(of: controlsHaveFocus) { _, has in
+            guard !has else { return }
+            Task {
+                if !controlsHaveFocus && !skipFocused && nextFocus == nil { surfaceFocused = true }
+            }
         }
         // The countdown leaves ten seconds to act in, and Select has nothing else to do at the end.
         // A lookup that lands after the end swaps the end card for Up Next, whose Play Now takes
         // over the focus value Start Over had: set again, the unchanged value moved nothing.
         .onChange(of: player.map { $0.status == .ended && offeredNext($0) != nil } ?? false) { _, waiting in
-            guard waiting && !isPanelShown else { return }
+            guard waiting && !controlsHaveFocus else { return }
             nextFocus = nil
             Task { nextFocus = .play }
         }
         // The end card's Start Over, for the same reason.
         .onChange(of: player.map(isFinished) ?? false) { _, finished in
-            if finished && !isPanelShown { nextFocus = .play }
+            if finished && !controlsHaveFocus { nextFocus = .play }
         }
         .onChange(of: player?.status == .ended) { _, ended in
             if ended, session.current?.item?.type == MediaType.movie, session.next == nil {
                 closePlayback()
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: isPanelShown)
+        .animation(.easeInOut(duration: 0.2), value: openPanel)
         #elseif os(macOS)
         // Lets the Playback menu's arrow shortcuts apply here and not in other windows' text fields.
         .focusedSceneValue(\.isPlayerWindow, true)
@@ -362,12 +424,12 @@ struct PlayerView: View {
     /// would be what the focus engine picks instead of the button beside the focused one.
     private func remoteSurface(_ player: MPVPlayer) -> some View {
         Button {
-            togglePlayback(player)
+            if !commitScrub(player) { togglePlayback(player) }
         } label: {
             Color.clear
         }
         .buttonStyle(InvisibleButtonStyle())
-        .disabled(isPanelShown || nextFocus != nil)
+        .disabled(controlsHaveFocus || nextFocus != nil)
         .focused($surfaceFocused)
         .padding(.top, 200)
         .ignoresSafeArea(edges: .bottom)
@@ -375,12 +437,15 @@ struct PlayerView: View {
         // Hiding the controls removes the menus; if one had focus, nothing would be
         // left to receive remote presses.
         .onChange(of: controlsVisible) { _, visible in
+            if !visible { buttonsActive = false }
             if !visible && !skipFocused && nextFocus == nil { surfaceFocused = true }
         }
         .background {
             RemoteSwipeReader(
                 onChanged: { fraction in scrub(by: fraction, player: player) },
-                onEnded: { finishScrub(player) }
+                // Lifting the finger only holds the preview, as Apple's player does: a swipe
+                // that wasn't meant as a scrub shouldn't move the picture.
+                onEnded: { scrubStart = nil }
             )
         }
     }
@@ -396,23 +461,27 @@ struct PlayerView: View {
         showControls()
     }
 
-    /// A full swipe across the touch surface moves five minutes, or a tenth of a long film.
+    /// A full swipe across the touch surface moves 90 seconds; further takes another swipe,
+    /// which carries on from where the last one left the preview.
     private func scrub(by fraction: Double, player: MPVPlayer) {
-        guard surfaceFocused || skipFocused, let duration = player.duration, abs(fraction) > 0.03 else { return }
-        let start = scrubStart ?? player.position
+        guard surfaceFocused || skipFocused, let duration = player.duration else { return }
+        let start = scrubStart ?? scrubPosition ?? player.position
         scrubStart = start
-        let span = max(300, duration * 0.1)
-        scrubPosition = min(max(start + fraction * span, 0), duration)
+        scrubPosition = min(max(start + fraction * 90, 0), duration)
         showControls()
     }
 
-    private func finishScrub(_ player: MPVPlayer) {
-        if let target = scrubPosition {
-            player.seek(toKeyframeNear: target)
-        }
-        scrubStart = nil
+    /// Goes to the held preview, if there is one: Select and Play/Pause do this before anything else.
+    private func commitScrub(_ player: MPVPlayer) -> Bool {
+        guard scrubStart == nil, let target = scrubPosition else { return false }
+        player.seek(toKeyframeNear: target)
         scrubPosition = nil
+        showControls()
+        return true
     }
+
+    /// The buttons beside the title or the menu above them; the surface stands aside meanwhile.
+    private var controlsHaveFocus: Bool { buttonsActive || openPanel != nil }
 
     private func focusSurface() {
         nextFocus = nil
@@ -483,7 +552,7 @@ struct PlayerView: View {
 
     private var panelIsShown: Bool {
         #if os(tvOS)
-        isPanelShown
+        openPanel != nil
         #else
         false
         #endif
@@ -506,6 +575,10 @@ struct PlayerView: View {
 
     private func skipOffer(_ skip: PlaybackChapter.Skip, player: MPVPlayer) -> some View {
         Button(skip.kind.rawValue) {
+            #if os(tvOS)
+            // The offer keeps focus while it shows, so Select on a held preview lands here.
+            if commitScrub(player) { return }
+            #endif
             if let duration = player.duration, skip.end >= duration {
                 // Credits run to the end of the file. Seeking right to the end while paused leaves
                 // mpv on the last frame without reaching the end, so Up Next never counts down;
@@ -518,9 +591,15 @@ struct PlayerView: View {
             showControls()
         }
         .font(.subheadline.weight(.semibold))
+        #if os(tvOS)
+        .buttonStyle(PlayerButtonStyle())
+        .padding(6)
+        .glassEffect(.player, in: .capsule)
+        #else
         .frame(minHeight: 44)
         .buttonStyle(.glass)
         .buttonBorderShape(.capsule)
+        #endif
         #if !os(tvOS)
         // On Apple TV the offer takes focus, which reads it out.
         .task(id: skip.kind) { AccessibilityNotification.Announcement("\(skip.kind.rawValue) available").post() }
@@ -535,12 +614,12 @@ struct PlayerView: View {
         // request for the picture made at the same time, as Start Over's, go first.
         .task(id: skip.kind) {
             do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
-            if !isPanelShown { skipFocused = true }
+            if !controlsHaveFocus { skipFocused = true }
         }
         // Cleared, so the next offer's request is a change: left set, it moved focus nowhere.
         .onDisappear {
             skipFocused = false
-            if !isPanelShown { surfaceFocused = true }
+            if !controlsHaveFocus { surfaceFocused = true }
         }
         #endif
         // Keep the offer visible while transport controls hide, clear of their bars and Up Next.
@@ -549,7 +628,7 @@ struct PlayerView: View {
         // menus, in line with their trailing edge.
         #if os(iOS)
         .padding(.horizontal, 20)
-        #else
+        #elseif os(macOS)
         .padding(.horizontal, 24)
         #endif
         .padding(.bottom, skipBottomPadding(player))
@@ -561,7 +640,8 @@ struct PlayerView: View {
         let hasNextOffer = offeredNext(player) != nil
         #endif
         #if os(tvOS)
-        return hasNextOffer ? 320 : (controlsVisible ? 200 : 48)
+        // Clear of the name shown over a focused button.
+        return hasNextOffer ? 320 : (controlsVisible ? 240 : 48)
         #elseif os(macOS)
         // Up Next rises above the timing panel while it shows.
         if hasNextOffer { return adjustingTiming != nil ? 240 + endCardTimingClearance : 240 }

@@ -1,79 +1,63 @@
 #if os(tvOS)
 import SwiftUI
 
-/// What swiping down during playback shows, as in the TV app: Info, Subtitles and Audio tabs
-/// in a glass capsule at the top, with the chosen tab's settings in a glass panel under it.
+/// The settings behind the Subtitles, Audio and More buttons on Apple TV, in a glass panel
+/// that rises above them, as the menus do from the same buttons on iPhone and Mac.
 struct PlayerPanel: View {
     enum Tab: String, CaseIterable, Identifiable {
-        case info = "Info", subtitles = "Subtitles", audio = "Audio"
+        case subtitles = "Subtitles", audio = "Audio", more = "More"
         var id: Self { self }
+
+        var systemImage: String {
+            switch self {
+            case .subtitles: "captions.bubble"
+            case .audio: "waveform"
+            case .more: "ellipsis"
+            }
+        }
     }
 
-    let title: String
+    let tab: Tab
     let player: MPVPlayer
     let onInteract: () -> Void
-    let onChooseSource: (() -> Void)?
-    @State private var tab = Tab.subtitles
-    @State private var showsPlaybackInfo = false
-    @FocusState private var focusedTab: Tab?
+    let onPlaybackInfo: () -> Void
 
     var body: some View {
-        VStack(spacing: 24) {
-            GlassEffectContainer {
-                HStack(spacing: 4) {
-                    ForEach(Tab.allCases) { tab in
-                        Button(tab.rawValue) { self.tab = tab }
-                            .buttonStyle(.glass)
-                            .buttonBorderShape(.capsule)
-                            .focused($focusedTab, equals: tab)
-                            .background(tab == self.tab ? AnyShapeStyle(.tint.opacity(0.2)) : AnyShapeStyle(.clear), in: .capsule)
-                    }
-                }
-            }
-            Group {
-                switch tab {
-                case .info: info
-                case .subtitles: subtitles
-                case .audio: audio
-                }
-            }
-            // Only as tall as what the tab holds; two tracks needn't cover the picture.
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(36)
-            .frame(width: 1100, alignment: .topLeading)
-            // Down from a tab lands here even with nothing straight below it, as on Info.
-            .focusSection()
-            .glassEffect(in: .rect(cornerRadius: 36))
+        // As wide as what the tab holds, so two short track names don't cover half the picture;
+        // a long name gets the full width, cut short if it needs more.
+        ViewThatFits(in: .horizontal) {
+            panel.fixedSize(horizontal: true, vertical: false)
+            panel
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        // Moving across the tabs switches them, as focus does in the TV app.
-        .onChange(of: focusedTab) { _, focused in
-            if let focused { tab = focused }
-            onInteract()
-        }
-        // Swiping down came from the picture, so focus has to be brought up here.
-        .onAppear { focusedTab = tab }
-        .sheet(isPresented: $showsPlaybackInfo) { PlaybackInfoView(player: player) }
+        .frame(maxWidth: 1000, alignment: .trailing)
     }
 
-    private var info: some View {
-        HStack(alignment: .top, spacing: 48) {
-            Text(title)
-                .font(.headline)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            VStack(alignment: .leading, spacing: 24) {
-                PanelStepper(label: "Speed", value: PlaybackSpeed.name(player.speed),
-                             decrement: step(speedBy: -1), increment: step(speedBy: 1))
-                Button(player.isZoomedToFill ? "Fit to Screen" : "Zoom to Fill") {
-                    player.setZoomToFill(!player.isZoomedToFill)
-                    onInteract()
-                }
-                if let onChooseSource {
-                    Button("Sources", action: onChooseSource)
-                }
-                Button("Playback Info") { showsPlaybackInfo = true; onInteract() }
+    private var panel: some View {
+        Group {
+            switch tab {
+            case .subtitles: subtitles
+            case .audio: audio
+            case .more: more
             }
-            .frame(width: 420, alignment: .leading)
+        }
+        // Only as tall as what the tab holds; two tracks needn't cover the picture.
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(36)
+        // Up from the buttons lands here even with nothing straight above the focused one.
+        .focusSection()
+        .buttonStyle(PlayerButtonStyle())
+        .glassEffect(.player, in: .rect(cornerRadius: 36))
+    }
+
+    private var more: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            PanelStepper(label: "Speed", value: PlaybackSpeed.name(player.speed),
+                         decrement: step(speedBy: -1), increment: step(speedBy: 1))
+            Button(player.isZoomedToFill ? "Fit to Screen" : "Zoom to Fill") {
+                player.setZoomToFill(!player.isZoomedToFill)
+                onInteract()
+            }
+            Button("Playback Info", action: onPlaybackInfo)
         }
     }
 
@@ -84,7 +68,6 @@ struct PlayerPanel: View {
                 SubtitleSizeStepper(player: player, onInteract: onInteract)
                 delayStepper(.sub)
             }
-            .frame(width: 420, alignment: .leading)
         }
     }
 
@@ -92,7 +75,6 @@ struct PlayerPanel: View {
         HStack(alignment: .top, spacing: 48) {
             TrackList(player: player, kind: .audio, onInteract: onInteract)
             delayStepper(.audio)
-                .frame(width: 420, alignment: .leading)
         }
     }
 
@@ -130,9 +112,9 @@ private struct TrackList: View {
             Text("Language")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .padding(.leading, 20)
+                .padding(.leading, 28)
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
                     // Sound can't be turned off, only subtitles.
                     if kind == .sub {
                         row("Off", isSelected: selection.wrappedValue == nil) { selection.wrappedValue = nil }
@@ -162,8 +144,6 @@ private struct TrackList: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        // Borderless puts its focus effect on the image alone, and that is hidden on unselected rows.
-        .buttonStyle(.plain)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
@@ -191,7 +171,7 @@ private struct SubtitleSizeStepper: View {
     }
 }
 
-/// `−  Medium  +` in a glass capsule; a nil action disables its end.
+/// `−  Medium  +`; a nil action disables its end.
 private struct PanelStepper: View {
     let label: String
     let value: String
@@ -206,14 +186,15 @@ private struct PanelStepper: View {
             HStack {
                 Button("Less", systemImage: "minus") { decrement?() }
                     .disabled(decrement == nil)
+                // Room for the longest value, so the buttons stay put as it changes.
                 Text(value)
                     .font(.callout.monospacedDigit())
-                    .frame(maxWidth: .infinity)
+                    .frame(width: 140)
                 Button("More", systemImage: "plus") { increment?() }
                     .disabled(increment == nil)
             }
             .labelStyle(.iconOnly)
-            .buttonBorderShape(.circle)
+            .buttonStyle(PlayerButtonStyle(width: 66))
             .accessibilityElement(children: .contain)
             .accessibilityLabel(label)
             .accessibilityValue(value)
