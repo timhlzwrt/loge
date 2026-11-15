@@ -81,6 +81,12 @@ struct AddonClientTests {
         #expect(response.metas[0].poster != nil)
     }
 
+    @Test func unescapesCatalogText() throws {
+        let json = #"{"metas":[{"id":"tt7235466","type":"series","name":"9-1-1","description":"The personal &amp; professional lives"}]}"#
+        let metas = try AddonClient.decodeCatalog(Data(json.utf8))
+        #expect(metas[0].description == "The personal & professional lives")
+    }
+
     @Test func decodesSeriesMeta() throws {
         let meta = try decodeFixture("cinemeta-meta-series", as: MetaResponse.self).meta
 

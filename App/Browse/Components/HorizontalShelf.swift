@@ -44,6 +44,11 @@ struct HorizontalShelf<Content: View>: View {
             #else
             .scrollIndicators(.hidden)
             #endif
+            #if os(tvOS)
+            // The whole width takes focus moving up or down, so a row of two isn't skipped
+            // when nothing of it lies straight above or below the focused item.
+            .focusSection()
+            #endif
     }
 
     #if os(macOS)

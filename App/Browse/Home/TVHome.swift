@@ -199,12 +199,16 @@ struct TVHomeHeader: View {
     }
 
     private func fillFocusedTitle() async {
-        guard let title = focus.title, title.logo == nil || title.description == nil, filled[title.id] == nil,
+        guard let title = focus.title, filled[title.id] == nil,
+              title.logo == nil || title.description == nil || title.background == nil,
               let client = store.addons.metaClient(type: title.type, id: title.id) else { return }
         do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
         // The header is a preview: without the details it shows what the entry has, and its page reports errors.
         guard let meta = try? await client.meta(type: title.type, id: title.id), !Task.isCancelled else { return }
-        filled[title.id] = title.fillingDetails(from: meta)
+        let complete = title.fillingDetails(from: meta)
+        filled[title.id] = complete
+        // The backdrop reads the focus, and Watch Later entries are saved without one.
+        if focus.title?.id == title.id { focus.title = complete }
     }
 
     private func details(_ focused: MetaPreview) -> some View {

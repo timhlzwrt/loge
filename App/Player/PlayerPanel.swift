@@ -103,10 +103,12 @@ private struct TrackList: View {
     let player: MPVPlayer
     let kind: MPVPlayer.Track.Kind
     let onInteract: () -> Void
+    @FocusState private var focusedRow: String?
 
     var body: some View {
         let tracks = player.distinctTracks(kind)
         let selection = player.selection(for: kind)
+        let selectedRow = selection.wrappedValue.map { "\($0)" } ?? (kind == .sub ? "off" : nil)
         // Wider than the steppers' 8: a focused row's platter reaches above its text, over the label.
         VStack(alignment: .leading, spacing: 22) {
             Text("Language")
@@ -117,20 +119,32 @@ private struct TrackList: View {
                 VStack(alignment: .leading, spacing: 4) {
                     // Sound can't be turned off, only subtitles.
                     if kind == .sub {
-                        row("Off", isSelected: selection.wrappedValue == nil) { selection.wrappedValue = nil }
+                        row("Off", id: "off", isSelected: selection.wrappedValue == nil) { selection.wrappedValue = nil }
                     }
                     ForEach(tracks) { track in
-                        row(track.displayName, isSelected: track.isSelected) { selection.wrappedValue = track.id }
+                        row(track.displayName, id: "\(track.id)", isSelected: track.isSelected) {
+                            selection.wrappedValue = track.id
+                        }
                     }
                 }
             }
-            .frame(maxHeight: 420)
-            .scrollClipDisabled()
+            // Room for the focused row's lift and shadow inside the clip, which a long list needs:
+            // unclipped, its rows spread over the label and the timeline.
+            .contentMargins(.vertical, 16, for: .scrollContent)
+            .contentMargins(.horizontal, 10, for: .scrollContent)
+            .frame(maxHeight: 452)
+            .padding(.vertical, -16)
+            .padding(.horizontal, -10)
+        }
+        .onChange(of: focusedRow) { old, new in
+            // Coming in from the buttons, start on the track in use rather than the nearest row.
+            guard old == nil, let new, let selectedRow, new != selectedRow else { return }
+            focusedRow = selectedRow
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func row(_ name: String, isSelected: Bool, select: @escaping () -> Void) -> some View {
+    private func row(_ name: String, id: String, isSelected: Bool, select: @escaping () -> Void) -> some View {
         Button {
             select()
             onInteract()
@@ -144,6 +158,7 @@ private struct TrackList: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .focused($focusedRow, equals: id)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }

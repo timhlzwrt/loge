@@ -51,12 +51,28 @@ public struct AddonClient: Sendable {
     }
 
     static func decodeCatalog(_ data: Data) throws -> [MetaPreview] {
-        try decode(CatalogResponse.self, from: data).metas
+        try decode(CatalogResponse.self, from: data).metas.map { meta in
+            var meta = meta
+            meta.name = meta.name.decodingHTMLEntities
+            meta.description = meta.description?.decodingHTMLEntities
+            return meta
+        }
     }
 
     public func meta(type: String, id: String) async throws -> Meta {
         let response: MetaResponse = try await fetch(resourceURL("meta", type: type, id: id))
-        return response.meta
+        // Cinemeta passes on some text HTML-escaped: "personal &amp; professional lives".
+        var meta = response.meta
+        meta.name = meta.name.decodingHTMLEntities
+        meta.description = meta.description?.decodingHTMLEntities
+        meta.videos = meta.videos?.map { video in
+            var video = video
+            video.title = video.title?.decodingHTMLEntities
+            video.name = video.name?.decodingHTMLEntities
+            video.overview = video.overview?.decodingHTMLEntities
+            return video
+        }
+        return meta
     }
 
     public func streams(type: String, id: String) async throws -> [StreamSource] {

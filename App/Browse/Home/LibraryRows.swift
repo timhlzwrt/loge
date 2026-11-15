@@ -244,6 +244,8 @@ struct MyListView: View {
                 #if os(tvOS)
                 // Room for the focus lift, clear of the section's title.
                 .padding(.top, 20)
+                // Across the full width, so a short list isn't skipped moving down from the tabs.
+                .focusSection()
                 #endif
             }
         }

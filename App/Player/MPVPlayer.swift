@@ -144,8 +144,10 @@ final class MPVPlayer {
                 let format = [codec.map(Self.codecName), channelCount.map(Self.channelLayout)].compactMap { $0 }
                 if !format.isEmpty { parts.append(format.joined(separator: " ")) }
             case .sub:
-                if isForced { parts.append("Forced") }
-                if isHearingImpaired { parts.append("SDH") }
+                // Release titles often name these already: "English · SDH", not "English · SDH · SDH".
+                let named = title ?? ""
+                if isForced && named.range(of: "forced", options: .caseInsensitive) == nil { parts.append("Forced") }
+                if isHearingImpaired && named.range(of: "SDH", options: .caseInsensitive) == nil { parts.append("SDH") }
             }
             return parts.isEmpty ? "Track \(id)" : parts.joined(separator: " · ")
         }
