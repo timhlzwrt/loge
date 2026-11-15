@@ -28,6 +28,16 @@ struct PlayerControls: View {
     /// In full screen the Mac's title bar, and the title in it, is gone.
     let isFullScreen: Bool
     let onToggleFullScreen: () -> Void
+    #if os(tvOS)
+    /// The menu open above the buttons.
+    @Binding var openPanel: PlayerPanel.Tab?
+    /// Which of the buttons has focus; the player screen moves it there with a swipe down.
+    var buttonFocus: FocusState<FocusedButton?>.Binding
+
+    enum FocusedButton: Hashable {
+        case menu(PlayerPanel.Tab), sources
+    }
+    #endif
 
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -71,17 +81,64 @@ struct PlayerControls: View {
         .allowsHitTesting(false)
     }
 
+    /// Laid out as on iPhone: what's playing beside the same buttons, the timeline under both.
     private var tvBody: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 24) {
             Spacer()
-            Text(title)
-                .font(.sectionTitle)
-                .lineLimit(1)
+            if let openPanel {
+                PlayerPanel(tab: openPanel, player: player, onInteract: onInteract, onPlaybackInfo: onPlaybackInfo)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .padding(.bottom, 16)
+            }
+            HStack(alignment: .bottom, spacing: 32) {
+                nowPlaying
+                Spacer(minLength: 0)
+                tvButtons
+            }
+            // The preview rises over this row while scrubbing.
+            .opacity(scrubPosition == nil ? 1 : 0)
             timeline
         }
         // Full width even before the timeline knows the duration, so the title doesn't start centred.
         .frame(maxWidth: .infinity, alignment: .leading)
         .background { scrims }
+    }
+
+    /// One glass capsule, as on iPhone, rather than a glass circle per button.
+    private var tvButtons: some View {
+        HStack(spacing: 2) {
+            ForEach(PlayerPanel.Tab.allCases) { tab in
+                tvButton(tab.rawValue, systemImage: tab.systemImage, focus: .menu(tab)) {
+                    openPanel = openPanel == tab ? nil : tab
+                }
+            }
+            if let onChooseSource {
+                tvButton("Sources", systemImage: "list.bullet", focus: .sources, action: onChooseSource)
+            }
+        }
+        .font(.system(size: 34, weight: .medium))
+        .padding(6)
+        .glassEffect(.player, in: .capsule)
+    }
+
+    private func tvButton(_ name: String, systemImage: String, focus: FocusedButton, action: @escaping () -> Void) -> some View {
+        Button(name, systemImage: systemImage) {
+            action()
+            onInteract()
+        }
+        .labelStyle(.iconOnly)
+        .buttonStyle(PlayerButtonStyle(width: 84, height: 72))
+        .focused(buttonFocus, equals: focus)
+        .overlay(alignment: .top) {
+            // From across the room the icons alone don't say which is which; an open menu does.
+            if buttonFocus.wrappedValue == focus && openPanel == nil {
+                Text(name)
+                    .font(.caption.weight(.semibold))
+                    .fixedSize()
+                    .offset(y: -48)
+                    .accessibilityHidden(true)
+            }
+        }
     }
     #endif
 
@@ -117,19 +174,23 @@ struct PlayerControls: View {
                 }
                     .frame(maxWidth: .infinity)
             } else {
-                if isPortraitPhone {
-                    // Too narrow for the title beside five buttons; height is what's spare here.
-                    nowPlaying
-                    menuButtons
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                        .padding(.top, 12)
-                } else {
-                    HStack(alignment: .bottom, spacing: 16) {
+                Group {
+                    if isPortraitPhone {
+                        // Too narrow for the title beside five buttons; height is what's spare here.
                         nowPlaying
-                        Spacer(minLength: 0)
                         menuButtons
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                            .padding(.top, 12)
+                    } else {
+                        HStack(alignment: .bottom, spacing: 16) {
+                            nowPlaying
+                            Spacer(minLength: 0)
+                            menuButtons
+                        }
                     }
                 }
+                // The preview rises over this row while scrubbing, as on Apple TV.
+                .opacity(scrubPosition == nil ? 1 : 0)
                 timeline
                     .padding(.top, 10)
             }
@@ -143,6 +204,8 @@ struct PlayerControls: View {
                 transport
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .ignoresSafeArea()
+                    // A landscape phone's preview reaches up to the transport too.
+                    .opacity(scrubPosition == nil ? 1 : 0)
             }
         }
         .foregroundStyle(.white)
@@ -157,7 +220,9 @@ struct PlayerControls: View {
     }
 
     private var isPortraitPhone: Bool { horizontalSizeClass == .compact && verticalSizeClass == .regular }
+    #endif
 
+    #if !os(macOS)
     /// The series over the episode's code and name, or just the title for a film.
     private var nowPlaying: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -168,12 +233,19 @@ struct PlayerControls: View {
                     .lineLimit(1)
             }
             Text(item?.title ?? title)
+                #if os(tvOS)
+                .font(.title3.bold())
+                .lineLimit(1)
+                #else
                 .font(.title2.bold())
                 // A landscape phone has no height for a second line under the transport buttons.
                 .lineLimit(verticalSizeClass == .compact ? 1 : 2)
+                #endif
         }
     }
+    #endif
 
+    #if os(iOS)
     private var menuButtons: some View {
         GlassCapsule {
             SubtitlesMenu(player: player, onInteract: onInteract, isOpen: $isMenuOpen, adjustingTiming: $adjustingTiming)
@@ -319,7 +391,20 @@ struct PlayerControls: View {
             let longForm = duration >= 3600
             #if os(tvOS)
             VStack(spacing: 8) {
-                ProgressView(value: min(position, duration), total: duration)
+                // Drawn rather than a ProgressView, whose track is near black on tvOS: light,
+                // as the iPhone's, it reads as part of the glass controls above it.
+                Capsule()
+                    .fill(.white.opacity(0.3))
+                    .overlay(alignment: .leading) {
+                        GeometryReader { proxy in
+                            Rectangle()
+                                .fill(.white)
+                                .frame(width: proxy.size.width * min(position, duration) / duration)
+                        }
+                    }
+                    .clipShape(.capsule)
+                    .frame(height: 10)
+                    .accessibilityElement()
                     .overlay { segmentGaps(duration: duration) }
                     .compositingGroup()
                     .overlay { scrubPreviewView(duration: duration, longForm: longForm) }
@@ -334,9 +419,6 @@ struct PlayerControls: View {
                     Text(format(position, longForm: longForm))
                         .accessibilityHidden(true)
                     Spacer()
-                    endTime(remaining: duration - position)
-                        .foregroundStyle(.secondary)
-                        .padding(.trailing, 16)
                     Text("−" + format(duration - position, longForm: longForm))
                         .accessibilityHidden(true)
                 }
@@ -346,23 +428,10 @@ struct PlayerControls: View {
             HStack(spacing: 12) {
                 // The slider carries both times for VoiceOver.
                 Text(format(position, longForm: longForm))
-                    #if os(macOS)
-                    .foregroundStyle(.secondary)
-                    #endif
                     .accessibilityHidden(true)
                 slider(duration: duration, position: position, longForm: longForm)
                 Text("−" + format(duration - position, longForm: longForm))
-                    #if os(macOS)
-                    .foregroundStyle(.secondary)
-                    #endif
                     .accessibilityHidden(true)
-                #if os(iOS)
-                // A portrait phone's bar is already short.
-                if !isPortraitPhone {
-                    endTime(remaining: duration - position)
-                        .foregroundStyle(.secondary)
-                }
-                #endif
             }
             #if os(macOS)
             .font(.caption.monospacedDigit())
@@ -378,13 +447,6 @@ struct PlayerControls: View {
     }
 
     #if !os(macOS)
-    /// When playback will finish at the current speed, as the TV app shows it: whether there's
-    /// time to finish tonight, without the arithmetic.
-    private func endTime(remaining: Double) -> some View {
-        // The device locale, unlike other dates (`Locale.interface`): a clock follows its 12- or 24-hour setting.
-        Text("Ends at \(Date.now.addingTimeInterval(remaining / player.speed), format: .dateTime.hour().minute())")
-    }
-
     /// Thin cuts through the bar where an intro, recap or credits starts or ends: where the
     /// episode really ends and where a scrub will land, without adding colour.
     private func segmentGaps(duration: Double) -> some View {
@@ -520,6 +582,9 @@ struct PlayerControls: View {
                 }
                 .shadow(color: .black.opacity(0.4), radius: 8)
                 .frame(width: width)
+                // Its own height, not the zero offered below: the frame would get none and only
+                // the time would show.
+                .fixedSize(horizontal: false, vertical: true)
                 // A zero-height frame anchored at its bottom lets the preview rise above the bar.
                 .frame(width: width, height: 0, alignment: .bottom)
                 .offset(x: min(max(x, 0), max(proxy.size.width - width, 0)), y: -12)
@@ -543,6 +608,52 @@ struct PlayerControls: View {
         Duration.seconds(max(seconds, 0)).formatted(.time(pattern: longForm ? .hourMinuteSecond : .minuteSecond))
     }
 }
+
+#if os(tvOS)
+extension Glass {
+    /// The Apple TV player's one surface, the iPhone player's glass.
+    static var player: Glass { .regular }
+}
+
+/// The Apple TV player's buttons: white on the dark glass, lifted onto a white pill with dark
+/// content when focused, as buttons do across tvOS.
+struct PlayerButtonStyle: ButtonStyle {
+    /// A fixed width keeps a row of icons even; without one the label sets it.
+    var width: CGFloat?
+    var height: CGFloat = 66
+
+    func makeBody(configuration: Configuration) -> some View {
+        Platter(configuration: configuration, width: width, height: height)
+    }
+
+    private struct Platter: View {
+        let configuration: Configuration
+        let width: CGFloat?
+        let height: CGFloat
+        @Environment(\.isFocused) private var isFocused
+        @Environment(\.isEnabled) private var isEnabled
+
+        var body: some View {
+            configuration.label
+                .padding(.horizontal, width == nil ? 28 : 0)
+                .frame(width: width, height: height)
+                .foregroundStyle(isFocused ? .black : .white)
+                .background {
+                    if isFocused {
+                        Capsule()
+                            .fill(.white)
+                            .shadow(color: .black.opacity(0.35), radius: 14, y: 10)
+                    }
+                }
+                .opacity(isEnabled ? 1 : 0.35)
+                // Wide rows lift less, or they'd spill past the panel.
+                .scaleEffect(isFocused ? (configuration.isPressed ? 1.02 : (width == nil ? 1.05 : 1.12)) : 1)
+                .animation(.easeOut(duration: 0.15), value: isFocused)
+                .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+        }
+    }
+}
+#endif
 
 #if os(iOS)
 /// Icon-only buttons sharing one Liquid Glass capsule.

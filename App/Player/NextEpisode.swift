@@ -65,20 +65,21 @@ struct NextEpisodeOverlay: View {
         PlayerCard(still: next.item?.thumbnail ?? next.item?.background,
                    caption: hasEnded ? "Up Next · in \(secondsLeft) s" : "Up Next",
                    title: episodeTitle) {
+            #if os(tvOS)
+            Button("Play Now", action: play)
+                .focused(focus, equals: .play)
+            Button("Cancel", action: cancel)
+                .focused(focus, equals: .cancel)
+            #else
             Button("Play Now", action: play)
                 .buttonStyle(.glassProminent)
                 .foregroundStyle(.black)
-                #if os(tvOS)
-                .focused(focus, equals: .play)
-                #endif
             Button("Cancel", action: cancel)
                 .buttonStyle(.glass)
                 #if os(macOS)
                 .tint(.clear)
                 #endif
-                #if os(tvOS)
-                .focused(focus, equals: .cancel)
-                #endif
+            #endif
         }
         .task(id: hasEnded) {
             guard hasEnded else { return }
@@ -114,16 +115,15 @@ struct FinishedOverlay: View {
         PlayerCard(still: request.item?.thumbnail ?? request.item?.background,
                    caption: "Finished",
                    title: request.item?.title ?? request.title) {
+            #if os(tvOS)
+            Button("Start Over", action: startOver)
+                .focused(focus, equals: .play)
+            Button("Close", action: close)
+                .focused(focus, equals: .cancel)
+            #else
             Button("Start Over", action: startOver)
                 .buttonStyle(.glassProminent)
                 .foregroundStyle(.black)
-                #if os(tvOS)
-                .focused(focus, equals: .play)
-                #endif
-            #if os(tvOS)
-            Button("Close", action: close)
-                .buttonStyle(.glass)
-                .focused(focus, equals: .cancel)
             #endif
         }
     }
@@ -160,15 +160,24 @@ private struct PlayerCard<Buttons: View>: View {
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
                 HStack(spacing: 8) { buttons }
-                    #if !os(tvOS)
+                    #if os(tvOS)
+                    .buttonStyle(PlayerButtonStyle())
+                    // The first button's text lines up with the title; its pill reaches past it.
+                    .padding(.leading, -28)
+                    #else
                     .controlSize(.small)
                     #endif
                     .padding(.top, 4)
             }
             .frame(maxWidth: Self.textWidth, alignment: .leading)
         }
+        #if os(tvOS)
+        .padding(24)
+        .glassEffect(.player, in: .rect(cornerRadius: Self.radius))
+        #else
         .padding(10)
         .glassEffect(in: .rect(cornerRadius: Self.radius))
+        #endif
         #if os(iOS)
         // The top corner is the one the controls leave free; at the bottom the card would
         // cover the play button on a phone in landscape. A portrait phone is too narrow

@@ -49,7 +49,7 @@ cap without fresh source metadata.
 ## Inspect a hitch
 
 During playback, open **More (…) → Playback Info** on iPhone, iPad or Mac. On Apple TV,
-swipe down to the player panel, then open **Info → Playback Info**. This shows the
+swipe down to the buttons beside the title, then open **More → Playback Info**. This shows the
 decoded dimensions, source frame rate, active hardware decoder, video/audio
 bitrates, decoder/output drop counts and buffered seconds. Playback bitrates are
 mpv packet-level estimates between keyframes, not network download speed; see the

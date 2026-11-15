@@ -232,7 +232,8 @@ keeps Movie/Series labels because it can mix both.
   and 140 ms between rows, down from 75 and 250 before the rows went lazy. Keep measurements
   comparable.
 - Unverified: playback and Picture in Picture on tvOS and macOS, HDR output, tvOS display
-  matching, swipe-to-scrub and the scrub preview on screen, physical phone-to-Apple-TV
+  matching, swipe-to-scrub with the Siri Remote (the preview itself is checked in the
+  simulators by setting a scrub position), physical phone-to-Apple-TV
   handoff, Watch Trailer on Apple TV (in the More menu only with the YouTube app installed, opened
   by the undocumented `youtube://watch/<id>`), MDBList against the live service (built from
   its published schema; no key was available), Mac sources rows with AIOStreams' long names, the Search genre
