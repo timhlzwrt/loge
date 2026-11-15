@@ -220,10 +220,12 @@ struct EpisodeCard: View {
                 .opacity(video.isReleased() ? 1 : 0.5)
                 #if os(tvOS)
                 .hoverEffect(.highlight)
+                // Clear of the focus lift, as in Continue Watching.
+                .padding(.bottom, 18)
                 #else
                 .modifier(PointerHighlight())
-                #endif
                 .padding(.bottom, 9)
+                #endif
             if let caption = caption(progress) {
                 Text(caption)
                     .font(.episodeCaption)

@@ -223,7 +223,10 @@ struct TitleLogo: View {
                         .renderingMode(trimmed.isDark ? .template : .original)
                         .resizable().scaledToFit()
                         .foregroundStyle(.white)
-                        .frame(maxHeight: maxHeight)
+                        // No wider than the height allows: a tall logo given more width
+                        // would sit centred in it, away from the text it leads.
+                        .frame(maxWidth: maxHeight * CGFloat(trimmed.image.width) / CGFloat(max(trimmed.image.height, 1)),
+                               maxHeight: maxHeight)
                     if restsOnLettering {
                         drawn
                             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }

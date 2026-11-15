@@ -65,7 +65,7 @@ private struct CollectionTile: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Metrics.liftedCaptionSpacing) {
             CollectionArtwork(collection: collection)
                 .frame(width: width, height: collection.isFestival ? width * 9 / 16 : width * 1.25)
                 .clipShape(.rect(cornerRadius: Metrics.posterRadius))
@@ -158,6 +158,7 @@ struct RecordedCollectionView: View {
                                     PosterTile(meta: film.title, width: nil)
                                         #if os(tvOS)
                                         .hoverEffect(.highlight)
+                                        .padding(.bottom, Metrics.liftedCaptionSpacing - 6)
                                         #endif
                                     Text(film.title.name)
                                         .font(.cardTitle)

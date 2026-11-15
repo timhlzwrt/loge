@@ -16,6 +16,8 @@ struct SourceGroupView<Content: View>: View {
             Text(title)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.white.opacity(0.6))
+                // Room for the first row, which grows into the header when focused.
+                .padding(.bottom, 12)
         }
         #else
         VStack(alignment: .leading, spacing: 6) {

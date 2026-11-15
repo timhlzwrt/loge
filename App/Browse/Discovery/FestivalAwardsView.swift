@@ -42,7 +42,12 @@ struct FestivalAwardsView: View {
                                 Text("All awards").frame(minHeight: 44).contentShape(.rect)
                             }
                             .font(.metaLine)
+                            #if os(tvOS)
+                            // A plain link's focus platter spread over the count and the logo.
+                            .padding(.top, 8)
+                            #else
                             .buttonStyle(.plain)
+                            #endif
                         }
                     }
                     sectionPicker(edition)
@@ -194,6 +199,7 @@ private struct FestivalFilmTile: View {
             #if os(tvOS)
             // Only the poster lifts, as on credit tiles; a card around the text clipped its first letters.
             .hoverEffect(.highlight)
+            .padding(.bottom, Metrics.liftedCaptionSpacing - 8)
             #endif
             Text(film.title).font(.cardTitle).foregroundStyle(.primary).lineLimit(2)
             Text(film.awardSummary).font(.metaLine).foregroundStyle(.secondary).lineLimit(2)

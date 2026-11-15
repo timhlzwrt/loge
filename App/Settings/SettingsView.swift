@@ -378,6 +378,8 @@ private struct AddonRow: View {
                     .foregroundStyle(.secondary)
             }
         }
+        // A tvOS button centres wrapped lines, which left a long description off the row's edge.
+        .multilineTextAlignment(.leading)
         // Full-width rows, so focused rows on tvOS line up instead of hugging their text.
         .frame(maxWidth: .infinity, alignment: .leading)
     }

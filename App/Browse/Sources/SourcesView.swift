@@ -340,13 +340,10 @@ struct SourcesView: View {
                     .frame(maxWidth: .infinity)
             }
             if !failed.isEmpty {
-                HStack {
-                    // Named by host, so the user knows which addon to check.
-                    let hosts = failed.map { URL(string: $0.manifestURL)?.host() ?? $0.name }
-                    Text("Couldn't load sources from \(hosts.formatted(.list(type: .and).locale(.interface))).")
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button("Retry") { retry(failed) }
+                // Named by host, so the user knows which addon to check.
+                let hosts = failed.map { URL(string: $0.manifestURL)?.host() ?? $0.name }
+                retryRow("Couldn't load sources from \(hosts.formatted(.list(type: .and).locale(.interface))).") {
+                    retry(failed)
                 }
             }
             if groups.isEmpty && !isLoading && failed.isEmpty {
@@ -355,15 +352,30 @@ struct SourcesView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     // An aggregator can come back empty when its own sources time out.
-                    HStack {
-                        Text("No sources found.")
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Button("Retry") { retry(providers) }
-                    }
+                    retryRow("No sources found.") { retry(providers) }
                 }
             }
         }
+    }
+
+    private func retryRow(_ message: String, retry: @escaping () -> Void) -> some View {
+        #if os(tvOS)
+        // A list row with a button focuses as a whole; outside the label, the message
+        // would stay white on the focused white row.
+        Button(action: retry) {
+            HStack {
+                Text(message).foregroundStyle(.secondary)
+                Spacer()
+                Text("Retry")
+            }
+        }
+        #else
+        HStack {
+            Text(message).foregroundStyle(.secondary)
+            Spacer()
+            Button("Retry", action: retry)
+        }
+        #endif
     }
 
     /// Rows per resolution before the rest fold away; the sort already puts the best first.
