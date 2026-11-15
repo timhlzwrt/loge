@@ -181,6 +181,10 @@ keeps Movie/Series labels because it can mix both.
 - The Mac player window is a principal window, since an associated one can't go full screen.
 - The iOS timeline is a `Slider` to accessibility (10 s steps, spoken position), so FlowTests
   drag it rather than tap it.
+- `StreamWarmup` GETs the one link Play would autoplay (from the title page) or Up Next found,
+  without following the redirect: Comet resolves its link on the first request (most of the
+  time to the first frame) and keeps it an hour. Never a source marked uncached (that starts a
+  debrid download), never the whole list; the player still opens the addon's URL, not a saved one.
 - Resuming past a shorter source's end seeks to 30 s before it instead of finishing; opening
   a stream fails with Try Again after 20 s.
 - Navigation is the four tabs (Home, My Lists, Search, Settings) with `.tabBarOnly`, no sidebar
