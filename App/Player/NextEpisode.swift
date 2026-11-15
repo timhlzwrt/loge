@@ -19,6 +19,8 @@ enum NextEpisode {
             ?? streams.first(where: { $0.playbackURL != nil }),
             let url = stream.playbackURL
         else { return nil }
+        // Found a minute before it's offered, so the addon has resolved the link by Play Now.
+        StreamWarmup.shared.warm(stream)
 
         let next = item.episode(video)
         return PlaybackRequest(

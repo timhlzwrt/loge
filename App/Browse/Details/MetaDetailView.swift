@@ -238,8 +238,24 @@ struct MetaDetailView: View {
         // being read; the sources screen picks up the same request.
         .task(id: play?.route.id) {
             guard let route = play?.route else { return }
-            for provider in store.addons.streamProviders(type: route.type, id: route.id) {
+            let providers = store.addons.streamProviders(type: route.type, id: route.id)
+            for provider in providers {
                 provider.prefetchStreams(type: route.type, id: route.id)
+            }
+            // The source Play would start by itself, chosen as the sources screen's autoplay
+            // chooses it, is warmed so its addon has the link resolved by then. Without a
+            // remembered source Play leaves the choice to the list, so nothing is.
+            guard let remembered = library.sources[route.item.metaID],
+                  let provider = providers.first(where: { $0.id == remembered.providerURL }),
+                  let streams = try? await provider.streams(type: route.type, id: route.id),
+                  !Task.isCancelled
+            else { return }
+            let allowed = streams.filter {
+                StreamDetails($0).permitsAutomaticPlayback(
+                    type: route.type, maximumFileSize: PlaybackPreferences.maximumAutomaticFileSize)
+            }
+            if let stream = SourceSelection.continuing(remembered, itemID: route.id, in: allowed) {
+                StreamWarmup.shared.warm(stream)
             }
         }
     }
