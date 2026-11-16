@@ -15,16 +15,19 @@ public final class LibraryStore {
     public nonisolated static let minimumResumePosition: Double = 30
     /// Keeps the stored progress small; the oldest entries are dropped first.
     nonisolated static let maximumEntries = 500
+    static let recentlyWatchedLimit = 12
 
     private static let progressKey = "watchProgress"
     private static let savedKey = "savedTitles"
     private static let sourcesKey = "lastSources"
-    private static let listsKey = "titleLists"
+    /// Custom lists, which older builds saved beside Watch Later; read once to fold them into it.
+    private static let retiredListsKey = "titleLists"
     private static let activeProfileKey = "libraryActiveProfile"
     private static let archiveKey = "playbackSyncArchive"
     private static let removalsKey = "playbackSyncRemovals"
     private static let titleRemovalsKey = "playbackSyncTitleRemovals"
     private static let resumeFractionsKey = "playbackSyncResumeFractions"
+    private static let recentlyWatchedHiddenKey = "recentlyWatchedHidden"
 
     public private(set) var progress: [String: WatchProgress] = [:]
     /// Whose library this is: nil for this device's own, otherwise a sync account's. Set by
@@ -34,10 +37,11 @@ public final class LibraryStore {
     @ObservationIgnored private var playbackRemovals: [String: Date] = [:]
     @ObservationIgnored private var playbackTitleRemovals: [String: Date] = [:]
     @ObservationIgnored private var remoteResumeFractions: [String: Double] = [:]
-    /// Watch Later, newest first: the one list older builds saved, so it needs no migration.
+    /// Watch Later, newest first, then what custom lists held when they were folded into it.
     public private(set) var saved: [MetaPreview] = []
-    /// The user's own lists, oldest first.
-    public private(set) var lists: [TitleList] = []
+    /// Titles taken out of Recently Watched, by movie or series ID, with when. Kept on this
+    /// device only: it hides a row entry, and says nothing about what was watched.
+    private var recentlyWatchedHidden: [String: Date] = [:]
     /// Keyed by movie or series ID.
     public private(set) var sources: [String: RememberedSource] = [:]
 
@@ -56,7 +60,6 @@ public final class LibraryStore {
         guard id != activeProfileID else { return }
         saveProgress()
         save(saved, forKey: Self.savedKey)
-        save(lists, forKey: Self.listsKey)
         save(sources, forKey: Self.sourcesKey)
         activeProfileID = id
         if let id { defaults.set(id, forKey: Self.activeProfileKey) }
@@ -68,12 +71,13 @@ public final class LibraryStore {
     private func loadProfileData() {
         progress = Self.decode(data(forKey: Self.progressKey)) ?? [:]
         saved = Self.decode(data(forKey: Self.savedKey)) ?? []
-        lists = Self.decode(data(forKey: Self.listsKey)) ?? []
+        foldRetiredLists()
         sources = Self.decode(data(forKey: Self.sourcesKey)) ?? [:]
         playbackArchive = Self.decode(data(forKey: Self.archiveKey)) ?? [:]
         playbackRemovals = Self.decode(data(forKey: Self.removalsKey)) ?? [:]
         playbackTitleRemovals = Self.decode(data(forKey: Self.titleRemovalsKey)) ?? [:]
         remoteResumeFractions = Self.decode(data(forKey: Self.resumeFractionsKey)) ?? [:]
+        recentlyWatchedHidden = Self.decode(data(forKey: Self.recentlyWatchedHiddenKey)) ?? [:]
     }
 
     public var playbackSyncSnapshot: PlaybackSyncSnapshot {
@@ -81,7 +85,7 @@ public final class LibraryStore {
                              removals: playbackRemovals, titleRemovals: playbackTitleRemovals)
     }
 
-    /// Validate everything before replacing progress. Private sources and lists are unaffected.
+    /// Validate everything before replacing progress. Private sources and Watch Later are unaffected.
     public func applyPlaybackSyncSnapshot(_ snapshot: PlaybackSyncSnapshot) throws {
         // Most syncs bring nothing new; replacing progress anyway would redraw every view that
         // reads it and write it all to storage again.
@@ -157,6 +161,40 @@ public final class LibraryStore {
             return ($0.item.season ?? 0, $0.item.episode ?? 0, $0.item.id)
                 > ($1.item.season ?? 0, $1.item.episode ?? 0, $1.item.id)
         }
+    }
+
+    /// The most recently finished titles, newest first, each by its latest finished movie or
+    /// episode. Leaves out what Continue Watching shows: titles in progress, and `excluding`,
+    /// for series with a new episode out.
+    public func recentlyWatched(excluding metaIDs: Set<String> = []) -> [WatchProgress] {
+        let excluded = metaIDs.union(continueWatching.map(\.item.metaID))
+        var latest: [String: WatchProgress] = [:]
+        for entry in progress.values where entry.isFinished && Self.isLater(entry, than: latest[entry.item.metaID]) {
+            latest[entry.item.metaID] = entry
+        }
+        return Array(latest.values
+            .filter { entry in
+                !excluded.contains(entry.item.metaID)
+                    && recentlyWatchedHidden[entry.item.metaID].map { entry.updatedAt > $0 } ?? true
+            }
+            .sorted { ($0.updatedAt, $0.item.metaID) > ($1.updatedAt, $1.item.metaID) }
+            .prefix(Self.recentlyWatchedLimit))
+    }
+
+    /// Takes a title out of Recently Watched until it's finished again; its progress and
+    /// watched marks stay.
+    public func hideFromRecentlyWatched(metaID: String, at date: Date = .now) {
+        recentlyWatchedHidden[metaID] = date
+        // Only entries that still hide something are kept: a finished title, not finished again
+        // since. Progress is capped at `maximumEntries`, so this is too.
+        var lastFinished: [String: Date] = [:]
+        for entry in progress.values where entry.isFinished {
+            lastFinished[entry.item.metaID] = max(lastFinished[entry.item.metaID] ?? entry.updatedAt, entry.updatedAt)
+        }
+        recentlyWatchedHidden = recentlyWatchedHidden.filter { metaID, hiddenAt in
+            lastFinished[metaID].map { $0 <= hiddenAt } ?? false
+        }
+        save(recentlyWatchedHidden, forKey: Self.recentlyWatchedHiddenKey)
     }
 
     /// Checks one title's resume state without building and sorting Continue Watching.
@@ -278,51 +316,29 @@ public final class LibraryStore {
         save(saved, forKey: Self.savedKey)
     }
 
-    // MARK: Lists
-
-    /// A blank name becomes "Untitled List". Returns the new list's ID.
-    @discardableResult
-    public func createList(named name: String) -> TitleList.ID {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let list = TitleList(name: trimmed.isEmpty ? "Untitled List" : trimmed)
-        lists.append(list)
-        save(lists, forKey: Self.listsKey)
-        return list.id
+    /// Watch Later became the only list: what custom lists held follows its own titles, in
+    /// the lists' order and without duplicates. Each profile has its own, folded when loaded.
+    private func foldRetiredLists() {
+        let key = Self.storageKey(Self.retiredListsKey, profile: activeProfileID)
+        // Undecodable lists stay stored, as other library data does, for a fixed build to fold.
+        guard let lists: [RetiredList] = Self.decode(defaults.data(forKey: key)) else { return }
+        var ids = Set(saved.map(\.id))
+        saved += lists.flatMap(\.titles).filter { ids.insert($0.id).inserted }
+        save(saved, forKey: Self.savedKey)
+        defaults.removeObject(forKey: key)
     }
 
-    public func renameList(_ id: TitleList.ID, to name: String) {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let index = lists.firstIndex(where: { $0.id == id }) else { return }
-        lists[index].name = trimmed
-        save(lists, forKey: Self.listsKey)
-    }
-
-    public func deleteList(_ id: TitleList.ID) {
-        lists.removeAll { $0.id == id }
-        save(lists, forKey: Self.listsKey)
-    }
-
-    public func isInList(_ metaID: String, list id: TitleList.ID) -> Bool {
-        lists.first { $0.id == id }?.titles.contains { $0.id == metaID } == true
-    }
-
-    public func toggle(_ meta: MetaPreview, inList id: TitleList.ID) {
-        guard let index = lists.firstIndex(where: { $0.id == id }) else { return }
-        if let position = lists[index].titles.firstIndex(where: { $0.id == meta.id }) {
-            lists[index].titles.remove(at: position)
-        } else {
-            lists[index].titles.insert(meta, at: 0)
-        }
-        save(lists, forKey: Self.listsKey)
+    private struct RetiredList: Decodable {
+        var titles: [MetaPreview]
     }
 
     // MARK: Artwork
 
-    /// Titles with a saved entry that can't be drawn: a list entry without a poster, or a
+    /// Titles with a saved entry that can't be drawn: a Watch Later entry without a poster, or a
     /// Continue Watching entry without a backdrop or poster. Entries keep the artwork they
     /// were saved with, and catalogs, other devices' progress and older builds can leave it out.
     public var titlesMissingArtwork: [MetaPreview] {
-        let listed = (saved + lists.flatMap(\.titles)).filter { $0.poster == nil }
+        let listed = saved.filter { $0.poster == nil }
         let watching = continueWatching.map(\.item)
             .filter { $0.background == nil || $0.poster == nil }
             .map { MetaPreview(id: $0.metaID, type: $0.type, name: $0.title) }
@@ -333,16 +349,12 @@ public final class LibraryStore {
     /// Fills in artwork missing from this title's entries everywhere in the library.
     /// Artwork already there stays: it's what the user saw when they saved it.
     public func fillArtwork(from meta: Meta) {
-        let before = (saved: saved, lists: lists, progress: progress)
+        let before = (saved: saved, progress: progress)
         saved = saved.map { $0.id == meta.id ? $0.fillingArtwork(from: meta) : $0 }
-        for index in lists.indices {
-            lists[index].titles = lists[index].titles.map { $0.id == meta.id ? $0.fillingArtwork(from: meta) : $0 }
-        }
         for (id, entry) in progress where entry.item.metaID == meta.id {
             progress[id]?.item = entry.item.fillingArtwork(from: meta)
         }
         if saved != before.saved { save(saved, forKey: Self.savedKey) }
-        if lists != before.lists { save(lists, forKey: Self.listsKey) }
         if progress != before.progress { save(progress, forKey: Self.progressKey) }
     }
 

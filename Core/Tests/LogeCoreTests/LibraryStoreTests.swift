@@ -146,6 +146,60 @@ struct LibraryStoreTests {
         #expect(store.continueWatching.map(\.item.id) == ["tt9:1:3"])
     }
 
+    @Test func recentlyWatchedShowsEachSeriesByItsLatestFinishedEpisode() {
+        let store = LibraryStore(defaults: defaults)
+        store.markWatched([episode(1, 1), episode(1, 2)], at: t0)
+        store.record(movie, position: 5900, duration: 6000, at: t0 + 10)
+        store.record(episode(1, 3), position: 10, duration: 2000, at: t0 + 20)
+
+        #expect(store.recentlyWatched().map(\.item.id) == ["tt1", "tt9:1:2"])
+    }
+
+    @Test func recentlyWatchedLeavesOutWhatContinueWatchingShows() {
+        let store = LibraryStore(defaults: defaults)
+        store.record(episode(1, 1), position: 1990, duration: 2000, at: t0)
+        store.record(episode(1, 2), position: 300, duration: 2000, at: t0 + 10)
+        let other = WatchItem(id: "tt5:1:1", type: "series", metaID: "tt5", title: "New episode out")
+        store.markWatched([movie, other], at: t0 + 20)
+
+        #expect(store.recentlyWatched(excluding: ["tt5"]).map(\.item.id) == ["tt1"])
+    }
+
+    @Test func recentlyWatchedIsTheLatestTwelveNewestFirst() {
+        let store = LibraryStore(defaults: defaults)
+        for index in 0..<20 {
+            let item = WatchItem(id: "tt\(index)", type: "movie", metaID: "tt\(index)", title: "")
+            store.markWatched([item], at: t0 + Double(index))
+        }
+
+        #expect(store.recentlyWatched().map(\.item.id) == (8..<20).reversed().map { "tt\($0)" })
+    }
+
+    @Test func hidingFromRecentlyWatchedKeepsWatchedMarksUntilFinishedAgain() {
+        let store = LibraryStore(defaults: defaults)
+        store.markWatched([movie], at: t0)
+        store.hideFromRecentlyWatched(metaID: movie.metaID, at: t0 + 10)
+
+        let restored = LibraryStore(defaults: defaults)
+        #expect(restored.recentlyWatched().isEmpty)
+        #expect(restored.isWatched(movie.id))
+        restored.record(movie, position: 5900, duration: 6000, at: t0 + 20)
+        #expect(restored.recentlyWatched().map(\.item.id) == ["tt1"])
+    }
+
+    @Test func recentlyWatchedHidesPerProfile() {
+        let store = LibraryStore(defaults: defaults)
+        store.markWatched([movie], at: t0)
+        store.activateProfile(id: "account")
+        store.markWatched([movie], at: t0)
+        store.hideFromRecentlyWatched(metaID: movie.metaID, at: t0 + 10)
+        store.activateProfile(id: nil)
+
+        #expect(store.recentlyWatched().map(\.item.id) == ["tt1"])
+        store.activateProfile(id: "account")
+        #expect(store.recentlyWatched().isEmpty)
+    }
+
     @Test func dropsOldestEntriesBeyondTheLimit() {
         let store = LibraryStore(defaults: defaults)
         for index in 0...LibraryStore.maximumEntries {
@@ -207,48 +261,31 @@ struct LibraryStoreTests {
         let store = LibraryStore(defaults: defaults)
         #expect(store.saved.map(\.id) == ["tt9", "tt1", "ch1"])
         #expect(store.saved.first?.poster == "https://img/9")
-        #expect(store.lists.isEmpty)
-
-        // Adding a custom list leaves My List as it was.
-        store.toggle(MetaPreview(id: "tt5", type: "movie", name: "Other"), inList: store.createList(named: "Later"))
-        #expect(LibraryStore(defaults: defaults).saved.map(\.id) == ["tt9", "tt1", "ch1"])
     }
 
-    @Test func customListsPersistTheirTitlesNewestFirst() {
+    @Test func customListsFoldIntoWatchLaterOnce() {
+        defaults.set(Data(#"[{"id":"tt1","type":"movie","name":"Kept"}]"#.utf8), forKey: "savedTitles")
+        // As older builds wrote them: oldest list first, each newest first, a title in two of them.
+        let lists = #"[{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","name":"Horror","titles":[{"id":"tt3","type":"movie","name":"Three"},{"id":"tt1","type":"movie","name":"Kept"}]},"#
+            + #"{"id":"7F9619FF-8B86-D011-B42D-00C04FC964FF","name":"Empty","titles":[]},"#
+            + #"{"id":"8F9619FF-8B86-D011-B42D-00C04FC964FF","name":"Shows","titles":[{"id":"tt4","type":"series","name":"Four"},{"id":"tt3","type":"movie","name":"Three"}]}]"#
+        defaults.set(Data(lists.utf8), forKey: "titleLists")
+
         let store = LibraryStore(defaults: defaults)
-        let horror = store.createList(named: "  Horror  ")
-        let empty = store.createList(named: " ")
-        let first = MetaPreview(id: "tt1", type: "movie", name: "First")
-        let second = MetaPreview(id: "tt2", type: "series", name: "Second")
-        store.toggle(first, inList: horror)
-        store.toggle(second, inList: horror)
+        #expect(store.saved.map(\.id) == ["tt1", "tt3", "tt4"])
+        #expect(defaults.data(forKey: "titleLists") == nil)
 
-        var reloaded = LibraryStore(defaults: defaults)
-        #expect(reloaded.lists.map(\.name) == ["Horror", "Untitled List"])
-        #expect(reloaded.lists.first?.titles.map(\.id) == ["tt2", "tt1"])
-        #expect(reloaded.isInList("tt1", list: horror))
-        #expect(!reloaded.isInList("tt1", list: empty))
-        #expect(!reloaded.isSaved("tt1"))
-
-        store.toggle(first, inList: horror)
-        store.renameList(horror, to: "Scary")
-        store.renameList(empty, to: "")
-        reloaded = LibraryStore(defaults: defaults)
-        #expect(!reloaded.isInList("tt1", list: horror))
-        #expect(reloaded.lists.map(\.name) == ["Scary", "Untitled List"])
-
-        store.deleteList(horror)
-        #expect(LibraryStore(defaults: defaults).lists.map(\.id) == [empty])
+        // Once folded, removing a title doesn't bring it back.
+        store.toggleSaved(MetaPreview(id: "tt3", type: "movie", name: "Three"))
+        #expect(LibraryStore(defaults: defaults).saved.map(\.id) == ["tt1", "tt4"])
     }
 
     @Test func fillsArtworkMissingFromSavedEntries() async throws {
         let store = LibraryStore(defaults: defaults)
-        let list = store.createList(named: "Later")
         let bare = MetaPreview(id: "tt9", type: "series", name: "Show")
         let drawn = MetaPreview(id: "tt1", type: "movie", name: "Movie", poster: "https://img/own")
         store.toggleSaved(bare)
         store.toggleSaved(drawn)
-        store.toggle(bare, inList: list)
         store.record(episode(1, 2), position: 300, duration: 2000, at: t0)
         #expect(store.titlesMissingArtwork.map(\.id) == ["tt9"])
 
@@ -270,7 +307,7 @@ struct LibraryStoreTests {
         let reloaded = LibraryStore(defaults: defaults)
         #expect(reloaded.titlesMissingArtwork.isEmpty)
         #expect(reloaded.saved.map(\.poster) == ["https://img/own", "https://img/poster"])
-        #expect(reloaded.lists.first?.titles.first?.background == "https://img/backdrop")
+        #expect(reloaded.saved.last?.background == "https://img/backdrop")
         let item = try #require(reloaded.progress["tt9:1:2"]?.item)
         #expect(item.poster == "https://img/poster")
         #expect(item.thumbnail == "https://img/still")
