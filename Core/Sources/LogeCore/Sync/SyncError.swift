@@ -4,7 +4,7 @@ public enum SyncError: Error, Equatable, LocalizedError, Sendable {
     case invalidEndpoint, invalidData, invalidKey, decryptionFailed, unsupportedVersion
     case unauthorized, conflict, tooLarge, invalidResponse, unavailable
     case httpStatus(Int)
-    case wrongCode, notReady, overlappingGroup, recoveryRequired, expiredInvitation
+    case wrongCode, notReady, recoveryRequired, expiredInvitation
     case keychain(Int32)
 
     public var errorDescription: String? {
@@ -20,9 +20,8 @@ public enum SyncError: Error, Equatable, LocalizedError, Sendable {
         case .invalidResponse: "The sync server didn't return a compatible response."
         case .unavailable: "Couldn't reach the sync server. Your local setup is unchanged."
         case .httpStatus(let status): "The sync server responded with HTTP \(status)."
-        case .wrongCode: "Paste the complete account, device or sharing code for this server."
+        case .wrongCode: "Paste the complete account or device code for this server."
         case .notReady: "Finish connecting and resolve pending changes first."
-        case .overlappingGroup: "A category can belong to one shared setup. Leave its current shared setup first."
         case .recoveryRequired:
             """
                 This account already has encrypted data. Enter its recovery key and retry the same code, or \

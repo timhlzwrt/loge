@@ -69,8 +69,6 @@ private struct BuildInfo {
 /// Where titles, artwork and timings come from. Kept here rather than under every
 /// picture and list, which once carried their own source lines.
 struct DataSourcesView: View {
-    @State private var editions: [FestivalEdition] = []
-    @State private var festivalSourceFailure = false
     var body: some View {
         SettingsPage("Data Sources") {
             Section {
@@ -81,7 +79,7 @@ struct DataSourcesView: View {
                         .frame(width: 120, height: 16)
                         .foregroundStyle(.white)
                         .accessibilityLabel("TMDB")
-                    Text("Details, filmographies, portraits, popular directors and member reviews, once connected.")
+                    Text("Details, filmographies and portraits, once connected.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                     Text("This product uses the TMDB API but is not endorsed or certified by TMDB.")
@@ -102,22 +100,7 @@ struct DataSourcesView: View {
                        url: "https://mdblist.com")
                 source("Letterboxd via Stremboxd", "Popular and all-time lists on Home and in genres.",
                        url: "https://letterboxd.com")
-                source("Wikidata", "Recorded historical festival winners and selected directors’ films. Records may be incomplete.",
-                       url: "https://www.wikidata.org")
             } header: { SettingsHeader("Titles") }
-
-            Section {
-                ForEach(editions, id: \.festival) { edition in
-                    ForEach(edition.sources, id: \.absoluteString) { url in
-                        source("\(edition.festival.name) · \(url.host() ?? "Source")",
-                               "\(edition.coverage) Checked \(edition.checkedOn).", url: url.absoluteString)
-                    }
-                }
-                if festivalSourceFailure {
-                    Text("The bundled festival source list couldn't be read.")
-                        .foregroundStyle(.secondary)
-                }
-            } header: { SettingsHeader("2026 Festival Awards") }
 
             Section {
                 source("TheIntroDB", "Intro, recap and credits timings for the skip buttons.",
@@ -126,19 +109,6 @@ struct DataSourcesView: View {
                     .foregroundStyle(.secondary)
             } header: { SettingsHeader("Playback") }
 
-            Section {
-                ForEach(FilmCollection.allCases) { collection in
-                    // The licences of the cropped portraits ask for the change to be noted.
-                    let credit = collection.isFestival
-                        ? collection.artworkCredit
-                        : "Photo: \(collection.artworkCredit) · Cropped"
-                    source(collection.name, credit, url: collection.artworkCreditURL.absoluteString)
-                }
-            } header: { SettingsHeader("Images") }
-        }
-        .task {
-            do { editions = try FestivalEdition.all() }
-            catch { festivalSourceFailure = true }
         }
     }
 

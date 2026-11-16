@@ -14,4 +14,10 @@ struct SourcesRoute: Hashable, Identifiable {
 
     var type: String { item.type }
     var id: String { item.id }
+
+    /// What bitrates are estimated over: the length of the file as last played here beats
+    /// the listed runtime, which is rounded. Shared so warming picks the source Play will.
+    @MainActor func bitrateRuntime(in library: LibraryStore) -> TimeInterval? {
+        library.progress[id].flatMap { $0.isEstimated == true ? nil : $0.duration } ?? runtime
+    }
 }

@@ -542,7 +542,7 @@ final class PlaybackSession {
         let episodes = episodes
         tasks.append(Task {
             do {
-                let found = try await NextEpisode.request(after: current, episodes: episodes)
+                let found = try await NextEpisode.request(after: current, episodes: episodes, runtime: duration)
                 // The episode may have changed while the lookup ran.
                 guard self.current == current else { return }
                 self.next = found

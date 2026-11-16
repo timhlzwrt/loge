@@ -4,7 +4,7 @@ import os
 
 private let log = Logger(subsystem: "li.tjh.MediaApp", category: "library")
 
-/// An episode with the day it airs or aired, carrying its series' artwork.
+/// An episode with the day it aired, carrying its series' artwork.
 public struct ScheduledEpisode: Sendable, Equatable, Identifiable {
     public var item: WatchItem
     public var date: Date
@@ -12,10 +12,9 @@ public struct ScheduledEpisode: Sendable, Equatable, Identifiable {
     public var id: String { item.id }
 }
 
-/// When the series being watched get their next episodes: the episode lists of the series
-/// in the library, looked up through the addons and kept in memory. What's new or upcoming
-/// is worked out from them against the library, so it follows what's watched without
-/// another request.
+/// When the series being watched got their latest episodes: the episode lists of the series
+/// in the library, looked up through the addons and kept in memory. What's new is worked out
+/// from them against the library, so it follows what's watched without another request.
 @MainActor @Observable
 public final class EpisodeSchedule {
     /// Long-running viewers have hundreds of series in their history; the recent ones are
@@ -25,21 +24,13 @@ public final class EpisodeSchedule {
     static let lifetime: TimeInterval = 6 * 60 * 60
 
     /// Each series' episodes in viewing order, without specials. Written only when they
-    /// change: Continue Watching and Upcoming on Home are rebuilt from them.
+    /// change: Continue Watching on Home is rebuilt from them.
     private var episodes: [String: [Video]] = [:]
     @ObservationIgnored private var fetchedAt: [String: Date] = [:]
     /// Being looked up, so overlapping refreshes (launch and Home appearing) ask once.
     @ObservationIgnored private var inFlight = Set<String>()
 
     public init() {}
-
-    #if DEBUG
-    /// UI checks show a series' schedule without the network.
-    public func showForTesting(_ videos: [Video], of metaID: String) {
-        episodes[metaID] = LibraryStore.playOrder(videos)
-        fetchedAt[metaID] = .now
-    }
-    #endif
 
     /// Looks up the episodes of the series being followed through the installed addons.
     /// - Parameter force: Also those looked up recently, for pull-to-refresh.
@@ -60,12 +51,15 @@ public final class EpisodeSchedule {
 
     func refresh(for library: LibraryStore, force: Bool = false, at now: Date = .now,
                  lookup: (_ id: String) async -> Meta?) async {
-        let followed = library.followedSeries.prefix(Self.maximumSeries).map(\.item.metaID)
+        let series = library.followedSeries.prefix(Self.maximumSeries)
+        let followed = series.map(\.item.metaID)
         if episodes.keys.contains(where: { !followed.contains($0) }) {
             episodes = episodes.filter { followed.contains($0.key) }
         }
         fetchedAt = fetchedAt.filter { followed.contains($0.key) }
-        for id in followed where !inFlight.contains(id) {
+        // Only a series whose latest episode was finished can have a new one waiting. The
+        // others keep what was looked up, for when that episode is finished.
+        for id in series.filter(\.isFinished).map(\.item.metaID) where !inFlight.contains(id) {
             if !force, let known = fetchedAt[id], now.timeIntervalSince(known) < Self.lifetime { continue }
             guard !Task.isCancelled else { return }
             inFlight.insert(id)
@@ -88,15 +82,5 @@ public final class EpisodeSchedule {
             return ScheduledEpisode(item: latest.item.episode(videos[index + 1]), date: date)
         }
         .sorted { $0.date > $1.date }
-    }
-
-    /// The next episode of each series that hasn't aired yet, soonest first.
-    public func upcoming(in library: LibraryStore, at now: Date = .now) -> [ScheduledEpisode] {
-        library.followedSeries.compactMap { latest -> ScheduledEpisode? in
-            guard let next = episodes[latest.item.metaID]?.first(where: { !$0.isReleased(asOf: now) }),
-                  let date = next.releaseDate else { return nil }
-            return ScheduledEpisode(item: latest.item.episode(next), date: date)
-        }
-        .sorted { $0.date < $1.date }
     }
 }

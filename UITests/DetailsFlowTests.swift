@@ -29,7 +29,7 @@ final class DetailsFlowTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Awards"].exists)
         XCTAssertFalse(app.staticTexts["Cast & Crew"].exists)
         app.swipeUp()
-        XCTAssertTrue(app.staticTexts["Connect TMDB in Settings for cast and crew, reviews and recommendations."]
+        XCTAssertTrue(app.staticTexts["Connect TMDB in Settings for cast and crew and recommendations."]
             .waitForExistence(timeout: 5))
         screenshot("details-movie-information")
     }

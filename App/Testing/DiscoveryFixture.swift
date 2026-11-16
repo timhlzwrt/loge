@@ -59,19 +59,8 @@ enum DiscoveryFixture {
                 .background(Color.canvas)
                 .navigationTitle("Library")
             }
-        // A new episode beside something half-watched, and two series with an episode still to air.
-        case "upcoming":
-            ScrollView {
-                VStack(alignment: .leading, spacing: 40) {
-                    ContinueWatchingRow()
-                    UpcomingRow()
-                }
-                .padding(.vertical, 24)
-            }
-            .environment(upcoming.library)
-            .environment(upcoming.schedule)
-            .background(Color.canvas)
-            .navigationTitle("Upcoming")
+        case "my-lists":
+            if let library { MyListView().environment(library) }
         case "recommended":
             HomeView()
                 .environment(recommendationLibrary)
@@ -90,8 +79,6 @@ enum DiscoveryFixture {
             MetaDetailView(preview: MetaPreview(id: "tt2543164", type: "movie", name: "Arrival"))
         case "person":
             PersonView(route: PersonRoute(person: Person(name: "Christopher Nolan", roles: [.director], tmdbID: 525)))
-        case "festival":
-            FilmCollectionView(collection: .sundance, client: FilmCollectionClient(session: session))
         // Sources from `Tools/test-addon.py --port 8769 --many --delay 5`: twelve 1080p rows that
         // fold, and while they're awaited, autoplay waiting for a remembered source they don't list.
         case "sources-folded", "sources-autoplay", "sources-empty", "sources-empty-sheet":
@@ -102,26 +89,8 @@ enum DiscoveryFixture {
         // The first featured series, started at S2, E3: its carousel page says where Play resumes.
         case "carousel-resume":
             CarouselResumeFixture()
-        case "directors":
-            ScrollView {
-                if ProcessInfo.processInfo.environment["DISCOVERY_BASELINE"] == "1" {
-                    DiscoveryCollectionRow(title: "Popular Directors", collections: FilmCollection.directors)
-                } else {
-                    PopularDirectorsRow()
-                }
-            }
-            .background(Color.canvas)
-            .navigationTitle("Directors")
         default:
-            ScrollView {
-                VStack(alignment: .leading, spacing: 40) {
-                    ReviewsSection(preview: title)
-                    PopularDirectorsRow()
-                }
-                .padding(.vertical, 24)
-            }
-            .background(Color.canvas)
-            .navigationTitle("Discovery")
+            ContentUnavailableView("No fixture screen named \"\(screenName ?? "")\"", systemImage: "questionmark.square.dashed")
         }
     }
 
@@ -203,66 +172,6 @@ enum DiscoveryFixture {
         (1447570, "Joel Tobman", "Grain Farmer (uncredited)", nil),
     ]
 
-    /// Nine member reviews over two pages, shaped like TMDB's: long Markdown with blank lines,
-    /// HTML breaks, a link, a missing rating and a long user name.
-    nonisolated static func reviews(page: Int) -> String {
-        let entries: [(id: String, author: String, rating: String, content: String)] = page == 1 ? [
-            ("fixture-review", "Film viewer", "8",
-             "A patient, ambitious journey that gives its enormous images a human scale. The quiet scenes between Cooper and Murph are what stayed with me.\\n\\nThe ending invites discussion, but the film earns its sense of wonder. It asks for patience in its first hour, with the farm, the dust and the school meeting about the moon landings, and it pays that patience back once the ship leaves. I would have cut a few of the explanations shouted across the cockpit, and the organ is loud enough to rattle the seats, but neither stopped me from going back to see it again the following week. On the second visit I watched the people around me more than the screen, and nobody reached for a phone during the last hour, which says more than I can. This text was written for the offline UI test."),
-            ("fixture-review-2", "Second viewer", "6",
-             "Long, loud and sentimental, though the docking sequence alone is worth it. This text was written for the offline UI test."),
-            ("fixture-review-3", "Third viewer", "9",
-             "Only listed behind All reviews. This text was written for the offline UI test."),
-            ("fixture-review-4", "cinephile_from_the_back_row_1987", "null",
-             "**Spoilers below.**<br><br>I went in expecting a space film and came out having watched a film about a father who keeps missing his daughter's life, one video message at a time. The Miller's planet sequence is the clearest example: an hour there costs seven years back home, and the film lets you feel each of them when Cooper sits down in front of the screen.\\n\\nThe score does a lot of the work, sometimes too much; in the dust-storm scenes it drowns out dialogue I'd have liked to hear. The science has been argued over [at length](https://www.themoviedb.org/movie/157336), and I'm not the one to settle it.\\n\\nWhat I keep coming back to is how physical it all is: the corn, the dust on the plates, the robots that look like slabs of metal and turn out to be the funniest characters in it.\\n\\nThe docking scene deserves its reputation. There's no music for the first few seconds, only the sound inside the cabin, and then the organ comes in as the ship starts to spin. I've seen people in the row in front of me lean with it. It's the rare blockbuster set piece where you understand exactly what's at stake and exactly what has to happen, and the film doesn't cut away to explain it.\\n\\nThe bookshelf is where people split. I think it works because the film has been setting it up from the first scene, with the books falling and the dust on the floor; others find it too neat. Either way, it's the emotional point the whole film was heading for, and McConaughey plays it as a man who has run out of other options.\\n\\nOn a second viewing the first hour plays better than I remembered. Knowing where it goes, the scenes on the farm read as goodbyes, and the baseball game with the dust storm coming in over the field is one of the best things in it.\\n\\nIf you can, see it on the largest screen near you. The IMAX sequences were shot for it, and on a television the black bars come and go as the aspect ratio changes, which takes some getting used to.\\n\\nOne more thing, for anyone who hasn't seen it yet: go in knowing as little as you can. The trailers give away more than they should, and the film works best when the third act arrives without warning. It's long, and I'd still sit through all of it again tomorrow. This text was written for the offline UI test."),
-            ("fixture-review-5", "Ana", "7",
-             "Beautiful and a bit too long. This text was written for the offline UI test."),
-            ("fixture-review-6", "Rewatcher", "10",
-             "Third time in a cinema and it still works. This text was written for the offline UI test."),
-        ] : [
-            ("fixture-review-7", "Late reader", "5", "Page two, loaded by More reviews. This text was written for the offline UI test."),
-            ("fixture-review-8", "Weekend viewer", "8", "Page two again. This text was written for the offline UI test."),
-            ("fixture-review-9", "Last one", "null", "The last review in the fixture. This text was written for the offline UI test."),
-        ]
-        return entries.map {
-            #"{"id":"\#($0.id)","author":"\#($0.author)","author_details":{"rating":\#($0.rating)},"content":"\#($0.content)","#
-                + #""created_at":"2026-01-15T12:00:00Z","url":"https://www.themoviedb.org/review/\#($0.id)"}"#
-        }.joined(separator: ",")
-    }
-
-    private static let upcoming: (library: LibraryStore, schedule: EpisodeSchedule) = {
-        let suite = "loge.discovery-upcoming-fixture"
-        let defaults = UserDefaults(suiteName: suite) ?? .standard
-        defaults.removePersistentDomain(forName: suite)
-        let library = LibraryStore(defaults: defaults)
-        let schedule = EpisodeSchedule()
-        let day: TimeInterval = 24 * 60 * 60
-        // Each series' first episode was watched to the end; the days are when its episodes air.
-        let series: [(id: String, name: String, backdrop: String, watched: Double, airs: [Double])] = [
-            ("tt0903747", "Breaking Bad", "/tsRy63Mu5cu8etL1X7ZLyf7UP1M.jpg", -3, [-8, -1, 6]),
-            ("tt3032476", "Better Call Saul", "/rfxryDIv8huejujg4JueDJx8zCz.jpg", -2, [-6, 1, 8]),
-        ]
-        for show in series {
-            let item = WatchItem(id: "\(show.id):1:1", type: "series", metaID: show.id, title: show.name, season: 1, episode: 1,
-                                 background: "https://image.tmdb.org/t/p/w1280\(show.backdrop)")
-            library.record(item, position: 2_690, duration: 2_700, at: .now + show.watched * day)
-            let videos = show.airs.enumerated().map { index, days in
-                #"{"id":"\#(show.id):1:\#(index + 1)","title":"Episode \#(index + 1)","season":1,"episode":\#(index + 1),"#
-                    + #""released":"\#((Date.now + days * day).ISO8601Format())"}"#
-            }
-            do {
-                schedule.showForTesting(try JSONDecoder().decode([Video].self, from: Data("[\(videos.joined(separator: ","))]".utf8)),
-                                        of: show.id)
-            } catch {
-                assertionFailure("Couldn't decode the upcoming fixture's episodes: \(error)")
-            }
-        }
-        library.record(WatchItem(id: "tt2543164", type: "movie", metaID: "tt2543164", title: "Arrival",
-                                 background: "https://image.tmdb.org/t/p/w1280/8MUZz7oPXQftFTslZpRP3CVMOoq.jpg"),
-                       position: 2_900, duration: 6_960, at: .now - 2 * day)
-        return (library, schedule)
-    }()
-
     private static let library: LibraryStore? = {
         let suite = "loge.discovery-library-fixture"
         guard let defaults = UserDefaults(suiteName: suite) else { return nil }
@@ -274,6 +183,14 @@ enum DiscoveryFixture {
                                      season: 1, episode: 2), position: 600, duration: 2400)
             library.toggleSaved(MetaPreview(id: "fixture-movie-\(index)", type: "movie", name: "Saved \(index)"))
         }
+        // Today, yesterday and last year, for Recently Watched's captions.
+        library.markWatched([WatchItem(id: "fixture-finished-1", type: "movie", metaID: "fixture-finished-1",
+                                       title: "Finished Film")])
+        library.markWatched([WatchItem(id: "fixture-finished-2:4:6", type: "series", metaID: "fixture-finished-2",
+                                       title: "Finished Series", season: 4, episode: 6, episodeTitle: "Finale")],
+                            at: .now.addingTimeInterval(-86_400))
+        library.markWatched([WatchItem(id: "fixture-finished-3", type: "movie", metaID: "fixture-finished-3",
+                                       title: "Older Film")], at: .now.addingTimeInterval(-400 * 86_400))
         return library
     }()
 }
@@ -453,8 +370,6 @@ private final class DiscoveryFixtureProtocol: URLProtocol, @unchecked Sendable {
                  "belongs_to_collection":{"id":263,"name":"The Dark Knight Collection"},
                  "videos":{"results":[{"key":"EXeTwQWrcwY","site":"YouTube","type":"Trailer","official":true}]}}
                 """#
-        case "/3/movie/155/reviews":
-            body = #"{"id":155,"page":1,"total_pages":0,"total_results":0,"results":[]}"#
         case "/3/collection/263":
             body = #"""
                 {"id":263,"name":"The Dark Knight Collection","parts":[
@@ -524,52 +439,10 @@ private final class DiscoveryFixtureProtocol: URLProtocol, @unchecked Sendable {
                  "credits":{"cast":[\#(cast.joined(separator: ","))],"crew":[]},
                  "recommendations":{"results":[\#(results.joined(separator: ","))]}}
                 """#
-        case "/3/tv/1396/reviews":
-            body = #"{"id":1396,"page":1,"total_pages":0,"total_results":0,"results":[]}"#
         case let path where path.hasPrefix("/3/movie/") && path.hasSuffix("/external_ids"):
             let id = url.pathComponents[3]
             let imdbID = DiscoveryFixture.recommended.first { String($0.tmdbID) == id }?.imdbID
             body = #"{"id":\#(id),"imdb_id":\#(imdbID.map { "\"\($0)\"" } ?? "null")}"#
-        case "/3/movie/157336/reviews":
-            let page = url.query?.contains("page=2") == true ? 2 : 1
-            body = #"{"id":157336,"page":\#(page),"total_pages":2,"total_results":9,"results":[\#(DiscoveryFixture.reviews(page: page))]}"#
-        case "/3/person/138":
-            body = #"{"id":138,"name":"Quentin Tarantino","popularity":55,"profile_path":"/1gjcpAa99FAOWGnrUvHEXXsRs7o.jpg"}"#
-        case "/3/person/popular":
-            let people: [(Int, String, Double, String?)] = [
-                (525, "Christopher Nolan", 85, "/xuAIuYSmsUzKlUMBFGVZaWsY3DZ.jpg"),
-                (137427, "Denis Villeneuve", 78, "/xzQYqb4nR8xT7Zdw5itbEL9K3fd.jpg"),
-                (1032, "Martin Scorsese", 72, "/g3DjfKsgZQWZiw30I20hZVk1oMX.jpg"),
-                (45400, "Greta Gerwig", 69, "/dxKAhpkz4XNwmRzMG5QOpXjPZ1N.jpg"),
-                (488, "Steven Spielberg", 64, "/tZxcg19YQ3e8fJ0pOs7hjlnmmr6.jpg"),
-                (21684, "Bong Joon-ho", 61, "/stwnTvZAoD8gEJEDHpDQyLCyDy5.jpg"),
-                (608, "Hayao Miyazaki", 58, "/ouhjt9KugzhWtdEyBPipihB3ic8.jpg"),
-                (69759, "Apichatpong Weerasethakul", 21, nil),
-            ]
-            let results = people.map {
-                #"{"id":\#($0.0),"name":"\#($0.1)","known_for_department":"Directing","popularity":\#($0.2),"profile_path":\#($0.3.map { "\"\($0)\"" } ?? "null")}"#
-            }
-            body = #"{"page":1,"total_pages":1,"results":[\#(results.joined(separator: ","))]}"#
-        case "/sparql":
-            body = #"""
-                {
-                  "results": {
-                    "bindings": [
-                      {
-                        "imdb": {
-                          "value": "tt1234567"
-                        },
-                        "filmLabel": {
-                          "value": "Recorded winner (UI fixture)"
-                        },
-                        "date": {
-                          "value": "2024-01-26T00:00:00Z"
-                        }
-                      }
-                    ]
-                  }
-                }
-                """#
         default:
             if url.path.hasPrefix("/catalog/movie/top/search=") {
                 let title = String(url.path.dropFirst("/catalog/movie/top/search=".count).dropLast(".json".count))

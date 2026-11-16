@@ -2,11 +2,11 @@ import LogeCore
 import SwiftUI
 
 #if !os(tvOS)
-/// Swipeable highlights from the popular movies and series, edge to edge, with page dots underneath.
+/// Swipeable highlights from Home's first movie and series shelves, edge to edge, with page dots underneath.
 struct FeaturedCarousel: View {
     @Environment(TMDBAccount.self) private var tmdb
-    let movies: CatalogSource
-    let series: CatalogSource
+    let movies: CatalogSource?
+    let series: CatalogSource?
     @Binding var playing: SourcesRoute?
     @Binding var opening: MetaPreview?
     @State private var items: [MetaPreview] = []
@@ -52,8 +52,8 @@ struct FeaturedCarousel: View {
             guard items.isEmpty else { return }
             // The carousel is decoration on top of the rows below, which show
             // their own error, so a failure here just leaves it out.
-            async let movieItems = try? movies.items()
-            async let seriesItems = try? series.items()
+            async let movieItems = try? movies?.items()
+            async let seriesItems = try? series?.items()
             // Each awaited on its own line, as Release builds have mishandled child task
             // results awaited inside a larger expression.
             let loadedMovies = await movieItems
@@ -243,7 +243,6 @@ struct FeaturedPage: View {
             }
             .buttonStyle(GlassIconButtonStyle())
             .contentTransition(.symbolEffect(.replace))
-            .contextMenu { SaveToMenu(title: meta) }
         }
     }
 

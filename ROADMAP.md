@@ -9,26 +9,32 @@ release dates. This roadmap reflects the source as of **12 November 2026**.
 ## Shipped
 
 - [x] Native iPhone, iPad, Apple TV and Mac browsing and playback.
-- [x] Built-in Cinemeta discovery/search, genre shelves, festival editions,
-  director discovery and optional TMDB metadata, filmographies and reviews.
+- [x] Built-in Cinemeta discovery/search, genre shelves and optional TMDB
+  metadata and filmographies.
 - [x] TMDB-based recommendations: More Like This on details and a Recommended
   Home row ranked on the device from watched and saved titles.
 - [x] Addon management, structured source selection, remembered sources,
   connection-aware recommendations and automatic fallback.
+- [x] A source filter by audio language, HDR and bitrate (not codec), and a maximum
+  bitrate for automatic choices that replaced the per-episode size limit.
 - [x] mpv playback, subtitles and timing controls, timeline previews,
   available chapter/community skips and automatic next episodes.
-- [x] Continue Watching, episode resume, Up Next, Watch Later, custom lists
-  and day-grouped viewing history.
-- [x] New episodes of followed series in Continue Watching, an Upcoming row with
-  air dates, trailers opened on YouTube, and the other films of a film series
+- [x] Continue Watching, episode resume, Up Next and Watch Later (custom lists
+  were folded into it in November 2026), and Recently Watched in My Lists (the last
+  12 titles finished, replacing the History page).
+- [x] New episodes of followed series in Continue Watching, trailers opened on YouTube (not on Apple TV), and the other films of a film series
   on a movie's page (TMDB).
+- [x] Arranged Home shelves (Settings → Home): hide, reorder, add installed addons'
+  catalogs and reset, synced with the account's appearance settings.
 - [x] Letterboxd and Rotten Tomatoes scores beside the IMDb rating on a title's
   page, with the user's own MDBList key.
 - [x] Optional encrypted self-hosted accounts with progress, watched state,
   addons and preferences; offline merging, the newest position winning, and a
   choice when a title was removed on one device and played on another.
-- [x] Scoped shared setups, separate private progress, expiring invitations,
-  device revocation and a local service administration page.
+- [x] Expiring device invitations, device revocation and a local service
+  administration page.
+- [x] A one-time setup copy (addons, optionally playback preferences) as a link
+  or code, replacing the live shared setups of earlier versions.
 - [x] GitHub release assets for iOS/tvOS/Mac, a SideStore source, a Mac
   drag-to-Applications installer and signed Sparkle updates.
 
@@ -55,8 +61,8 @@ alone doesn't verify playback or Picture in Picture at runtime.
   Exercise Picture in Picture only where the simulator supports it; record
   unsupported cases as skipped, not passed.
 - [x] Test independent account stores for offline changes, reconnect, conflicting
-  progress, explicit removals and sign-out. Exercise account connection and sharing
-  UI in simulators. No physical phone-to-TV handoff or live-provider check is a
+  progress, explicit removals and sign-out. Exercise account connection and setup
+  copy UI in simulators. No physical phone-to-TV handoff or live-provider check is a
   release prerequisite.
 - [x] Cover fresh installs, browse-to-play and returning from playback on iPhone
   and iPad, including landscape. Use the existing tvOS remote driver for button-based
@@ -81,15 +87,15 @@ suites instead of creating another test harness. See the
 These are proposals, not promised releases. Agree on scope and interaction design
 before implementation.
 
-### 1. Sync Watch Later and custom lists
+### 1. Sync Watch Later
 
 Playback progress and setup already sync through the optional self-hosted account;
-Watch Later and custom lists should be considered separately. Carry list membership,
-names and deliberate removals between a person's devices, with defined offline-merge
-rules. Keep these lists private to the account, not part of addon-sharing invitations.
+Watch Later should be considered separately. Carry its titles and deliberate removals
+between a person's devices, with defined offline-merge rules. Keep it private to the
+account, not part of a setup copy.
 This would expand sync scope and needs agreement before implementation.
 
-**Test target:** independent stores converge after concurrent additions, renames and
+**Test target:** independent stores converge after concurrent additions and
 removals; reconnect doesn't resurrect deleted entries; another account can't read them.
 
 ### 2. Search installed addons
@@ -101,25 +107,6 @@ Keep built-in search as the default to avoid sending every query to every provid
 
 **Test target:** fixture addons cover partial failure, delayed responses, duplicate
 titles and changing the query before earlier responses finish.
-
-### 3. Narrow sources by audio, HDR and codec
-
-Build on the existing source details, sorting and bitrate limit: let users narrow a
-long list by reported audio language, dynamic range or codec. Keep unknown metadata
-visible unless explicitly excluded, and provide a clear reset when no sources match.
-These are metadata filters, not guarantees about what a device can decode or display.
-
-**Test target:** deterministic source fixtures cover mixed and missing metadata, empty
-results, filter reset and tvOS focus after the list changes.
-
-### 4. Arrange Home shelves
-
-Let people hide shelves they don't use and reorder the rest, without changing the
-artwork-led layout. Start with local preferences and a reset to the default order;
-sharing or syncing that layout would be a separate decision.
-
-**Test target:** simulator flows cover persistence after relaunch, default restoration,
-hidden/empty shelves and predictable Apple TV focus after reordering.
 
 ## On hold
 

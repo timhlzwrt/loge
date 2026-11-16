@@ -19,55 +19,21 @@ public struct StreamDetails: Sendable, Equatable {
         }
     }
 
-    public enum SortOrder: String, CaseIterable, Identifiable, Sendable {
-        case cachedFirst = "Cached first"
-        case lowerBitrate = "Lower bitrate"
-        case higherBitrate = "Higher bitrate"
-        case smallerFile = "Smaller file"
-        case addonOrder = "Addon order"
-
-        public var id: Self { self }
-
-        /// Equal or missing values leave the addon's own ranking intact.
-        public func precedes(_ lhs: StreamDetails, _ rhs: StreamDetails) -> Bool {
-            switch self {
-            case .cachedFirst:
-                func rank(_ cached: Bool?) -> Int { cached == true ? 0 : cached == nil ? 1 : 2 }
-                return rank(lhs.isCached) < rank(rhs.isCached)
-            case .lowerBitrate:
-                return (lhs.listedBitrate ?? .infinity) < (rhs.listedBitrate ?? .infinity)
-            case .higherBitrate:
-                return (lhs.listedBitrate ?? 0) > (rhs.listedBitrate ?? 0)
-            case .smallerFile:
-                return (lhs.isPackageSize ? .infinity : lhs.size?.converted(to: .bytes).value ?? .infinity)
-                    < (rhs.isPackageSize ? .infinity : rhs.size?.converted(to: .bytes).value ?? .infinity)
-            case .addonOrder:
-                return false
-            }
-        }
-
-        /// The first order that tells the two apart decides; later ones break its ties.
-        public static func precedes(_ lhs: StreamDetails, _ rhs: StreamDetails, by orders: [SortOrder]) -> Bool {
-            for order in orders {
-                if order.precedes(lhs, rhs) { return true }
-                if order.precedes(rhs, lhs) { return false }
-            }
-            return false
-        }
-    }
-
     public var resolution: Resolution?
     /// "Dolby Vision", "HDR10+", "HDR10" or "HLG", best first; a file can carry several.
     public var dynamicRange: [String] = []
+    /// False for a picture known to be SDR, nil when the text doesn't say.
+    public var isHDR: Bool?
     public var codec: String?
     /// The format, then Atmos, then the channel layout: "TrueHD", "Atmos", "7.1".
     public var audio: [String] = []
+    /// The audio languages the addon marks, as ISO 639-1 codes from `LanguageCodes.common`;
+    /// empty when it doesn't say, or only says "Multi".
+    public var languages: [String] = []
     /// Where the release came from: "Remux", "BluRay", "WEB-DL", "WEB" or "HDTV".
     public var releaseType: String?
     public var size: Measurement<UnitInformationStorage>?
     public var isPackageSize = false
-    /// Only the protocol's explicit videoSize identifies the individual playable file.
-    public var fileSize: Int64?
     /// The addon's explicitly reported video/overall bitrate, in bits per second.
     public var bitrate: Double?
     /// The file size spread over the title's runtime, for the many addons that report no
@@ -84,7 +50,6 @@ public struct StreamDetails: Sendable, Equatable {
             .joined(separator: "\n")
         self.init(text: text)
         if let bytes = stream.behaviorHints?.videoSize, bytes > 0 {
-            fileSize = bytes
             size = Measurement(value: Double(bytes), unit: .bytes)
             isPackageSize = false
         }
@@ -123,6 +88,10 @@ public struct StreamDetails: Sendable, Equatable {
             dynamicRange.append("HDR10")
         }
         if has(/\bhlg\b/) { dynamicRange.append("HLG") }
+        // Release names tag HDR next to the resolution, so a resolution without a tag is SDR.
+        isHDR = if !dynamicRange.isEmpty { true }
+            else if resolution != nil || has(/\bsdr\b/) { false }
+            else { nil }
 
         codec = if has(/\b(hevc|[xh][ .]?265)\b/) { "HEVC" }
             else if has(/\bav1\b/) { "AV1" }
@@ -146,6 +115,18 @@ public struct StreamDetails: Sendable, Equatable {
         // Written after the format ("DDP5.1"), and not to be confused with a size ("25.1 GB").
         if let channels = text.firstMatch(of: /(?:^|[^\d.,])([257])\.([01])(?!\d|\s*[GMT]i?B)/) {
             audio.append("\(channels.1).\(channels.2)")
+        }
+
+        // Addons mark languages with flags ("🇬🇧 🇩🇪"); names would also match film titles
+        // ("The French Dispatch"). The flag's region gives its main language.
+        for character in text {
+            let scalars = character.unicodeScalars.map(\.value)
+            guard scalars.count == 2, scalars.allSatisfy((0x1F1E6...0x1F1FF).contains) else { continue }
+            let region = String(String.UnicodeScalarView(scalars.compactMap { UnicodeScalar($0 - 0x1F1E6 + 65) }))
+            let language = Locale.Language(identifier: Locale.Language(identifier: "und-\(region)").maximalIdentifier)
+            if let code = language.languageCode?.identifier, LanguageCodes.common.contains(code), !languages.contains(code) {
+                languages.append(code)
+            }
         }
 
         releaseType = if has(/\bremux\b/) { "Remux" }
@@ -214,7 +195,7 @@ public struct StreamDetails: Sendable, Equatable {
         size.map { $0.formatted(.byteCount(style: .file).locale(.interface)) + (isPackageSize ? " pack" : "") }
     }
 
-    /// The reported bitrate, else the estimate: what the list sorts and caps by.
+    /// The reported bitrate, else the estimate: what the list and autoplay cap by.
     public var listedBitrate: Double? { bitrate ?? estimatedBitrate }
 
     /// "18 Mbps" as reported, or "≈18 Mbps" estimated from the size.
@@ -224,9 +205,11 @@ public struct StreamDetails: Sendable, Equatable {
         return (bitrate == nil ? "≈" : "") + mbps + " Mbps"
     }
 
-    /// Series with unknown sizes or pack totals need a manual choice while a limit is enabled.
-    public func permitsAutomaticPlayback(type: String, maximumFileSize: Int64) -> Bool {
-        type != MediaType.series || maximumFileSize <= 0 || fileSize.map { $0 <= maximumFileSize } == true
+    /// Whether the listed bitrate is within `maximumBitrate` Mbps (0 for no limit); nil when
+    /// the bitrate isn't known.
+    public func isWithin(maximumBitrate: Int) -> Bool? {
+        guard maximumBitrate > 0 else { return true }
+        return listedBitrate.map { $0 <= Double(maximumBitrate) * 1_000_000 }
     }
 
     /// The headings the sources list groups by, best first; anything else, SD included,

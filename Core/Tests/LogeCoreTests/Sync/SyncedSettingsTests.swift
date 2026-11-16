@@ -49,16 +49,57 @@ struct SyncedSettingsTests {
         invalid = SyncedSettings(addonURLs: ["https://a.example/not-a-manifest"])
         #expect(throws: SyncError.invalidData) { try invalid.validated() }
         #expect(throws: SyncError.invalidKey) { try AccountSyncCipher(key: "short", resource: "configuration") }
-        let unknownAccent = Data(#"{"addonURLs":[],"audioLanguage":"en","subtitleLanguage":"","subtitleScale":1,"maximumSourceGigabytes":50,"accent":"purple"}"#.utf8)
+        let unknownAccent = Data(#"{"addonURLs":[],"audioLanguage":"en","subtitleLanguage":"","subtitleScale":1,"maximumBitrate":50,"accent":"purple"}"#.utf8)
         #expect(throws: (any Error).self) { try JSONDecoder().decode(SyncedSettings.self, from: unknownAccent) }
+        invalid = SyncedSettings(maximumBitrate: 40)
+        #expect(throws: SyncError.invalidData) { try invalid.validated() }
     }
 
-    @MainActor @Test func unsetPreferencesReadAsDefaultsAndCategoriesWriteOnlyTheirOwn() {
+    @Test func readsSetupsFromBeforeTheBitrateLimitAndStaysReadableForThem() throws {
+        func decoded(_ limit: String) throws -> SyncedSettings {
+            let json = #"{"addonURLs":[],"audioLanguage":"de","subtitleLanguage":"","subtitleScale":1,"# + limit + #""accent":"white"}"#
+            return try JSONDecoder().decode(SyncedSettings.self, from: Data(json.utf8))
+        }
+        #expect(try decoded(#""maximumSourceGigabytes":0,"#).maximumBitrate == 0)
+        #expect(try decoded(#""maximumSourceGigabytes":25,"#).maximumBitrate == 100)
+        #expect(try decoded("").maximumBitrate == 100)
+        #expect(try decoded(#""maximumBitrate":25,"maximumSourceGigabytes":50,"#).maximumBitrate == 25)
+        #expect(try decoded(#""maximumSourceGigabytes":0,"#).audioLanguage == "de")
+
+        // Older versions require a size limit in a valid range.
+        let settings = SyncedSettings(maximumBitrate: 25)
+        let object = try #require(try JSONSerialization.jsonObject(with: JSONEncoder().encode(settings)) as? [String: Any])
+        #expect(object["maximumSourceGigabytes"] as? Int == 50)
+        #expect(try JSONDecoder().decode(SyncedSettings.self, from: JSONEncoder().encode(settings)) == settings)
+        var unlimited = settings; unlimited.maximumBitrate = 0
+        let unlimitedObject = try #require(try JSONSerialization.jsonObject(with: JSONEncoder().encode(unlimited)) as? [String: Any])
+        #expect(unlimitedObject["maximumSourceGigabytes"] as? Int == 0)
+    }
+
+    @Test func migratesAStoredSizeLimitOnce() {
+        let defaults = UserDefaults(suiteName: "SyncedSettingsTests-\(UUID().uuidString)")!
+        defaults.set(0, forKey: SyncedSettings.Key.maximumSourceGigabytes)
+        SyncedSettings.migrateSourceSizeLimit(in: defaults)
+        #expect(defaults.object(forKey: SyncedSettings.Key.maximumBitrate) as? Int == 0)
+        #expect(defaults.object(forKey: SyncedSettings.Key.maximumSourceGigabytes) == nil)
+
+        defaults.set(25, forKey: SyncedSettings.Key.maximumBitrate)
+        defaults.set(10, forKey: SyncedSettings.Key.maximumSourceGigabytes)
+        SyncedSettings.migrateSourceSizeLimit(in: defaults)
+        #expect(defaults.object(forKey: SyncedSettings.Key.maximumBitrate) as? Int == 25)
+
+        let other = UserDefaults(suiteName: "SyncedSettingsTests-\(UUID().uuidString)")!
+        other.set(50, forKey: SyncedSettings.Key.maximumSourceGigabytes)
+        SyncedSettings.migrateSourceSizeLimit(in: other)
+        #expect(other.object(forKey: SyncedSettings.Key.maximumBitrate) as? Int == 100)
+    }
+
+    @MainActor @Test func unsetPreferencesReadAsDefaultsAndWrittenOnesReadBack() {
         let defaults = UserDefaults(suiteName: "SyncedSettingsTests-\(UUID().uuidString)")!
         #expect(SyncedSettings(addonURLs: [], defaults: defaults) == SyncedSettings())
-        SyncedSettings(audioLanguage: "de", accent: .coral).writePreferences(to: defaults, categories: [.appearance])
-        #expect(defaults.string(forKey: SyncedSettings.Key.accent) == "coral")
-        #expect(defaults.string(forKey: SyncedSettings.Key.audioLanguage) == nil)
+        let settings = SyncedSettings(audioLanguage: "de", accent: .coral)
+        settings.writePreferences(to: defaults)
+        #expect(SyncedSettings(addonURLs: [], defaults: defaults) == settings)
     }
 
     @Test(arguments: ["http://sync.example/v2", "https://name:secret@sync.example/v2",

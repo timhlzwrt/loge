@@ -41,7 +41,6 @@ struct EpisodeScheduleTests {
         #expect(new.first?.item.episodeTitle == "Episode 3")
         #expect(new.first?.item.background == "https://img/backdrop")
         #expect(new.first?.date == now - day)
-        #expect(schedule.upcoming(in: library, at: now).map(\.item.id) == ["tt9:1:4"])
 
         // Once it's started it has its own Continue Watching entry.
         library.record(episode(3), position: 600, duration: 2000, at: now)
@@ -54,7 +53,6 @@ struct EpisodeScheduleTests {
         let schedule = await schedule(library, meta(firstAired: -300))
 
         #expect(schedule.newEpisodes(in: library, at: now).isEmpty)
-        #expect(schedule.upcoming(in: library, at: now).isEmpty)
     }
 
     @Test func anUnfinishedEpisodeHoldsBackTheNextOne() async {
@@ -65,28 +63,14 @@ struct EpisodeScheduleTests {
         #expect(schedule.newEpisodes(in: library, at: now).isEmpty)
     }
 
-    @Test func upcomingListsEachSeriesNextEpisodeSoonestFirst() async {
-        let library = LibraryStore(defaults: defaults)
-        library.record(episode(1), position: 1990, duration: 2000, at: now - day)
-        library.record(episode(1, of: "tt8"), position: 1990, duration: 2000, at: now - 2 * day)
-        library.record(WatchItem(id: "tt1", type: "movie", metaID: "tt1", title: "Movie"), position: 600, duration: 6000, at: now)
-        let schedule = await schedule(library, meta(firstAired: -4), meta("tt8", firstAired: -6))
-
-        #expect(schedule.upcoming(in: library, at: now).map(\.item.id) == ["tt8:1:2", "tt9:1:2"])
-
-        // Removed from Continue Watching, a series is no longer followed.
-        library.removeFromContinueWatching(metaID: "tt8")
-        #expect(schedule.upcoming(in: library, at: now).map(\.item.id) == ["tt9:1:2"])
-    }
-
     @Test func episodesAreLookedUpAgainOnlyOnceTheyreStale() async {
         let library = LibraryStore(defaults: defaults)
-        library.record(episode(1), position: 1990, duration: 2000, at: now - day)
+        library.record(episode(1), position: 1990, duration: 2000, at: now - 5 * day)
         let schedule = EpisodeSchedule()
         var lookups = 0
         let lookup: (String) async -> Meta? = { _ in
             lookups += 1
-            return self.meta(firstAired: -4)
+            return self.meta(firstAired: -10)
         }
         await schedule.refresh(for: library, at: now, lookup: lookup)
         await schedule.refresh(for: library, at: now + 60, lookup: lookup)
@@ -97,6 +81,6 @@ struct EpisodeScheduleTests {
 
         // A failed lookup keeps what was known.
         await schedule.refresh(for: library, force: true, at: now + 240) { _ in nil }
-        #expect(schedule.upcoming(in: library, at: now).count == 1)
+        #expect(schedule.newEpisodes(in: library, at: now).count == 1)
     }
 }

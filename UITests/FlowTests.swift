@@ -41,7 +41,7 @@ final class FlowTests: XCTestCase {
     }
 
     @MainActor
-    func testAccountSharingKeepsProgressPrivate() throws {
+    func testConnectedAccountAddsOnlyOwnDevices() throws {
         guard let path = ProcessInfo.processInfo.environment["SYNC_TEST_CODE_FILE"] else {
             throw XCTSkip("Set TEST_RUNNER_SYNC_TEST_CODE_FILE to a disposable one-use account code file.")
         }
@@ -49,25 +49,15 @@ final class FlowTests: XCTestCase {
         app.launchArguments = ["--sync-ui-test"]
         app.launchEnvironment["SYNC_TEST_CODE_FILE"] = path
         app.launch()
-        let share = app.buttons["Share setup"]
-        XCTAssertTrue(share.waitForExistence(timeout: 30))
+        let addDevice = app.buttons["Add my device"]
+        XCTAssertTrue(addDevice.waitForExistence(timeout: 30))
         XCTAssertFalse(app.buttons["Connect account"].exists)
+        XCTAssertFalse(app.buttons["Share setup"].exists || app.buttons["Join shared setup"].exists)
         screenshot("sync-account-connected")
-        share.tap()
-        let addons = app.switches["Addons"]
-        let playback = app.switches["Playback preferences"]
-        let appearance = app.switches["Appearance"]
-        XCTAssertTrue(addons.waitForExistence(timeout: 5))
-        XCTAssertEqual(addons.value as? String, "1")
-        XCTAssertEqual(playback.value as? String, "0")
-        XCTAssertEqual(appearance.value as? String, "0")
-        XCTAssertFalse(app.switches["Playback progress"].exists)
-        appearance.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
-        let enabled = expectation(for: NSPredicate(format: "value == '1'"), evaluatedWith: appearance)
-        wait(for: [enabled], timeout: 5)
-        screenshot("sync-sharing-categories")
+        addDevice.tap()
+        XCTAssertTrue(app.buttons["Create connection code"].waitForExistence(timeout: 5))
         app.buttons["Done"].tap()
-        XCTAssertTrue(app.buttons["Add my device"].exists)
+        XCTAssertTrue(addDevice.exists)
     }
 
     @MainActor
@@ -610,28 +600,27 @@ final class FlowTests: XCTestCase {
     }
 
     @MainActor
-    func testSourceBitrateFilteringAndSorting() {
+    func testSourceBitrateFilter() {
         installTestAddonIfNeeded()
         openSeries("Lanterns")
         episodeCard().tap()
         let higherRate = app.buttons.matching(NSPredicate(format: "label MATCHES '.*25[,.]2 Mbps.*'")).firstMatch
         XCTAssertTrue(higherRate.waitForExistence(timeout: 15))
         screenshot("source-bitrates")
-        app.buttons["Sort & Filter"].tap()
-        screenshot("source-sort-menu")
-        app.buttons["Sort by"].tap()
-        app.buttons["Lower bitrate"].tap()
-        app.buttons["Sort & Filter"].tap()
-        app.buttons["Maximum bitrate"].tap()
+        app.buttons["Filter"].tap()
+        screenshot("source-filter-menu")
+        app.buttons["Bitrate"].tap()
         app.buttons["Up to 25 Mbps"].tap()
-        XCTAssertTrue(app.staticTexts["Up to 25 Mbps, estimated from the size where not reported. Unknown bitrates stay visible."].exists)
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label ENDSWITH 'hidden.'")).firstMatch.exists)
         XCTAssertFalse(higherRate.exists)
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label MATCHES '.*23[,.]6 Mbps.*'")).firstMatch.exists)
         screenshot("source-bitrate-filter")
-        app.buttons["Sort & Filter"].tap()
-        app.buttons["Maximum bitrate"].tap()
-        app.buttons["Any bitrate"].tap()
+        app.buttons["Show all"].tap()
         XCTAssertTrue(higherRate.exists)
+        // The bitrate is the Maximum bitrate setting: back to its default for the other tests.
+        app.buttons["Filter"].tap()
+        app.buttons["Bitrate"].tap()
+        app.buttons["Up to 100 Mbps"].tap()
     }
 
     /// A source that doesn't open hands over to the next one instead of stopping.

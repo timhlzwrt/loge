@@ -18,7 +18,7 @@ struct AccountSyncTests {
     }
     func enrollment(_ user: String) throws -> String {
         let invite = UUID().uuidString
-        AccountGatewayProtocol.state.withLock { $0.invites[invite] = .init(account: user, group: nil) }
+        AccountGatewayProtocol.state.withLock { $0.invites[invite] = .init(account: user) }
         return try JSONSerialization.data(withJSONObject: ["version": 2, "kind": "account", "endpoint": "https://sync.example/v2", "code": invite]).base64EncodedString()
     }
     func reset() { AccountGatewayProtocol.state.withLock { $0 = .init() } }
@@ -92,99 +92,6 @@ struct AccountSyncTests {
         await second.resolve(useLocal: false)
         #expect(second.errorMessage == nil)
         try first.disconnect(); try second.disconnect()
-    }
-
-    @Test func shareCredentialFailureRollsBackTheUnpublishedGroup() async throws {
-        reset()
-        let (account, _, _, _, storage) = fixture()
-        await account.connect(code: try enrollment("alice")); await account.resolve(useLocal: true)
-        storage.failSave = true
-        await #expect(throws: (any Error).self) { try await account.makeShareCode(categories: [.addons]) }
-        #expect(AccountGatewayProtocol.state.withLock { $0.groups.isEmpty })
-        #expect(account.sharedGroups.isEmpty)
-        storage.failSave = false
-        _ = try await account.makeShareCode(categories: [.addons])
-        #expect(account.sharedGroups.count == 1)
-        try account.disconnect()
-    }
-
-    @Test func wrongSharedKeyDoesNotLeaveAnUnusableMembership() async throws {
-        reset()
-        let (alice, _, _, _, _) = fixture()
-        await alice.connect(code: try enrollment("alice")); await alice.resolve(useLocal: true)
-        let valid = try await alice.makeShareCode(categories: [.addons])
-        var object = try #require(try JSONSerialization.jsonObject(with: Data(base64Encoded: valid)!) as? [String: Any])
-        object["key"] = AccountSyncCipher.generateKey()
-        let bad = try JSONSerialization.data(withJSONObject: object).base64EncodedString()
-        let (bob, _, _, _, _) = fixture()
-        await bob.connect(code: try enrollment("bob")); await bob.resolve(useLocal: false)
-        await bob.joinShare(code: bad)
-        #expect(bob.errorMessage != nil && bob.sharedGroups.isEmpty)
-        #expect(AccountGatewayProtocol.state.withLock { $0.groups.values.allSatisfy { !$0.members.contains("bob") } })
-        await bob.joinShare(code: try await alice.makeShareCode(categories: [.addons]))
-        #expect(bob.errorMessage == nil && bob.sharedGroups.count == 1)
-        try alice.disconnect(); try bob.disconnect()
-    }
-
-    @Test func disconnectDuringJoinRollsBackOnlyTheNewMembership() async throws {
-        reset()
-        let (alice, _, _, _, _) = fixture()
-        await alice.connect(code: try enrollment("alice")); await alice.resolve(useLocal: true)
-        let code = try await alice.makeShareCode(categories: [.addons])
-        let (bob, _, library, _, _) = fixture()
-        await bob.connect(code: try enrollment("bob")); await bob.resolve(useLocal: false)
-        AccountGatewayProtocol.state.withLock { $0.hooks["POST join"] = {
-            do { try bob.disconnect() } catch { Issue.record(error) }
-        } }
-        await bob.joinShare(code: code)
-        #expect(!bob.isConnected && library.activeProfileID == nil)
-        #expect(AccountGatewayProtocol.state.withLock { $0.groups.values.allSatisfy { !$0.members.contains("bob") } })
-        #expect(alice.sharedGroups.count == 1)
-        try alice.disconnect()
-    }
-
-    @Test func revokedSharedMembershipClearsItsPendingChoice() async throws {
-        reset()
-        let (alice, addonsA, _, _, _) = fixture()
-        await alice.connect(code: try enrollment("alice")); await alice.resolve(useLocal: true)
-        let code = try await alice.makeShareCode(categories: [.addons])
-        let (bob, addonsB, _, _, _) = fixture()
-        await bob.connect(code: try enrollment("bob")); await bob.resolve(useLocal: false)
-        await bob.joinShare(code: code)
-        try addonsA.replaceManifestURLs(["https://a.example/manifest.json"])
-        try addonsB.replaceManifestURLs(["https://b.example/manifest.json"])
-        await alice.sync(); await bob.sync()
-        #expect(bob.needsChoice)
-        let group = try #require(alice.sharedGroups.first)
-        await alice.leaveGroup(id: group.id)
-        await bob.sync()
-        #expect(!bob.needsChoice && bob.sharedGroups.isEmpty)
-        _ = try await bob.makeShareCode(categories: [.addons])
-        try alice.disconnect(); try bob.disconnect()
-    }
-
-    @Test func simultaneousGroupConflictsAreReviewedWithoutReplacingTheFirstChoice() async throws {
-        reset()
-        let (alice, addonsA, _, defaultsA, _) = fixture()
-        await alice.connect(code: try enrollment("alice")); await alice.resolve(useLocal: true)
-        let addonsCode = try await alice.makeShareCode(categories: [.addons])
-        let playbackCode = try await alice.makeShareCode(categories: [.playback])
-        let (bob, addonsB, _, defaultsB, _) = fixture()
-        await bob.connect(code: try enrollment("bob")); await bob.resolve(useLocal: false)
-        await bob.joinShare(code: addonsCode); await bob.joinShare(code: playbackCode)
-        try addonsA.replaceManifestURLs(["https://a.example/manifest.json"])
-        try addonsB.replaceManifestURLs(["https://b.example/manifest.json"])
-        defaultsA.set("de", forKey: "audioLanguage")
-        defaultsB.set("fr", forKey: "audioLanguage")
-        await alice.sync(); await bob.sync()
-        #expect(bob.choiceSummary.contains("Addons"))
-        await bob.sync()
-        #expect(bob.choiceSummary.contains("Addons"))
-        await bob.resolve(useLocal: false)
-        #expect(bob.needsChoice && bob.choiceSummary.contains("Playback preferences"))
-        await bob.resolve(useLocal: false)
-        #expect(!bob.needsChoice && defaultsB.string(forKey: "audioLanguage") == "de")
-        try alice.disconnect(); try bob.disconnect()
     }
 
     @Test func playbackConflictDoesNotBlockOtherTitlesOrSettingsAndSurvivesRelaunch() async throws {
@@ -428,6 +335,22 @@ struct AccountSyncTests {
         try alice.disconnect(); try second.disconnect()
     }
 
+    @Test func homeLayoutSyncsToTheOtherDevice() async throws {
+        reset()
+        let (alice, _, _, defaultsA, _) = fixture()
+        await alice.connect(code: try enrollment("alice")); await alice.resolve(useLocal: true)
+        let (second, _, _, defaultsB, _) = fixture()
+        await second.connect(code: try await alice.makeDeviceCode()); await second.resolve(useLocal: false)
+        var layout = HomeLayout.default
+        layout.setHidden(true, for: .genres)
+        layout.move(fromOffsets: [2], toOffset: 0)
+        defaultsA.set(layout.storedData, forKey: HomeLayout.storageKey)
+        await alice.sync(); await second.sync()
+        #expect(HomeLayout(storedData: defaultsB.data(forKey: HomeLayout.storageKey)) == layout)
+        #expect(!alice.needsChoice && !second.needsChoice)
+        try alice.disconnect(); try second.disconnect()
+    }
+
     @Test func newAccountRequiresExplicitImportAndDisconnectRestoresLocalLibrary() async throws {
         reset()
         let (account, _, library, defaults, storage) = fixture()
@@ -463,45 +386,58 @@ struct AccountSyncTests {
         try alice.disconnect(); try second.disconnect(); try bob.disconnect()
     }
 
-    @Test func sharedAddonsPropagateWithoutSharingPersonalSettingsOrProgress() async throws {
+    @Test func leavingASharedSetupKeepsItsValuesOverTheAccountsOlderCopy() async throws {
         reset()
-        let (alice, addonsA, libraryA, defaultsA, _) = fixture()
+        let (alice, addonsA, libraryA, defaultsA, storageA) = fixture()
         await alice.connect(code: try enrollment("alice")); await alice.resolve(useLocal: true)
-        try addonsA.replaceManifestURLs(["https://first.example/manifest.json", "https://second.example/manifest.json"])
-        defaultsA.set("coral", forKey: "accentColor")
-        libraryA.record(WatchItem(id: "private", type: "movie", metaID: "private", title: "Private"), position: 180, duration: 1000)
-        await alice.sync()
-        let share = try await alice.makeShareCode(categories: [.addons])
-        let object = try #require(try JSONSerialization.jsonObject(with: Data(base64Encoded: share)!) as? [String: Any])
-        #expect(object["kind"] as? String == "share" && object["groups"] == nil)
-        #expect(object["key"] as? String != alice.recoveryKey)
-        let (bob, addonsB, libraryB, defaultsB, _) = fixture()
-        await bob.connect(code: try enrollment("bob")); await bob.resolve(useLocal: false)
+        let (second, addonsB, _, defaultsB, _) = fixture()
+        await second.connect(code: try await alice.makeDeviceCode()); await second.resolve(useLocal: false)
+        // The account's own copy of the categories alice shared moved on without her, as when
+        // one of the account's devices wrote it while hers came from the group.
+        try addonsB.replaceManifestURLs(["https://personal.example/manifest.json"])
+        defaultsB.set("fr", forKey: "audioLanguage")
         defaultsB.set("mint", forKey: "accentColor")
-        await bob.joinShare(code: share)
-        #expect(bob.errorMessage == nil)
-        #expect(addonsB.addons.map(\.manifestURL) == addonsA.addons.map(\.manifestURL))
-        #expect(defaultsB.string(forKey: "accentColor") == "mint" && libraryB.progress.isEmpty)
-        try addonsA.replaceManifestURLs(["https://second.example/manifest.json"])
-        await alice.sync(); await bob.sync()
-        #expect(addonsB.addons.map(\.manifestURL) == ["https://second.example/manifest.json"] && libraryB.progress.isEmpty)
-        let code = try await bob.makeDeviceCode()
-        let (third, addonsC, libraryC, _, _) = fixture()
-        await third.connect(code: code); await third.resolve(useLocal: false)
-        #expect(third.errorMessage == nil)
-        #expect(addonsC.addons.map(\.manifestURL) == ["https://second.example/manifest.json"] && libraryC.progress.isEmpty)
-        try alice.disconnect(); try bob.disconnect(); try third.disconnect()
+        await second.sync()
+        // Shared addons and playback preferences, as the group set them on alice's device.
+        try addonsA.replaceManifestURLs(["https://shared.example/manifest.json"])
+        defaultsA.set("de", forKey: "audioLanguage")
+        let savedData = try #require(storageA.data)
+        var saved = try #require(try JSONSerialization.jsonObject(with: savedData) as? [String: Any])
+        saved["groups"] = [["id": "fedcba9876543210fedcba9876543210", "name": "Shared setup",
+                            "categories": ["addons", "playback"], "key": AccountSyncCipher.generateKey()]]
+        storageA.data = try JSONSerialization.data(withJSONObject: saved)
+
+        let updated = restored(storage: storageA, addons: addonsA, library: libraryA, defaults: defaultsA)
+        let rewrittenData = try #require(storageA.data)
+        let rewritten = try #require(try JSONSerialization.jsonObject(with: rewrittenData) as? [String: Any])
+        #expect(rewritten["groups"] == nil)
+        #expect(addonsA.addons.map(\.manifestURL) == ["https://shared.example/manifest.json"])
+        await updated.sync()
+        #expect(!updated.needsChoice && updated.errorMessage == nil)
+        #expect(addonsA.addons.map(\.manifestURL) == ["https://shared.example/manifest.json"])
+        #expect(defaultsA.string(forKey: "audioLanguage") == "de")
+        // Categories that were never shared merge as before.
+        #expect(defaultsA.string(forKey: "accentColor") == "mint")
+        await second.sync()
+        #expect(addonsB.addons.map(\.manifestURL) == ["https://shared.example/manifest.json"])
+        #expect(defaultsB.string(forKey: "audioLanguage") == "de")
+        // Once settled, the account's later changes reach this device again.
+        try addonsB.replaceManifestURLs(["https://later.example/manifest.json"])
+        await second.sync(); await updated.sync()
+        #expect(!updated.needsChoice && addonsA.addons.map(\.manifestURL) == ["https://later.example/manifest.json"])
+        try updated.disconnect(); try second.disconnect()
     }
 
-    @Test func sharingCodeCannotBeUsedToSignIntoAnotherPerson() async throws {
+    @Test func codesForRemovedSharedSetupsAreRefused() async throws {
         reset()
-        let (alice, _, _, _, _) = fixture()
-        await alice.connect(code: try enrollment("alice")); await alice.resolve(useLocal: true)
-        let share = try await alice.makeShareCode(categories: [.addons])
+        let share = try JSONSerialization.data(withJSONObject: [
+            "version": 2, "kind": "share", "endpoint": "https://sync.example/v2", "code": "share-code",
+            "key": AccountSyncCipher.generateKey(), "groupID": "fedcba9876543210fedcba9876543210", "categories": ["addons"],
+        ]).base64EncodedString()
         let (bob, _, library, _, _) = fixture()
         await bob.connect(code: share)
-        #expect(!bob.isConnected && bob.errorMessage != nil && library.activeProfileID == nil)
-        try alice.disconnect()
+        #expect(!bob.isConnected && bob.errorMessage == SyncError.wrongCode.localizedDescription)
+        #expect(library.activeProfileID == nil)
     }
 
     @Test func endpointAndCipherRejectWrongKeysAndWrongResources() throws {
@@ -516,7 +452,7 @@ struct AccountSyncTests {
     }
 
     @Test(.enabled(if: ProcessInfo.processInfo.environment["LOGE_V2_TEST_FIXTURE_FILE"] != nil))
-    func liveAccountsShareOnlySelectedSetupAndOwnDevicesReceiveProgress() async throws {
+    func liveAccountsKeepProgressPrivateAndOwnDevicesReceiveIt() async throws {
         struct Fixture: Decodable {
             let endpoint: String
             let codeA: String
@@ -556,10 +492,6 @@ struct AccountSyncTests {
         await alice.sync(); await bob.sync()
         await alice.resolve(useLocal: false); await bob.resolve(useLocal: false)
         try #require(alice.errorMessage == nil && bob.errorMessage == nil)
-        // A previous failed run may have left only its disposable shared setup.
-        for group in alice.sharedGroups { await alice.leaveGroup(id: group.id) }
-        for group in bob.sharedGroups { await bob.leaveGroup(id: group.id) }
-        await alice.sync(); await bob.sync()
         try addonsA.replaceManifestURLs(["https://first.example/manifest.json", "https://second.example/manifest.json"])
         defaultsA.set("coral", forKey: "accentColor")
         defaultsB.set("mint", forKey: "accentColor")
@@ -573,17 +505,12 @@ struct AccountSyncTests {
         try #require(second.errorMessage == nil)
         #expect(librarySecond.progress["private-a"]?.position == 140)
         #expect(libraryB.progress["private-a"] == nil)
-        let shared = try await alice.makeShareCode(categories: [.addons])
-        await bob.joinShare(code: shared)
-        try #require(bob.errorMessage == nil)
-        #expect(addonsB.addons.map(\.manifestURL) == addonsA.addons.map(\.manifestURL))
-        #expect(defaultsB.string(forKey: "accentColor") == "mint")
-        #expect(libraryB.progress["private-a"] == nil)
         try addonsB.replaceManifestURLs(["https://second.example/manifest.json"])
         libraryB.record(movie("private-b"), position: 200, duration: 1000)
         await bob.sync(); await alice.sync(); await second.sync()
-        #expect(addonsA.addons.map(\.manifestURL) == ["https://second.example/manifest.json"])
+        #expect(addonsA.addons.map(\.manifestURL) == ["https://first.example/manifest.json", "https://second.example/manifest.json"])
         #expect(libraryA.progress["private-b"] == nil)
+        #expect(defaultsB.string(forKey: "accentColor") == "mint")
         #expect(defaultsSecond.string(forKey: "accentColor") == "coral")
         librarySecond.record(movie("private-a"), position: 220, duration: 1000)
         await second.sync(); await alice.sync()

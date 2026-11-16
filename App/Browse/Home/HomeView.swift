@@ -5,6 +5,7 @@ struct HomeView: View {
     @Environment(LibraryStore.self) private var library
     @Environment(AddonStore.self) private var store
     @Environment(EpisodeSchedule.self) private var schedule
+    @AppStorage(HomeLayout.storageKey) private var storedLayout: Data?
     /// Replaced on pull-to-refresh, which rebuilds the rows so they load again.
     @State private var refreshID = UUID()
     /// Returning to Home runs `.task` again; its artwork is already cached by then.
@@ -21,25 +22,32 @@ struct HomeView: View {
     #endif
 
     var body: some View {
-        let sources = DiscoveryCatalogs.home
+        let rows = HomeLayout(storedData: storedLayout).rows(addons: store.addons)
+        let sources = rows.catalogs
         #if os(tvOS)
-        TVHome(sources: sources)
+        TVHome(rows: rows)
             // On every return to Home: a series started since then is followed from here on.
             .task { await schedule.refresh(for: library, addons: store) }
         #else
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 28) {
-                FeaturedCarousel(movies: sources[0], series: sources[1], playing: $playing, opening: $opening)
-                ContinueWatchingRow()
-                UpcomingRow()
-                MyListRow()
-                RecommendedRow()
-                // Genres follow the popular shelves, ahead of the narrower ones.
-                ForEach(sources.prefix(3)) { CatalogRow(source: $0, page: sources) }
-                GenreRow()
-                ForEach(sources.dropFirst(3)) { CatalogRow(source: $0, page: sources) }
-                DiscoveryCollectionRow(title: "Film Festivals", collections: FilmCollection.festivals)
-                PopularDirectorsRow()
+                // From the first movie and series shelves, which by default are the popular ones.
+                let movies = sources.first { $0.catalog.type == MediaType.movie }
+                let series = sources.first { $0.catalog.type == MediaType.series }
+                if movies != nil || series != nil {
+                    FeaturedCarousel(movies: movies, series: series, playing: $playing, opening: $opening)
+                        // Loads its pages once, so other shelves start it over.
+                        .id([movies?.id, series?.id])
+                }
+                ForEach(rows) { row in
+                    switch row {
+                    case .catalog(let source): CatalogRow(source: source, page: sources)
+                    case .genres: GenreRow()
+                    case .continueWatching: ContinueWatchingRow()
+                    case .watchLater: MyListRow()
+                    case .recommended: RecommendedRow()
+                    }
+                }
             }
             .padding(.bottom, 32)
             .id(refreshID)
@@ -90,7 +98,7 @@ struct HomeView: View {
 /// so it's already there when a row scrolls in or the carousel pages. Plain data tasks
 /// rather than a task group: opening anything from Home cancels its task, and a Release
 /// crash on the iPhone (a group child finishing after its group was gone) followed opening
-/// a festival while this was likely still running.
+/// a title from Home while this was likely still running.
 @MainActor
 func prefetch(_ urls: [String?]) {
     for url in Set(urls.compactMap { $0 }).compactMap(URL.init(string:)) where ArtworkCache.cached(url) == nil {

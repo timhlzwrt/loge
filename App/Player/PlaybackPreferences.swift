@@ -8,12 +8,12 @@ enum PlaybackPreferences {
     static let defaultAudioLanguage = SyncedSettings().audioLanguage
     static let subtitleKey = SyncedSettings.Key.subtitleLanguage
     static let subtitleScaleKey = SyncedSettings.Key.subtitleScale
-    static let maximumSourceSizeKey = SyncedSettings.Key.maximumSourceGigabytes
-    static let defaultMaximumSourceGigabytes = SyncedSettings().maximumSourceGigabytes
+    static let maximumBitrateKey = SyncedSettings.Key.maximumBitrate
+    static let defaultMaximumBitrate = SyncedSettings().maximumBitrate
 
-    static var maximumAutomaticFileSize: Int64 {
-        let gigabytes = UserDefaults.standard.object(forKey: maximumSourceSizeKey) as? Int ?? defaultMaximumSourceGigabytes
-        return Int64(max(0, min(gigabytes, 1_000))) * 1_000_000_000
+    /// In Mbps; 0 for no limit.
+    static var maximumBitrate: Int {
+        UserDefaults.standard.object(forKey: maximumBitrateKey) as? Int ?? defaultMaximumBitrate
     }
 
     static let subtitleScales: [(name: String, scale: Double)] = Array(

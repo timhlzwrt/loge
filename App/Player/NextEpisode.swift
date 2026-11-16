@@ -5,16 +5,17 @@ import SwiftUI
 /// Finds what to play after the current episode: the next released episode, from the
 /// same addon, preferring the same release and quality (its binge group).
 enum NextEpisode {
-    static func request(after current: PlaybackRequest, episodes: [Video]) async throws -> PlaybackRequest? {
+    /// `runtime` is the current episode's length, close enough to the next one's to estimate
+    /// bitrates from file sizes.
+    static func request(after current: PlaybackRequest, episodes: [Video], runtime: TimeInterval) async throws -> PlaybackRequest? {
         guard let item = current.item, let providerURL = current.providerURL,
               let video = LibraryStore.episode(after: item.id, in: episodes), video.isReleased()
         else { return nil }
 
-        let streams = try await AddonClient(manifestURL: providerURL).streams(type: item.type, id: video.id)
-            .filter {
-                StreamDetails($0).permitsAutomaticPlayback(
-                    type: item.type, maximumFileSize: PlaybackPreferences.maximumAutomaticFileSize)
-            }
+        let streams = SourceSelection.automatic(
+            try await AddonClient(manifestURL: providerURL).streams(type: item.type, id: video.id),
+            maximumBitrate: PlaybackPreferences.maximumBitrate
+        ) { StreamDetails($0, runtime: runtime) }
         guard let stream = StreamSource.continuing(bingeGroup: current.bingeGroup, in: streams)
             ?? streams.first(where: { $0.playbackURL != nil }),
             let url = stream.playbackURL

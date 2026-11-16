@@ -31,41 +31,51 @@ navigation destinations.
    Torrents without a playable URL are excluded.
 5. `PlaybackSession` opens a `PlaybackRequest`, owns the player lifecycle and
    persists progress. `LibraryStore` supplies Continue Watching, My List,
-   watched status, remembered sources and Up Next.
-6. `EpisodeSchedule` looks up the episode lists of the series being watched (those with
-   progress, the 30 most recent, each at most every six hours) and works out from the
-   library which episode is new since the last one was finished and which airs next.
+   Recently Watched, watched status, remembered sources and Up Next.
+6. `EpisodeSchedule` looks up the episode lists of the series being watched (of the 30
+   most recent with progress, those whose last episode was finished, each at most every
+   six hours) and works out from the
+   library which episode is new since the last one was finished.
 7. `AccountSync` optionally connects to the self-hosted account gateway, carrying
-   encrypted progress, watched state, addon setup and preferences. Separate shared
-   setup categories never include private viewing progress. See [Private sync](SYNC.md).
+   encrypted progress, watched state, addon setup and preferences between one
+   person's devices. See [Private sync](SYNC.md).
+8. `SetupCode` is a one-time copy of the addons, and optionally the playback
+   preferences, that one person sends another as a `loge://setup#…` link or a code.
+   Importing installs through `AddonStore`'s usual path; nothing stays connected.
 
 ## Screens and platform behavior
 
 - `App/Browse/Home/HomeView.swift`: artwork carousel on iPhone/iPad/Mac; a
-  focus-driven backdrop and fixed title header on Apple TV. Fixed popular,
-  IMDb-favourites and genre shelves replace addon-ordered Home catalogs.
+  focus-driven backdrop and fixed title header on Apple TV. Shelves follow
+  `HomeLayout` (Core): by default the library rows, the popular, IMDb-favourites and
+  genre shelves as before; Settings → Home hides, reorders, adds installed addons'
+  catalogs (those needing no search or other input) and resets. The carousel takes the
+  first shown movie and series shelves; the Apple TV header and default focus the first
+  shown catalog shelf. An addon shelf is stored by manifest `id`, type and catalog `id`,
+  never its URL, and is skipped, not deleted, on a device without that addon.
 - `CatalogRow.swift` and `CatalogGridView.swift`: poster rows and paginated
   grids, with genre filtering when the addon advertises it.
 - `MetaDetailView.swift`: title details, seasons, episode cards, watched
   actions and next episode selection. The hero is the title and Play, with Watch Later
-  and a More menu (`TitleMoreMenu`: trailer, sources, lists, watched mark) beside it,
+  and a More menu (`TitleMoreMenu`: trailer, sources, watched mark) beside it,
   centred on a phone with Play in the middle;
   the description follows with genre, year, runtime and the scores one size down.
   Cast & Crew shows only with TMDB connected; the addon's credits then stand in while
   TMDB's load or when it has none. Watch Trailer opens YouTube (the addon's trailer,
-  or TMDB's when connected; on Apple TV only with the YouTube app installed), and a
+  or TMDB's when connected; not on Apple TV, which has no browser), and a
   movie in a TMDB collection lists that film series in release order.
 - `PersonView.swift`: person details and role-filtered TMDB filmographies when
   connected. Without TMDB it says a filmography needs TMDB and shows the title the
   person was opened from: Cinemeta's search no longer names cast or directors. That
   state is only left for a page still open when TMDB is disconnected.
 - `SourcesView.swift`: source selection, autoplay and fallback candidates. Resolution
-  groups retain addon order for ties, with cached-first, bitrate and file-size
-  sorting plus a reported-bitrate cap; unknown rates stay visible.
+  groups list cached sources first, otherwise in addon order; Filter narrows by audio
+  language, HDR and the Maximum bitrate setting, and unknown metadata stays visible.
 - `SearchView.swift`: debounced search across built-in movie/series feeds and local
   recent searches.
-- `App/Settings`: addon installation/order/removal, playback preferences,
-  self-hosted sync/sharing, the TMDB and MDBList connections and the Mac updater.
+- `App/Settings`: addon installation/order/removal, Home's shelves, playback preferences,
+  setup copies (Share Setup on iPhone, iPad and Mac; Import Setup everywhere), self-hosted
+  sync, the TMDB and MDBList connections and the Mac updater.
 
 The shared visual language lives in `App/Browse/Components`: charcoal canvas,
 white controls, artwork-led hierarchy, platform-specific `Metrics` and font
@@ -88,9 +98,10 @@ seconds without scrubbing. Transport seeks and preview load/seek/quit commands
 are submitted asynchronously; PiP additionally waits for playback to restart
 before completing AVKit's skip request. The vendored MPVKit build
 contains resize, subtitle and frame-presentation timing patches; see
-`Vendor/MPVKit/README.md` before replacing it. Automatic source choices default
-to a 50 GB per-episode limit for series only, based on explicit video-file sizes.
-Movies and manual source choices are unrestricted. See
+`Vendor/MPVKit/README.md` before replacing it. Automatic source choices stay within
+the Maximum bitrate setting (100 Mbps by default), reported or estimated from the
+size, and take sources of unknown bitrate only when none fits. Manual choices are
+unrestricted. See
 [playback performance](PLAYBACK_PERFORMANCE.md) for behavior and diagnostics.
 
 A title's page shows its scores behind each site's mark (`ScoresLine`): IMDb's from
@@ -105,7 +116,8 @@ discovery feeds, not recommendations inferred from viewing history.
 
 Library data, installed addon configuration and playback preferences use
 UserDefaults because tvOS may purge app files. Progress history is bounded to
-500 entries. The TMDB token, MDBList key and sync credentials use Keychain. This means installed addon configuration is sensitive local
+500 entries. Titles removed from Recently Watched are kept on the device only, and
+only while they still hide something. The TMDB token, MDBList key and sync credentials use Keychain. This means installed addon configuration is sensitive local
 preference data, not Keychain-protected data.
 
 Never copy a configured stream-addon manifest URL into docs, logs, screenshots
@@ -138,8 +150,8 @@ preferences while diagnosing a failure.
   progress limit for manual and remote writes as well as playback writes.
 - Discard canceled source, details and person responses before publishing state;
   source cancellation also prevents delayed autoplay and fallback changes.
-- Preserve binary file-size units when comparing sources, so GiB and GB sort
-  according to their actual byte counts.
+- Preserve binary file-size units, so GiB and GB sizes, and bitrates estimated from
+  them, follow their actual byte counts.
 
 These changes reduce wasted work and bound retained state. No frame-rate,
 memory or launch-time improvement is claimed without profiling.

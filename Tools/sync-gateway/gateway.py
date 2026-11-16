@@ -22,7 +22,6 @@ from fastapi.concurrency import run_in_threadpool
 MAX_BODY = 1_048_576
 ADMIN_SESSION_SECONDS = 8 * 3600
 ADMIN_LOGIN_SECONDS = 600
-CATEGORIES = {"addons", "playback", "appearance"}
 ID = re.compile(r"^[a-f0-9]{32}$")
 # Invitation and device records are named by the SHA-256 digest of their secret.
 RECORD_ID = re.compile(r"^[a-f0-9]{64}$")
@@ -87,8 +86,6 @@ class CouchStore:
 class Service:
     def __init__(self, store):
         self.store = store
-        # One public worker coordinates membership checks spanning group/invitation documents.
-        self.membership_lock = threading.RLock()
 
     def update(self, identifier, change):
         for _ in range(5):
@@ -120,74 +117,43 @@ class Service:
             fail(401, "This account is disabled.")
         return account, invitation
 
-    def invitation(self, account_id, kind, group_id=None):
+    def invitation(self, account_id):
         code = secrets.token_urlsafe(32)
         identifier = digest(code)
-        document = {"_id": "invitation:" + identifier, "type": "invitation", "kind": kind,
+        document = {"_id": "invitation:" + identifier, "type": "invitation", "kind": "device",
                     "accountID": account_id, "expires": time.time() + 86400, "createdAt": now(),
                     "consumed": False, "revoked": False}
-        if group_id:
-            document["groupID"] = group_id
         self.store.put(document)
-        result = {"id": identifier, "code": code,
-                  "expiresAt": datetime.fromtimestamp(document["expires"], timezone.utc).isoformat().replace("+00:00", "Z")}
-        if group_id:
-            result["groupID"] = group_id
-        return result
+        return {"id": identifier, "code": code,
+                "expiresAt": datetime.fromtimestamp(document["expires"], timezone.utc).isoformat().replace("+00:00", "Z")}
 
-    def consume(self, code, kind, account_id=None, device_name=None, has_recovery_key=False):
+    def consume(self, code, device_name, has_recovery_key=False):
         if not isinstance(code, str) or len(code) > 128:
             fail(400, "Invitation code is invalid.")
         identifier = digest(code)
         secret = secrets.token_urlsafe(32)
         def change(document):
-            if document["kind"] != kind or document["consumed"] or document["revoked"] or document["expires"] <= time.time():
+            if document["kind"] != "device" or document["consumed"] or document["revoked"] or document["expires"] <= time.time():
                 fail(410, "Invitation expired or already used.")
             owner = self.store.get("account:" + document["accountID"])
             if not owner or not owner.get("enabled"):
                 fail(410, "Invitation is no longer available.")
-            requires_key = kind == "device" and any(self.store.get("document:" + owner["id"] + ":" + item) is not None
+            requires_key = any(self.store.get("document:" + owner["id"] + ":" + item) is not None
                                                     for item in ("configuration", "progress"))
             if requires_key and not has_recovery_key:
                 fail(428, "This account already has encrypted data. Enter its recovery key or use Add My Device on a connected device.")
             document["consumed"] = True
-            if kind == "device":
-                document["device"] = {"id": identifier, "name": device_name, "createdAt": now(), "tokenHash": digest(secret)}
-                return {"token": identifier + "." + secret, "accountID": owner["id"],
-                        "displayName": owner["displayName"], "deviceID": identifier}
-            if account_id == document["accountID"]:
-                fail(400, "You already own this group.")
-            group = self.store.get("group:" + document["groupID"])
-            if not group or not group.get("enabled"):
-                fail(410, "Shared setup is no longer available.")
-            if any(set(group["categories"]) & set(existing["categories"]) for existing in self.groups(account_id)):
-                fail(409, "Leave the existing shared setup for these settings before joining another.")
-            document["joinedBy"] = account_id
-            return group_summary(group)
+            document["device"] = {"id": identifier, "name": device_name, "createdAt": now(), "tokenHash": digest(secret)}
+            return {"token": identifier + "." + secret, "accountID": owner["id"],
+                    "displayName": owner["displayName"], "deviceID": identifier}
         return self.update("invitation:" + identifier, change)
-
-    def groups(self, account_id):
-        joined = {document.get("groupID") for document in self.store.list("invitation:")
-                  if document.get("joinedBy") == account_id and not document.get("revoked")}
-        # Disabling an account also stops what it shares, as it stops new members joining.
-        return [group for group in self.store.list("group:")
-                if group.get("enabled") and (group["ownerID"] == account_id or group["id"] in joined)
-                and (self.store.get("account:" + group["ownerID"]) or {}).get("enabled")]
-
-    def group(self, account_id, group_id):
-        if not ID.fullmatch(group_id):
-            fail(404, "Shared setup not found.")
-        group = next((group for group in self.groups(account_id) if group["id"] == group_id), None)
-        if group is None:
-            fail(404, "Shared setup not found.")
-        return group
 
     def create_account(self, display_name):
         identifier = secrets.token_hex(16)
         self.store.put({"_id": "account:" + identifier, "type": "account", "id": identifier,
                         "displayName": display_name, "enabled": True, "createdAt": now()})
         return {"accountID": identifier, "displayName": display_name,
-                "invitation": self.invitation(identifier, "device")}
+                "invitation": self.invitation(identifier)}
 
 
 class AdminLogin:
@@ -291,10 +257,6 @@ class AdminLogin:
         if session:
             with self.lock:
                 self.sessions.pop(digest(session), None)
-
-
-def group_summary(group):
-    return {key: group[key] for key in ("id", "name", "categories", "ownerID")}
 
 
 def envelope(document):
@@ -465,7 +427,7 @@ def create_app(store=None, mode=None, admin_secret=None, admin_login=None):
             account = store.get("account:" + checked(account_id))
             if not account or not account.get("enabled"):
                 fail(404, "Enabled account not found.")
-            return enrollment_code(service.invitation(account_id, "device"))
+            return enrollment_code(service.invitation(account_id))
 
         @app.get("/admin/access")
         def access(request: Request):
@@ -477,25 +439,14 @@ def create_app(store=None, mode=None, admin_secret=None, admin_login=None):
                           "revoked": entry["revoked"], "kind": entry["kind"]}
                 if entry.get("device"):
                     devices.append({**common, **{key: entry["device"][key] for key in ("name", "createdAt")}})
-                elif not entry["consumed"]:
+                elif not entry["consumed"] and entry["kind"] == "device":
                     invitations.append({**common, "expiresAt": entry["expires"]})
-            return {"devices": devices, "invitations": invitations,
-                    "groups": [group_summary(group) | {"ownerID": group["ownerID"], "enabled": group["enabled"]}
-                               for group in store.list("group:")]}
+            return {"devices": devices, "invitations": invitations}
 
         @app.delete("/admin/access/{identifier}")
         def revoke(identifier: str, request: Request):
             administrator(request)
             service.update("invitation:" + checked(identifier, RECORD_ID), lambda document: document.update(revoked=True))
-            return {"ok": True}
-
-        @app.patch("/admin/groups/{group_id}")
-        async def update_group(group_id: str, request: Request):
-            administrator(request)
-            value = await body(request)
-            if not isinstance(value.get("enabled"), bool):
-                fail(400, "Choose a group state.")
-            await run_in_threadpool(service.update, "group:" + checked(group_id), lambda document: document.update(enabled=value["enabled"]))
             return {"ok": True}
         return app
 
@@ -506,13 +457,14 @@ def create_app(store=None, mode=None, admin_secret=None, admin_login=None):
     @app.post("/v2/redeem")
     async def redeem(request: Request):
         value = await body(request)
-        return await run_in_threadpool(service.consume, value.get("code"), "device", device_name=text(value.get("deviceName"), "device name"), has_recovery_key=value.get("hasRecoveryKey") is True)
+        return await run_in_threadpool(service.consume, value.get("code"), text(value.get("deviceName"), "device name"), has_recovery_key=value.get("hasRecoveryKey") is True)
 
     @app.get("/v2/me")
     def me(request: Request):
         account, credential = service.authenticate(request)
+        # Versions with shared setups require the list, and read an empty one as having left them all.
         return {"accountID": account["id"], "displayName": account["displayName"],
-                "deviceID": credential["device"]["id"], "groups": [group_summary(group) for group in service.groups(account["id"])]}
+                "deviceID": credential["device"]["id"], "groups": []}
 
     def resource(request, resource):
         account, _ = service.authenticate(request)
@@ -541,68 +493,22 @@ def create_app(store=None, mode=None, admin_secret=None, admin_login=None):
         identifier = await run_in_threadpool(resource, request, document)
         return await write(request, identifier)
 
-    @app.get("/v2/groups/{group_id}/document")
-    def get_group(group_id: str, request: Request):
-        account, _ = service.authenticate(request)
-        service.group(account["id"], group_id)
-        return read("shared:" + group_id)
+    def retired():
+        fail(410, "Shared setups are no longer available. Update loge to copy a setup instead.")
 
-    @app.put("/v2/groups/{group_id}/document")
-    async def put_group(group_id: str, request: Request):
-        account, _ = await run_in_threadpool(service.authenticate, request)
-        await run_in_threadpool(service.group, account["id"], group_id)
-        return await write(request, "shared:" + group_id)
-
-    def create_invitation(account, value):
-        with service.membership_lock:
-            return create_invitation_locked(account, value)
-
-    def create_invitation_locked(account, value):
-        kind = value.get("kind")
-        if kind == "device":
-            return service.invitation(account["id"], kind)
-        if kind == "share" and value.get("groupID"):
-            group = service.group(account["id"], str(value["groupID"]))
-            if group["ownerID"] != account["id"]:
-                fail(403, "Only the owner can invite someone to this shared setup.")
-            return service.invitation(account["id"], kind, group["id"])
-        categories = value.get("categories")
-        if kind != "share" or not isinstance(categories, list) or not categories or not all(isinstance(item, str) for item in categories) or len(categories) != len(set(categories)) or not set(categories) <= CATEGORIES:
-            fail(400, "Choose what to share.")
-        if any(set(categories) & set(group["categories"]) for group in service.groups(account["id"])):
-            fail(409, "These settings already belong to a shared setup.")
-        group_id = secrets.token_hex(16)
-        store.put({"_id": "group:" + group_id, "type": "group", "id": group_id,
-                   "name": text(value.get("name", "Shared setup"), "group name"),
-                   "categories": categories, "ownerID": account["id"], "enabled": True})
-        return service.invitation(account["id"], kind, group_id)
+    # What versions with shared setups still call: a clear refusal rather than a missing route.
+    app.add_api_route("/v2/join", retired, methods=["POST"])
+    app.add_api_route("/v2/groups/{path:path}", retired, methods=["GET", "PUT", "DELETE"])
 
     @app.post("/v2/invitations")
     async def invite(request: Request):
         account, _ = await run_in_threadpool(service.authenticate, request)
         value = await body(request)
-        return await run_in_threadpool(create_invitation, account, value)
-
-    @app.post("/v2/join")
-    async def join(request: Request):
-        account, _ = await run_in_threadpool(service.authenticate, request)
-        value = await body(request)
-        def join_group():
-            with service.membership_lock:
-                return service.consume(value.get("code"), "share", account_id=account["id"])
-        return await run_in_threadpool(join_group)
-
-    @app.delete("/v2/groups/{group_id}/membership")
-    def leave_group(group_id: str, request: Request):
-        account, _ = service.authenticate(request)
-        group = service.group(account["id"], group_id)
-        if group["ownerID"] == account["id"]:
-            service.update("group:" + group_id, lambda document: document.update(enabled=False))
-            return {"ok": True}
-        for entry in store.list("invitation:"):
-            if entry.get("groupID") == group_id and entry.get("joinedBy") == account["id"] and not entry["revoked"]:
-                service.update(entry["_id"], lambda document: document.update(revoked=True))
-        return {"ok": True}
+        if value.get("kind") == "share":
+            retired()
+        if value.get("kind") != "device":
+            fail(400, "Expected a device invitation.")
+        return await run_in_threadpool(service.invitation, account["id"])
 
     @app.get("/v2/devices")
     def devices(request: Request):

@@ -45,7 +45,6 @@ struct RecommendedRow: View {
             // Anything already watched, started or saved is known to the viewer.
             let known = Set(library.progress.values.map(\.item.metaID))
                 .union(library.saved.map(\.id))
-                .union(library.lists.flatMap(\.titles).map(\.id))
             do {
                 let metas = try await tmdb.recommendations(for: seeds, excluding: known)
                 try Task.checkCancellation()

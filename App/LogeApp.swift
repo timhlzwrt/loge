@@ -20,6 +20,9 @@ struct LogeApp: App {
     @State private var selectedTab = RootTab.home
     /// Coming back from Control Center or a system sheet isn't a return to the app.
     @State private var leftForeground = false
+    #if !os(tvOS)
+    @State private var openedSetup: OpenedSetup?
+    #endif
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(Accent.storageKey) private var accent = Accent.white
 
@@ -54,6 +57,7 @@ struct LogeApp: App {
         defaults = .standard
         #endif
         RetiredTraktData.remove()
+        SyncedSettings.migrateSourceSizeLimit()
         let addonStore = AddonStore(defaults: defaults)
         let library = LibraryStore(defaults: defaults)
         _addonStore = State(initialValue: addonStore)
@@ -75,6 +79,25 @@ struct LogeApp: App {
     var body: some Scene {
         WindowGroup {
             initialBrowseView
+                #if !os(tvOS)
+                // Before the environment below, which the sheet needs.
+                .onOpenURL { url in
+                    do throws(SetupCode.DecodingError) {
+                        openedSetup = OpenedSetup(code: try SetupCode(decoding: url.absoluteString))
+                    } catch {
+                        openedSetup = OpenedSetup(errorMessage: ImportSetupView.message(for: error))
+                    }
+                }
+                .sheet(item: $openedSetup) { opened in
+                    NavigationStack {
+                        ImportSetupView(code: opened.code, errorMessage: opened.errorMessage)
+                            .toolbar { Button("Done") { openedSetup = nil } }
+                    }
+                    #if os(macOS)
+                    .frame(minWidth: 520, minHeight: 560)
+                    #endif
+                }
+                #endif
                 #if os(macOS)
                 // Also corrects a too-small frame the system restored from an earlier launch.
                 .frame(minWidth: 900, minHeight: 600)
@@ -256,6 +279,15 @@ private final class BackgroundTime {
 private struct SyncUITestCode: Decodable { let code: String }
 #endif
 
+#if !os(tvOS)
+/// A setup link the app was opened with: read, or why it couldn't be. Never the text itself.
+private struct OpenedSetup: Identifiable {
+    let id = UUID()
+    var code: SetupCode?
+    var errorMessage: String?
+}
+#endif
+
 enum RootTab: Hashable {
     case home, search, myLists, settings
 }
@@ -340,10 +372,7 @@ private struct BrowseStack<Content: View>: View {
                 .navigationDestination(for: CatalogSource.self) { CatalogGridView(source: $0) }
                 .navigationDestination(for: PersonRoute.self) { PersonView(route: $0) }
                 .navigationDestination(for: TMDBCreditTitle.self) { TMDBTitleView(title: $0) }
-                .navigationDestination(for: HistoryRoute.self) { _ in HistoryView() }
-                .navigationDestination(for: FilmCollection.self) { FilmCollectionView(collection: $0) }
                 .navigationDestination(for: DiscoveryCatalogs.Genre.self) { GenreView(genre: $0) }
-                .navigationDestination(for: FestivalRoute.self) { $0.destination }
         }
     }
 }

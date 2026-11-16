@@ -33,8 +33,8 @@ struct TMDBSection: View {
             }
         } footer: {
             Text("""
-                Adds cast and crew with photos and filmographies, member reviews, More Like This, Recommended \
-                and Popular Directors. The API token is stored in this device's Keychain.
+                Adds cast and crew with photos and filmographies, More Like This and Recommended. \
+                The API token is stored in this device's Keychain.
                 """)
         }
         .onChange(of: tmdb.revision) { errorMessage = nil }

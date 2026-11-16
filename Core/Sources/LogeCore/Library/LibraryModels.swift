@@ -98,20 +98,6 @@ public struct RememberedSource: Codable, Sendable, Equatable {
     }
 }
 
-/// A list the user named and fills from titles' pages, beside My List.
-public struct TitleList: Codable, Sendable, Hashable, Identifiable {
-    public var id: UUID
-    public var name: String
-    /// Newest first, like My List.
-    public var titles: [MetaPreview]
-
-    public init(id: UUID = UUID(), name: String, titles: [MetaPreview] = []) {
-        self.id = id
-        self.name = name
-        self.titles = titles
-    }
-}
-
 extension MetaPreview {
     /// Artwork this entry was saved without, taken from the title's full details.
     public func fillingArtwork(from meta: Meta) -> MetaPreview {
