@@ -17,9 +17,12 @@ struct SourcesView: View {
     @State private var results: [StreamProvider.ID: Result<[ListedSource], Error>] = [:]
     @State private var hasAutoplayed = false
     @State private var playedAutomatically = false
-    @State private var sourceOrder = StreamDetails.SortOrder.cachedFirst
-    @State private var secondaryOrder = StreamDetails.SortOrder.addonOrder
-    @State private var maximumBitrate = 0
+    /// Audio and picture are chosen per list; the bitrate is the setting, so it carries over.
+    @State private var audioLanguage: String?
+    @State private var picture = SourceSelection.Filter.Picture.any
+    @AppStorage(PlaybackPreferences.maximumBitrateKey) private var maximumBitrate = PlaybackPreferences.defaultMaximumBitrate
+    /// Show all lifts the bitrate limit for this list without changing the setting.
+    @State private var ignoresBitrateLimit = false
     #if os(tvOS)
     @FocusState private var focusedSourceID: ListedSource.ID?
     @State private var initialFocusID: ListedSource.ID?
@@ -154,10 +157,13 @@ struct SourcesView: View {
         #endif
     }
 
-    /// "5 sources", once something has loaded.
-    private func countLabel(_ groups: [SourceSelection.Group]) -> String? {
-        let count = groups.reduce(0) { $0 + $1.entries.count }
-        return count == 0 ? nil : "\(count) \(count == 1 ? "source" : "sources")"
+    /// "5 sources", or "5 of 47 sources" while filtered, once something has loaded.
+    private func countLabel(_ groups: [SourceSelection.Group], providers: [StreamProvider]) -> String? {
+        let total = listedSources(providers).count
+        let shown = groups.reduce(0) { $0 + $1.entries.count }
+        guard total > 0 else { return nil }
+        let noun = total == 1 ? "source" : "sources"
+        return shown == total ? "\(total) \(noun)" : "\(shown) of \(total) \(noun)"
     }
 
     #if os(tvOS)
@@ -209,7 +215,7 @@ struct SourcesView: View {
                     Text(route.item.title)
                         .font(.headline)
                         .lineLimit(1)
-                    if let detail = [route.item.episodeCode, countLabel(groups)].compactMap({ $0 }).joined(separator: " · ").nilIfEmpty {
+                    if let detail = [route.item.episodeCode, countLabel(groups, providers: providers)].compactMap({ $0 }).joined(separator: " · ").nilIfEmpty {
                         Text(detail)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
@@ -246,7 +252,7 @@ struct SourcesView: View {
             VStack(spacing: 2) {
                 Text("Choose a Source")
                     .font(.headline)
-                Text([route.title, countLabel(groups)].compactMap { $0 }.joined(separator: " · "))
+                Text([route.title, countLabel(groups, providers: providers)].compactMap { $0 }.joined(separator: " · "))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -308,14 +314,16 @@ struct SourcesView: View {
         let isLoading = providers.contains { results[$0.id] == nil }
         // Folding never hides the rows the list points out.
         let kept = Set([lastPlayed, recommended, selectedID].compactMap { $0 })
+        let all = listedSources(providers)
+        let hidden = all.count - groups.reduce(0) { $0 + $1.entries.count }
         ListContainer {
-            sourceOptions
-            if maximumBitrate > 0 {
-                Text("Up to \(maximumBitrate) Mbps, estimated from the size where not reported. Unknown bitrates stay visible.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+            filterMenu(all)
+            if hidden > 0 && !groups.isEmpty {
+                messageRow("\(hidden) \(hidden == 1 ? "source" : "sources") hidden.", button: "Show all", action: showAll)
             }
-            if let status = autoplayStatus(providers: providers, lastPlayed: lastPlayed) {
+            // Judged on every source: one the filters hide is still listed, behind Show all.
+            if let status = autoplayStatus(providers: providers,
+                                           lastPlayed: SourceSelection.remembered(library.sources[route.item.metaID], in: all)?.id) {
                 Text(status)
                     .foregroundStyle(.secondary)
             }
@@ -342,43 +350,42 @@ struct SourcesView: View {
             if !failed.isEmpty {
                 // Named by host, so the user knows which addon to check.
                 let hosts = failed.map { URL(string: $0.manifestURL)?.host() ?? $0.name }
-                retryRow("Couldn't load sources from \(hosts.formatted(.list(type: .and).locale(.interface))).") {
+                messageRow("Couldn't load sources from \(hosts.formatted(.list(type: .and).locale(.interface))).", button: "Retry") {
                     retry(failed)
                 }
             }
             if groups.isEmpty && !isLoading && failed.isEmpty {
-                if maximumBitrate > 0 {
-                    Text("No sources match this bitrate limit.")
-                        .foregroundStyle(.secondary)
+                if hidden > 0 {
+                    messageRow("No sources match these filters.", button: "Show all", action: showAll)
                 } else {
                     // An aggregator can come back empty when its own sources time out.
-                    retryRow("No sources found.") { retry(providers) }
+                    messageRow("No sources found.", button: "Retry") { retry(providers) }
                 }
             }
         }
     }
 
-    private func retryRow(_ message: String, retry: @escaping () -> Void) -> some View {
+    private func messageRow(_ message: String, button: String, action: @escaping () -> Void) -> some View {
         #if os(tvOS)
         // A list row with a button focuses as a whole; outside the label, the message
         // would stay white on the focused white row.
-        Button(action: retry) {
+        Button(action: action) {
             HStack {
                 Text(message).foregroundStyle(.secondary)
                 Spacer()
-                Text("Retry")
+                Text(button)
             }
         }
         #else
         HStack {
             Text(message).foregroundStyle(.secondary)
             Spacer()
-            Button("Retry", action: retry)
+            Button(button, action: action)
         }
         #endif
     }
 
-    /// Rows per resolution before the rest fold away; the sort already puts the best first.
+    /// Rows per resolution before the rest fold away; the order already puts cached ones first.
     private static let foldedLength = 5
 
     /// Stays in place when pressed, so tvOS focus keeps a target while rows appear above it.
@@ -410,7 +417,7 @@ struct SourcesView: View {
             let host = URL(string: remembered.providerURL)?.host() ?? "your addon"
             return "Waiting for \(host) to start your last source…"
         }
-        // Still listed but not started (too large to start by itself): its row reads "Last played".
+        // Still listed but not started (above the bitrate limit): its row reads "Last played".
         guard lastPlayed == nil, case .success = results[remembered.providerURL] else { return nil }
         return "Your last source isn't listed now. Choose one below."
     }
@@ -420,31 +427,58 @@ struct SourcesView: View {
         Task { await load(providers) }
     }
 
-    private var sourceOptions: some View {
-        Menu {
-            // Submenus, so each list is named; inline, the two sort lists read as one
-            // repeated list.
+    private var filter: SourceSelection.Filter {
+        SourceSelection.Filter(audioLanguage: audioLanguage, picture: picture,
+                               maximumBitrate: ignoresBitrateLimit ? 0 : maximumBitrate)
+    }
+
+    private func showAll() {
+        audioLanguage = nil
+        picture = .any
+        ignoresBitrateLimit = true
+    }
+
+    /// Offers only the languages the listed sources mark.
+    private func filterMenu(_ sources: [ListedSource]) -> some View {
+        let marked = Set(sources.flatMap(\.details.languages))
+        let languages = PlaybackPreferences.languages.filter { marked.contains($0.code) }
+        let filter = filter
+        // "German · HDR · ≤ 50 Mbps": only what narrows the list. The limit is on by default,
+        // so it's named only where it hides something.
+        let limitHides = sources.contains { $0.details.isWithin(maximumBitrate: filter.maximumBitrate) == false }
+        let parts = [
+            filter.audioLanguage.map { code in languages.first { $0.code == code }?.name ?? code },
+            filter.picture == .hdr ? "HDR" : filter.picture == .sdr ? "SDR" : nil,
+            limitHides ? "≤ \(filter.maximumBitrate) Mbps" : nil,
+        ].compactMap { $0 }
+        return Menu {
+            // Submenus, so each list is named and shows its choice.
             Group {
-                Picker("Sort by", selection: $sourceOrder) {
-                    ForEach(StreamDetails.SortOrder.allCases) { order in Text(order.rawValue).tag(order) }
+                if !languages.isEmpty {
+                    Picker("Audio", selection: $audioLanguage) {
+                        Text("Any language").tag(String?.none)
+                        ForEach(languages, id: \.code) { Text($0.name).tag(Optional($0.code)) }
+                    }
                 }
-                Picker("Then by", selection: $secondaryOrder) {
-                    ForEach(StreamDetails.SortOrder.allCases) { order in Text(order.rawValue).tag(order) }
+                Picker("Picture", selection: $picture) {
+                    Text("Any").tag(SourceSelection.Filter.Picture.any)
+                    Text("HDR or Dolby Vision").tag(SourceSelection.Filter.Picture.hdr)
+                    Text("SDR").tag(SourceSelection.Filter.Picture.sdr)
                 }
-                Picker("Maximum bitrate", selection: $maximumBitrate) {
+                // Choosing a bitrate here changes the setting, and ends Show all's exception.
+                Picker("Bitrate", selection: Binding(get: { filter.maximumBitrate },
+                                                     set: { maximumBitrate = $0; ignoresBitrateLimit = false })) {
                     Text("Any bitrate").tag(0)
-                    ForEach([10, 25, 50, 100], id: \.self) { Text("Up to \($0) Mbps").tag($0) }
+                    ForEach(SyncedSettings.maximumBitrateOptions.filter { $0 > 0 }, id: \.self) {
+                        Text("Up to \($0) Mbps").tag($0)
+                    }
                 }
             }
             .pickerStyle(.menu)
         } label: {
-            // Says how the list is ordered now, rather than only that it can be.
             HStack(spacing: 6) {
-                Image(systemName: "arrow.up.arrow.down")
-                Text(sourceOrder.rawValue)
-                if maximumBitrate > 0 {
-                    Text("· up to \(maximumBitrate) Mbps")
-                }
+                Image(systemName: "line.3.horizontal.decrease")
+                Text(parts.isEmpty ? "Filter" : "Filter: " + parts.joined(separator: " · "))
                 Image(systemName: "chevron.down")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
@@ -452,9 +486,8 @@ struct SourcesView: View {
             .font(.subheadline.weight(.medium))
             .frame(minHeight: 44)
         }
-        .accessibilityLabel("Sort & Filter")
-        .accessibilityValue("\(sourceOrder.rawValue), then \(secondaryOrder.rawValue), "
-                                + (maximumBitrate == 0 ? "any bitrate" : "up to \(maximumBitrate) Mbps"))
+        .accessibilityLabel("Filter")
+        .accessibilityValue(parts.isEmpty ? "All sources" : parts.joined(separator: ", "))
     }
 
     @ViewBuilder
@@ -507,8 +540,8 @@ struct SourcesView: View {
     // MARK: Data
 
     private func groups(_ providers: [StreamProvider]) -> [SourceSelection.Group] {
-        SourceSelection.grouped(listedSources(providers).filter { withinBitrateLimit($0.details) },
-                                by: [sourceOrder, secondaryOrder])
+        let filter = filter
+        return SourceSelection.grouped(listedSources(providers).filter { filter.matches($0.details) })
     }
 
     /// In the user's addon order.
@@ -517,11 +550,6 @@ struct SourcesView: View {
             guard case .success(let entries) = results[provider.id] else { return [] }
             return entries
         }
-    }
-
-    /// Unknown bitrates pass, so a limit never hides sources that just don't say.
-    private func withinBitrateLimit(_ details: StreamDetails) -> Bool {
-        maximumBitrate == 0 || (details.listedBitrate ?? 0) <= Double(maximumBitrate) * 1_000_000
     }
 
     /// The best source for the speed playback has measured here; only marked, never played
@@ -538,8 +566,7 @@ struct SourcesView: View {
 
     private func load(_ providers: [StreamProvider]) async {
         let route = route
-        // The length of the file as last played here beats the listed runtime, which is rounded.
-        let runtime = library.progress[route.id].flatMap { $0.isEstimated == true ? nil : $0.duration } ?? route.runtime
+        let runtime = route.bitrateRuntime(in: library)
         let rememberedProvider = library.sources[route.item.metaID]?.providerURL
         await withTaskGroup(of: (StreamProvider.ID, Result<[ListedSource], Error>).self) { group in
             for provider in providers where results[provider.id] == nil {
@@ -579,8 +606,7 @@ struct SourcesView: View {
     private func playContinuingSourceIfPossible() {
         guard route.autoplay, !hasAutoplayed, let remembered = library.sources[route.item.metaID],
               case .success(let entries) = results[remembered.providerURL],
-              let stream = SourceSelection.continuing(
-                remembered, itemID: route.id, in: entries.filter { permitsAutomaticPlayback($0.details) }.map(\.stream)),
+              let stream = SourceSelection.continuing(remembered, itemID: route.id, in: automatic(entries).map(\.stream)),
               let provider = entries.first?.provider
         else { return }
         hasAutoplayed = true
@@ -611,13 +637,13 @@ struct SourcesView: View {
     /// What to try if `request` doesn't open, among the sources allowed to play automatically.
     private func fallbacks(for request: PlaybackRequest) -> [PlaybackRequest] {
         let providers = store.addons.streamProviders(type: route.type, id: route.id)
-        let candidates = listedSources(providers).filter { permitsAutomaticPlayback($0.details) }
-        return SourceSelection.fallbacks(for: request.url, bingeGroup: request.bingeGroup, among: candidates)
+        return SourceSelection.fallbacks(for: request.url, bingeGroup: request.bingeGroup,
+                                         among: automatic(listedSources(providers)))
             .compactMap { self.request(for: $0.stream, from: $0.provider) }
     }
 
-    private func permitsAutomaticPlayback(_ details: StreamDetails) -> Bool {
-        withinBitrateLimit(details)
-            && details.permitsAutomaticPlayback(type: route.type, maximumFileSize: PlaybackPreferences.maximumAutomaticFileSize)
+    /// Always by the setting: the list's filters and Show all only change what's listed.
+    private func automatic(_ sources: [ListedSource]) -> [ListedSource] {
+        SourceSelection.automatic(sources, maximumBitrate: maximumBitrate) { $0.details }
     }
 }

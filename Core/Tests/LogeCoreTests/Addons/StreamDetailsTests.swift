@@ -107,21 +107,6 @@ struct StreamDetailsTests {
         #expect(StreamDetails(text: "1 MiB").size?.converted(to: .bytes).value == 1_048_576)
         #expect(StreamDetails(text: "1 GiB").size?.converted(to: .bytes).value == 1_073_741_824)
         #expect(StreamDetails(text: "1 TiB").size?.converted(to: .bytes).value == 1_099_511_627_776)
-
-        let binary = StreamDetails(text: "1 GiB")
-        let decimal = StreamDetails(text: "1.05 GB")
-        #expect(StreamDetails.SortOrder.smallerFile.precedes(decimal, binary))
-        #expect(!StreamDetails.SortOrder.smallerFile.precedes(binary, decimal))
-    }
-
-    @Test func sortsSmallerFilesBeforeUnknownSizes() {
-        let small = StreamDetails(text: "2160p 10 GB")
-        let big = StreamDetails(text: "2160p 40 GB")
-        let megabytes = StreamDetails(text: "2160p 900 MB")
-        let unknown = StreamDetails(text: "2160p")
-
-        let sorted = [unknown, small, megabytes, big].sorted(by: StreamDetails.SortOrder.smallerFile.precedes)
-        #expect(sorted == [megabytes, small, big, unknown])
     }
 
     @Test func readsExplicitBitrateUnitsWithoutEstimatingFromSizes() {
@@ -145,21 +130,27 @@ struct StreamDetailsTests {
         #expect(StreamDetails(text: "25 Mbps\n25 Mbps").bitrate == 25_000_000)
     }
 
-    @Test func sortsCachedSourcesBeforeUnknownAndUncached() {
-        let cached = StreamDetails(text: "[RD+] 4K 10 GB")
-        let unknown = StreamDetails(text: "4K 40 GB")
-        let uncached = StreamDetails(text: "[RD download] 4K 80 GB")
-        #expect([uncached, unknown, cached].sorted(by: StreamDetails.SortOrder.cachedFirst.precedes) == [cached, unknown, uncached])
-        #expect(!StreamDetails.SortOrder.cachedFirst.precedes(cached, cached))
-        #expect(!StreamDetails.SortOrder.addonOrder.precedes(cached, uncached))
+    @Test func readsLanguagesFromFlagsOnly() {
+        #expect(StreamDetails(text: "🇬🇧 🇩🇪 🇬🇧 🇺🇸").languages == ["en", "de"])
+        #expect(StreamDetails(text: "Multi Audio / 🇮🇹").languages == ["it"])
+        // A language named in the title says nothing about the audio.
+        #expect(StreamDetails(text: "The.French.Dispatch.2021.1080p").languages.isEmpty)
+        #expect(StreamDetails(text: "Multi 🌐").languages.isEmpty)
     }
 
-    @Test func sortsReportedBitratesWithUnknownRatesLastInBothDirections() {
-        let low = StreamDetails(text: "12 Mbps")
-        let high = StreamDetails(text: "80 Mbps")
-        let unknown = StreamDetails(text: "633 GB Season Pack")
-        #expect([unknown, high, low].sorted(by: StreamDetails.SortOrder.lowerBitrate.precedes) == [low, high, unknown])
-        #expect([unknown, low, high].sorted(by: StreamDetails.SortOrder.higherBitrate.precedes) == [high, low, unknown])
+    @Test func tellsSDRFromAPictureNobodyDescribed() {
+        #expect(StreamDetails(text: "2160p DV HDR10").isHDR == true)
+        #expect(StreamDetails(text: "HLG").isHDR == true)
+        #expect(StreamDetails(text: "1080p WEB-DL").isHDR == false)
+        #expect(StreamDetails(text: "SDR").isHDR == false)
+        #expect(StreamDetails(text: "Stream 2 · 4 GB").isHDR == nil)
+    }
+
+    @Test func comparesBitratesWithTheLimitAndLeavesUnknownOnesOpen() {
+        #expect(StreamDetails(text: "50 Mbps").isWithin(maximumBitrate: 50) == true)
+        #expect(StreamDetails(text: "50.1 Mbps").isWithin(maximumBitrate: 50) == false)
+        #expect(StreamDetails(text: "633 GB Season Pack").isWithin(maximumBitrate: 50) == nil)
+        #expect(StreamDetails(text: "900 Mbps").isWithin(maximumBitrate: 0) == true)
     }
 
     private func stream(_ json: String) throws -> StreamSource {
@@ -202,27 +193,10 @@ struct StreamDetailsTests {
         #expect(details.bitrateLabel == "25 Mbps")
     }
 
-    @Test func sortsEstimatedAndReportedBitratesTogether() throws {
-        let reported = StreamDetails(try stream(#"{"title":"4K 30 Mbps"}"#), runtime: 7200)
-        let estimated = StreamDetails(try stream(#"{"title":"4K 9 GB"}"#), runtime: 7200)
-        let unknown = StreamDetails(try stream(#"{"title":"4K"}"#), runtime: 7200)
-        #expect([unknown, reported, estimated].sorted(by: StreamDetails.SortOrder.lowerBitrate.precedes) == [estimated, reported, unknown])
-        #expect([unknown, estimated, reported].sorted(by: StreamDetails.SortOrder.higherBitrate.precedes) == [reported, estimated, unknown])
-    }
-
-    @Test func breaksTiesWithTheSecondOrder() {
-        let cachedLow = StreamDetails(text: "[RD+] 4K 12 Mbps")
-        let cachedHigh = StreamDetails(text: "[RD+] 4K 80 Mbps")
-        let cachedUnknown = StreamDetails(text: "[RD+] 4K")
-        let uncachedHigh = StreamDetails(text: "[RD download] 4K 90 Mbps")
-        let all = [uncachedHigh, cachedUnknown, cachedLow, cachedHigh]
-
-        let higher = all.sorted { StreamDetails.SortOrder.precedes($0, $1, by: [.cachedFirst, .higherBitrate]) }
-        #expect(higher == [cachedHigh, cachedLow, cachedUnknown, uncachedHigh])
-        let lower = all.sorted { StreamDetails.SortOrder.precedes($0, $1, by: [.cachedFirst, .lowerBitrate]) }
-        #expect(lower == [cachedLow, cachedHigh, cachedUnknown, uncachedHigh])
-        #expect(!StreamDetails.SortOrder.precedes(cachedLow, cachedHigh, by: [.cachedFirst, .addonOrder]))
-        #expect(!StreamDetails.SortOrder.precedes(cachedHigh, cachedLow, by: [.cachedFirst, .addonOrder]))
+    @Test func capsEstimatedAndReportedBitratesAlike() throws {
+        // 9 GB over two hours is 10 Mbps.
+        #expect(StreamDetails(try stream(#"{"title":"4K 9 GB"}"#), runtime: 7200).isWithin(maximumBitrate: 10) == true)
+        #expect(StreamDetails(try stream(#"{"title":"4K 30 Mbps"}"#), runtime: 7200).isWithin(maximumBitrate: 25) == false)
     }
 
     @Test func usesIndividualVideoSizeInsteadOfSeasonPackTotal() throws {
@@ -230,10 +204,8 @@ struct StreamDetailsTests {
             {"title":"Show Season Pack 633 GB", "behaviorHints":{"videoSize":8000000000}}
             """.utf8))
         let details = StreamDetails(stream)
-        #expect(details.fileSize == 8_000_000_000)
         #expect(details.size?.converted(to: .bytes).value == 8_000_000_000)
         #expect(!details.isPackageSize)
-        #expect(details.permitsAutomaticPlayback(type: "series", maximumFileSize: 50_000_000_000))
     }
 
     @Test func labelsPackTotalsWithoutRankingThemAsLargeVideoFiles() {
@@ -242,35 +214,8 @@ struct StreamDetailsTests {
         #expect(pack.isPackageSize)
         #expect(pack.sizeLabel?.hasSuffix(" pack") == true)
         #expect(!episode.isPackageSize)
-        #expect(StreamDetails.SortOrder.smallerFile.precedes(episode, pack))
         let ambiguous = StreamDetails(text: "Episode 8 GB · Season Pack 633 GB")
         #expect(!ambiguous.isPackageSize)
-        #expect(ambiguous.fileSize == nil)
         #expect(ambiguous.size == nil)
-        #expect(!ambiguous.permitsAutomaticPlayback(type: "series", maximumFileSize: 50_000_000_000))
-    }
-
-    @Test func doesNotLimitMovies() throws {
-        let stream = try JSONDecoder().decode(StreamSource.self, from: Data("""
-            {"name":"4K HEVC", "behaviorHints":{"videoSize":633000000000}}
-            """.utf8))
-        #expect(StreamDetails(stream).permitsAutomaticPlayback(type: "movie", maximumFileSize: 50_000_000_000))
-        #expect(StreamDetails(text: "4K").permitsAutomaticPlayback(type: "movie", maximumFileSize: 50_000_000_000))
-    }
-
-    @Test func limitsAutomaticEpisodesWithoutDisabling4K() throws {
-        func details(bytes: Int64) throws -> StreamDetails {
-            let json = "{\"name\":\"4K HEVC\",\"behaviorHints\":{\"videoSize\":\(bytes)}}"
-            return StreamDetails(try JSONDecoder().decode(StreamSource.self, from: Data(json.utf8)))
-        }
-        let boundary = try details(bytes: 50_000_000_000)
-        let large = try details(bytes: 50_000_000_001)
-        #expect(boundary.resolution == .ultraHD)
-        #expect(boundary.permitsAutomaticPlayback(type: "series", maximumFileSize: 50_000_000_000))
-        #expect(!large.permitsAutomaticPlayback(type: "series", maximumFileSize: 50_000_000_000))
-        #expect(large.permitsAutomaticPlayback(type: "series", maximumFileSize: 0))
-        #expect(!StreamDetails(text: "633 GB").permitsAutomaticPlayback(type: "series", maximumFileSize: 50_000_000_000))
-        #expect(StreamDetails(text: "633 GB").permitsAutomaticPlayback(type: "series", maximumFileSize: 0))
-        #expect(try !details(bytes: -1).permitsAutomaticPlayback(type: "series", maximumFileSize: 50_000_000_000))
     }
 }

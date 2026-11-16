@@ -2,49 +2,36 @@
 
 ## Automatic source choices
 
-Settings → Playback → Automatic series source limit defaults to **50 GB per episode**.
-It applies only to series: remembered-source autoplay, continuing a series,
-opening-failure fallbacks, and Up Next. Movies and manual source choices remain
-unrestricted, including 4K.
-Choose **No limit** to restore automatic choices for sources without file-size metadata.
+Settings → Playback → Maximum bitrate defaults to **100 Mbps** (also 10, 25 and 50,
+or No limit). It applies to films and series alike: remembered-source autoplay, the
+link warmed from a title's page, opening-failure fallbacks and Up Next. Autoplay never
+starts a source whose reported or estimated bitrate is above it, prefers sources known
+to be within it, and falls back to sources of unknown bitrate only when no known one
+fits. A remembered release continues in that order too. Manual choices are unrestricted.
+50 Mbps is about 22 GB per hour.
 
-The cap uses positive `behaviorHints.videoSize` values only. The
-[Stremio stream protocol](https://github.com/Stremio/stremio-addon-sdk/blob/master/docs/api/responses/stream.md)
-defines that field as the selected video file's size in bytes. A size extracted from
-an addon's text may instead describe a torrent or an entire season. It is displayed
-but never used to reject an episode as oversized. Explicit pack totals receive a
-`pack` suffix and do not outrank individual files merely because they are larger.
+The limit replaced a per-episode size limit (50 GB by default). A stored "No limit"
+carries over; any size becomes the 100 Mbps default.
 
-When a limit is enabled, unknown-size series sources require a manual choice. A
-remembered episode URL therefore waits for fresh source metadata instead of
-bypassing the limit. If
-no eligible source exists for the next episode, loge does not start one automatically.
+An estimate spreads the file size over the runtime: duration, variable bitrate, audio
+tracks and container overhead differ. The cap is a control over automatic choices, not
+a claim that every file below it will play smoothly or that every larger file will stutter.
 
-File size is not bitrate: duration, variable bitrate, audio tracks and container
-overhead differ. The cap is a control over automatic choices, not a claim that every
-file below it will play smoothly or that every larger file will stutter.
+## Source bitrate, order and filters
 
-## Source bitrate and sorting
-
-The source list shows an addon's explicitly reported bitrate in **Mbps**, alongside
-file size. It accepts rate units such as `Mbps`, `Mbit/s` and `kbps`; it does not
-estimate a rate from runtime or from a season pack's size. Audio-only rate reports
+The source list shows an addon's reported bitrate in **Mbps**, alongside file size,
+or one estimated from the size and runtime (`≈`). It accepts rate units such as `Mbps`,
+`Mbit/s` and `kbps`, and never estimates from a season pack's size. Audio-only rate reports
 and conflicting rate values are left unknown. These are addon-reported rates,
 not measured transfer speeds or promises about peak bitrate.
 
-**Sort & Filter** keeps the 4K, 1080p and 720p groups and sorts within each group.
-The default **Cached first** puts known cached sources before unknown cache status,
-then uncached sources, preserving addon order for ties. **Lower bitrate**,
-**Higher bitrate**, **Smaller file** and **Addon order** are also available. Unknown
-rates sort after known rates in either bitrate direction. Pack totals and ambiguous
-multiple size reports do not rank as individual video sizes.
-
-The optional **Maximum reported bitrate** filter limits known rates to 10, 25, 50
-or 100 Mbps. Unknown rates remain visible, as the list explains; the filter does
-not assert that those sources are below the selected limit. It applies to source
-choices and automatic fallbacks from this screen, alongside the series-only
-automatic file-size policy above. A remembered URL cannot bypass an active bitrate
-cap without fresh source metadata.
+The list has one order: 4K, 1080p, 720p and Other groups, and within each group
+cached sources first, then those of unknown cache status, then uncached ones, otherwise
+in addon order. **Filter** narrows it by audio language (from the flags addons show),
+picture (HDR or Dolby Vision, or SDR: a resolution with no HDR tag) and the Maximum
+bitrate setting. Sources that don't state a language, picture or bitrate stay listed.
+Audio and picture reset for each list; **Show all** also lifts the bitrate limit for
+that list only.
 
 ## Inspect a hitch
 
