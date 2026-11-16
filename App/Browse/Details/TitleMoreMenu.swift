@@ -2,20 +2,15 @@ import LogeCore
 import SwiftUI
 
 /// What a title offers besides Play and Watch Later, behind one button so the two stand
-/// alone: its trailer, the sources list, the user's lists and, for a movie, the watched mark.
+/// alone: its trailer, the sources list and, for a movie, the watched mark.
 struct TitleMoreMenu: View {
-    /// What the lists keep.
-    let title: MetaPreview
     let trailer: URL?
     /// Nil until there's something to play.
     let chooseSource: (() -> Void)?
     /// Nil for a series, which is marked by season or episode.
     let movie: WatchItem?
 
-    @Environment(LibraryStore.self) private var library
     @Environment(\.openURL) private var openURL
-    @State private var isNaming = false
-    @State private var name = ""
 
     var body: some View {
         Menu {
@@ -24,13 +19,6 @@ struct TitleMoreMenu: View {
             }
             if let chooseSource {
                 Button("Choose a Source", systemImage: "list.bullet", action: chooseSource)
-            }
-            Section("Save to") {
-                ListMembershipActions(title: title)
-                Button("New List…", systemImage: "plus") {
-                    name = ""
-                    isNaming = true
-                }
             }
             if let movie {
                 Section { WatchedMarkButton(item: movie) }
@@ -47,15 +35,6 @@ struct TitleMoreMenu: View {
         .buttonStyle(GlassIconButtonStyle())
         #endif
         .help("More")
-        .alert("New List", isPresented: $isNaming) {
-            TextField("Name", text: $name)
-            Button("Create") {
-                library.toggle(title, inList: library.createList(named: name))
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("\(title.name) goes on it.")
-        }
     }
 }
 

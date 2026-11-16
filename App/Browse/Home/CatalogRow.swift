@@ -287,6 +287,6 @@ struct PosterTile: View {
         .accessibilityLabel(meta.name)
         // The element replaces the progress bar's own label.
         .accessibilityValue(progress.map { $0.isFinished ? "Watched" : "\(Int($0.fraction * 100)) percent watched" } ?? "")
-        .contextMenu { SaveToMenu(title: meta) }
+        .contextMenu { WatchLaterToggle(title: meta) }
     }
 }

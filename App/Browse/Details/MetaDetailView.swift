@@ -12,8 +12,6 @@ struct MetaDetailView: View {
     @State private var tmdbState = TMDBLoadState.disconnected
     @State private var loadAttempt = 0
     @State private var tmdbAttempt = 0
-    /// Every Retry on the page, which reviews follow to reload if they failed too.
-    @State private var retries = 0
     /// What the TMDB details on screen were loaded for, so returning to the page keeps them.
     @State private var tmdbLoadedKey: TMDBLoadKey?
     @State private var collection: TMDBCollection?
@@ -91,7 +89,6 @@ struct MetaDetailView: View {
                     }
                     MoreLikeThisRow(titles: tmdbDetails?.recommendations ?? [])
                         .detailColumn(.full)
-                    ReviewsSection(preview: preview, pageRetries: retries, pageOffersRetry: offersRetry)
                     InformationSection(meta: meta, details: tmdbDetails, people: people)
                         .detailColumn(.side)
                 } else if case .failed(let message) = state {
@@ -250,9 +247,9 @@ struct MetaDetailView: View {
                   let streams = try? await provider.streams(type: route.type, id: route.id),
                   !Task.isCancelled
             else { return }
-            let allowed = streams.filter {
-                StreamDetails($0).permitsAutomaticPlayback(
-                    type: route.type, maximumFileSize: PlaybackPreferences.maximumAutomaticFileSize)
+            let runtime = route.bitrateRuntime(in: library)
+            let allowed = SourceSelection.automatic(streams, maximumBitrate: PlaybackPreferences.maximumBitrate) {
+                StreamDetails($0, runtime: runtime)
             }
             if let stream = SourceSelection.continuing(remembered, itemID: route.id, in: allowed) {
                 StreamWarmup.shared.warm(stream)
@@ -275,23 +272,15 @@ struct MetaDetailView: View {
             : AnyLayout(VStackLayout(alignment: .leading, spacing: spacing))
     }
 
-    /// One Retry for everything that failed: addon details, TMDB details and reviews load
-    /// separately, but a button for each read as several problems.
+    /// One Retry for everything that failed: addon and TMDB details load separately, but a
+    /// button for each read as several problems.
     private func retry() {
-        retries += 1
         // Whatever loaded stays on the page while the rest is asked again.
         if isAddonFailed {
             state = .loading
             loadAttempt += 1
         }
         if case .failed = tmdbState { tmdbAttempt += 1 }
-    }
-
-    /// Whether the page shows a Retry of its own, for the addon or TMDB details.
-    private var offersRetry: Bool {
-        if isAddonFailed { return true }
-        if case .failed(_, canRetry: true) = tmdbState { return true }
-        return false
     }
 
     /// Full details once loaded; until then the catalog entry already has enough to draw the page.
@@ -366,7 +355,7 @@ struct MetaDetailView: View {
                 Text("Loading TMDB details…")
             case .disconnected:
                 if !tmdb.isConfigured, isOnTMDB, hasDetails {
-                    Text("Connect TMDB in Settings for cast and crew, reviews and recommendations.")
+                    Text("Connect TMDB in Settings for cast and crew and recommendations.")
                 }
             case .loaded:
                 EmptyView()
@@ -380,7 +369,7 @@ struct MetaDetailView: View {
         .padding(.horizontal, Metrics.gutter)
     }
 
-    /// What My List and the user's lists keep: the catalog entry, with artwork it lacked
+    /// What Watch Later keeps: the catalog entry, with artwork it lacked
     /// filled in from the full details, so the title has a poster wherever it's listed.
     private func savedPreview(_ meta: Meta?) -> MetaPreview {
         meta.map(preview.fillingArtwork(from:)) ?? preview
@@ -478,9 +467,7 @@ struct MetaDetailView: View {
         let watchLater = MyListButton(isSaved: library.isSaved(preview.id)) {
             library.toggleSaved(saved)
         }
-        .contextMenu { SaveToMenu(title: saved) }
         let more = TitleMoreMenu(
-            title: saved,
             trailer: Self.trailerURL(youTubeID: tmdbDetails?.trailerYouTubeID ?? meta?.trailers?.youTubeID),
             chooseSource: play.map { play in
                 {
@@ -527,14 +514,12 @@ struct MetaDetailView: View {
     }
 
     /// Trailers play on YouTube: its site, which opens the YouTube app where that's installed.
-    /// Apple TV has no browser, so there it's the app or no button.
+    /// Apple TV has no browser to open it in, so it offers none.
     private static func trailerURL(youTubeID: String?) -> URL? {
-        guard let youTubeID else { return nil }
         #if os(tvOS)
-        guard let url = URL(string: "youtube://watch/\(youTubeID)"), UIApplication.shared.canOpenURL(url) else { return nil }
-        return url
+        nil
         #else
-        return URL(string: "https://www.youtube.com/watch?v=\(youTubeID)")
+        youTubeID.flatMap { URL(string: "https://www.youtube.com/watch?v=\($0)") }
         #endif
     }
 

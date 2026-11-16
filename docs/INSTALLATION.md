@@ -98,16 +98,16 @@ secret; never include it in a public issue or screenshot of an editable field.
 No account is required for basic browsing and playback. These are three
 separate integrations, not three required setup steps.
 
-### Private sync and shared setups
+### Private sync
 
 **Settings → Sync** connects to your own HTTPS service using a connection code.
 There is no default server. Your devices can share progress, watched state,
-ordered addons and preferences. Other accounts can join selected setup
-categories without receiving your private viewing progress.
+ordered addons and preferences. To give another person your addons, use
+**Settings → Addons → Share Setup…** instead: a one-time copy, no account needed.
 
 See [Private sync](SYNC.md) for server deployment, joining devices, expiring
 invitations, conflicts and recovery keys. Save the recovery key securely.
-Watch Later, custom lists and remembered stream URLs remain local.
+Watch Later and remembered stream URLs remain local.
 
 ### TMDB metadata
 

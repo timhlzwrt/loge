@@ -14,8 +14,6 @@ enum Metrics {
     /// Continue Watching stills.
     static let cardWidth: CGFloat = 354
     static let episodeWidth: CGFloat = 375
-    /// History cards: their width in My Lists' row, the narrowest column of History's grid.
-    static let historyCardWidth: CGFloat = 375
     // tvOS already insets content by its own safe area margins.
     static let gutter: CGFloat = 0
     static let rowSpacing: CGFloat = 40
@@ -35,7 +33,6 @@ enum Metrics {
     static let posterWidth: CGFloat = 132
     static let cardWidth: CGFloat = 232
     static let episodeWidth: CGFloat = 232
-    static let historyCardWidth: CGFloat = 232
     static let gutter: CGFloat = 32
     static let rowSpacing: CGFloat = 16
     static let headerSpacing: CGFloat = 16
@@ -53,7 +50,6 @@ enum Metrics {
     static let posterWidth: CGFloat = isPad ? 160 : 112
     static let cardWidth: CGFloat = isPad ? 320 : 270
     static let episodeWidth: CGFloat = isPad ? 320 : 240
-    static let historyCardWidth: CGFloat = isPad ? 240 : 170
     static let gutter: CGFloat = isPad ? 32 : 20
     static let rowSpacing: CGFloat = 12
     static let headerSpacing: CGFloat = 12
@@ -76,8 +72,8 @@ enum Metrics {
 }
 
 extension View {
-    /// For a title's pages on iPhone: details, sources, and the people and reviews reached from
-    /// them, so the bar doesn't come and go on the way through. It would cover their last actions.
+    /// For a title's pages on iPhone: details, sources, and the people reached from them,
+    /// so the bar doesn't come and go on the way through. It would cover their last actions.
     func hidingPhoneTabBar() -> some View {
         #if os(iOS)
         toolbar(Metrics.isPhone ? .hidden : .automatic, for: .tabBar)
@@ -142,7 +138,7 @@ extension Font {
     /// Further from the screen than a phone, an iPad reads long text at the system's body size.
     @MainActor static let synopsis = Metrics.isPhone ? Font.subheadline : Font.body
     static let cardTitle = Font.subheadline.bold()
-    /// Episode and History cards share these, so both read as one kind of card.
+    /// Episode and Continue Watching cards share these, so both read as one kind of card.
     static let episodeCaption = Font.caption.weight(.semibold)
     static let episodeTitle = Font.headline
     #endif
