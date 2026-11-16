@@ -16,13 +16,13 @@ struct AccountSyncLocalSetup {
         SyncedSettings(addonURLs: addons.addons.map(\.manifestURL), defaults: defaults)
     }
 
-    func apply(_ settings: SyncedSettings, categories: Set<SyncCategory> = Set(SyncCategory.allCases)) throws {
+    func apply(_ settings: SyncedSettings) throws {
         let settings = try settings.validated()
-        if categories.contains(.addons), addons.addons.map(\.manifestURL) != settings.addonURLs {
+        if addons.addons.map(\.manifestURL) != settings.addonURLs {
             try addons.replaceManifestURLs(settings.addonURLs)
             Task { await addons.refreshManifests() }
         }
-        settings.writePreferences(to: defaults, categories: categories)
+        settings.writePreferences(to: defaults)
     }
 
     func rememberBeforeConnecting(_ settings: SyncedSettings) throws {

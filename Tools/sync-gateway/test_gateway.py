@@ -89,25 +89,19 @@ class GatewayTests(unittest.TestCase):
         self.assertNotIn(token, serialized)
         self.assertNotIn(token.split('.')[1], serialized)
 
-    def test_share_grants_only_group_access_and_leave_revokes_it(self):
-        a, auth_a = self.account('A')
-        b, auth_b = self.account('B')
-        _, auth_c = self.account('C')
-        created = self.public.post('/v2/invitations', headers=auth_a, json={'kind': 'share', 'name': 'Household', 'categories': ['addons']}).json()
-        group = created['groupID']
-        path = '/v2/groups/' + group + '/document'
-        self.assertEqual(self.public.put(path, headers=auth_a, json=self.envelope).status_code, 200)
-        self.assertEqual(self.public.get(path, headers=auth_b).status_code, 404)
-        joined = self.public.post('/v2/join', headers=auth_b, json={'code': created['code']})
-        self.assertEqual(joined.status_code, 200)
-        self.assertEqual(joined.json()['categories'], ['addons'])
-        self.assertEqual(self.public.get(path, headers=auth_b).status_code, 200)
-        self.assertEqual(self.public.get(path, headers=auth_c).status_code, 404)
-        self.assertEqual(self.public.get('/v2/documents/progress', headers=auth_b).status_code, 404)
-        self.assertEqual(self.public.post('/v2/invitations', headers=auth_b, json={'kind': 'share', 'groupID': group}).status_code, 403)
-        self.assertEqual(self.public.post('/v2/invitations', headers=auth_a, json={'kind': 'share', 'groupID': group}).status_code, 200)
-        self.assertEqual(self.public.delete('/v2/groups/' + group + '/membership', headers=auth_b).status_code, 200)
-        self.assertEqual(self.public.get(path, headers=auth_b).status_code, 404)
+    def test_shared_setup_routes_of_older_apps_are_gone_not_broken(self):
+        _, authorization = self.account('A')
+        path = '/v2/groups/fedcba9876543210fedcba9876543210/'
+        for method, route in (('get', path + 'document'), ('put', path + 'document'), ('delete', path + 'membership')):
+            body = {} if method != 'put' else {'json': self.envelope}
+            self.assertEqual(getattr(self.public, method)(route, headers=authorization, **body).status_code, 410, route)
+        self.assertEqual(self.public.post('/v2/join', headers=authorization, json={'code': 'x'}).status_code, 410)
+        share = {'kind': 'share', 'name': 'Shared setup', 'categories': ['addons']}
+        self.assertEqual(self.public.post('/v2/invitations', headers=authorization, json=share).status_code, 410)
+        self.assertEqual(self.public.post('/v2/invitations', headers=authorization, json={'kind': 'other'}).status_code, 400)
+        self.assertEqual(self.public.get('/v2/me', headers=authorization).json()['groups'], [])
+        self.assertFalse(any(key.startswith(('group:', 'shared:')) for key in self.store.documents))
+        self.assertEqual(set(self.admin.get('/admin/access', headers=self.admin_headers).json()), {'devices', 'invitations'})
 
     def test_revoke_device_and_disable_account_take_effect_immediately(self):
         account, authorization = self.account('A')
@@ -117,20 +111,6 @@ class GatewayTests(unittest.TestCase):
         self.admin.patch('/admin/accounts/' + account['accountID'], headers=self.admin_headers, json={'enabled': True})
         self.assertEqual(self.public.delete('/v2/devices/' + account['deviceID'], headers=authorization).status_code, 200)
         self.assertEqual(self.public.get('/v2/me', headers=authorization).status_code, 401)
-
-    def test_owner_leaving_stops_shared_access_without_deleting_data(self):
-        _, auth_a = self.account('A')
-        _, auth_b = self.account('B')
-        invitation = self.public.post('/v2/invitations', headers=auth_a,
-            json={'kind': 'share', 'categories': ['addons']}).json()
-        group_id = invitation['groupID']
-        path = '/v2/groups/' + group_id + '/document'
-        self.assertEqual(self.public.put(path, headers=auth_a, json=self.envelope).status_code, 200)
-        self.assertEqual(self.public.post('/v2/join', headers=auth_b, json={'code': invitation['code']}).status_code, 200)
-        self.assertEqual(self.public.delete('/v2/groups/' + group_id + '/membership', headers=auth_a).status_code, 200)
-        self.assertEqual(self.public.get(path, headers=auth_b).status_code, 404)
-        self.assertEqual(self.public.get('/v2/me', headers=auth_b).json()['groups'], [])
-        self.assertIsNotNone(self.store.get('shared:' + group_id))
 
     def test_missing_recovery_key_does_not_consume_returning_account_code(self):
         account, authorization = self.account('A')
@@ -153,24 +133,11 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual(self.public.delete('/v2/invitations/' + invitation['id'], headers=authorization).status_code, 200)
         self.assertEqual(self.public.post('/v2/redeem', json={'code': invitation['code'], 'deviceName': 'Late'}).status_code, 410)
 
-    def test_disabled_owner_stops_sharing_for_existing_members(self):
-        owner, auth_a = self.account('A')
-        _, auth_b = self.account('B')
-        invitation = self.public.post('/v2/invitations', headers=auth_a,
-            json={'kind': 'share', 'categories': ['addons']}).json()
-        path = '/v2/groups/' + invitation['groupID'] + '/document'
-        self.assertEqual(self.public.put(path, headers=auth_a, json=self.envelope).status_code, 200)
-        self.assertEqual(self.public.post('/v2/join', headers=auth_b, json={'code': invitation['code']}).status_code, 200)
-        self.assertEqual(self.public.get(path, headers=auth_b).status_code, 200)
-        self.admin.patch('/admin/accounts/' + owner['accountID'], headers=self.admin_headers, json={'enabled': False})
-        self.assertEqual(self.public.get(path, headers=auth_b).status_code, 404)
-        self.assertEqual(self.public.get('/v2/me', headers=auth_b).json()['groups'], [])
-
     def test_malformed_record_ids_are_not_found_on_every_route(self):
         _, authorization = self.account('A')
         for path in ('/v2/devices/..%2Faccount', '/v2/invitations/not-a-digest'):
             self.assertEqual(self.public.delete(path, headers=authorization).status_code, 404)
-        for method, path in (('patch', '/admin/accounts/x'), ('patch', '/admin/groups/x'),
+        for method, path in (('patch', '/admin/accounts/x'),
                              ('post', '/admin/accounts/x/invitation'), ('delete', '/admin/access/x')):
             body = {} if method == 'delete' else {'json': {'enabled': False}}
             response = getattr(self.admin, method)(path, headers=self.admin_headers, **body)
@@ -187,12 +154,8 @@ class GatewayTests(unittest.TestCase):
         redeem = self.public.post('/v2/redeem', json=CONTRACT['redeem']['request'] | {'code': created['invitation']['code']})
         check('redeem', redeem)
         auth_a = {'Authorization': 'Bearer ' + redeem.json()['token']}
-        _, auth_b = self.account('B')
         check('inviteDevice', self.public.post('/v2/invitations', headers=auth_a, json=CONTRACT['inviteDevice']['request']))
-        share = self.public.post('/v2/invitations', headers=auth_a, json=CONTRACT['inviteShare']['request'])
-        check('inviteShare', share)
-        check('join', self.public.post('/v2/join', headers=auth_b, json=CONTRACT['join']['request'] | {'code': share.json()['code']}))
-        check('me', self.public.get('/v2/me', headers=auth_b))
+        check('me', self.public.get('/v2/me', headers=auth_a))
         check('putDocument', self.public.put('/v2/documents/progress', headers=auth_a, json=CONTRACT['putDocument']['request']))
         check('getDocument', self.public.get('/v2/documents/progress', headers=auth_a))
         check('devices', self.public.get('/v2/devices', headers=auth_a))
@@ -225,12 +188,10 @@ class GatewayTests(unittest.TestCase):
             authorization = b'Bearer ' + b'a' * 64 + b'.' + secret
             self.assertEqual(self.public.get('/v2/me', headers={'Authorization': authorization}).status_code, 401)
 
-    def test_invalid_envelope_and_untrusted_group_metadata_are_rejected(self):
+    def test_invalid_envelopes_are_rejected(self):
         _, authorization = self.account('A')
         for body in [self.envelope | {'_attachments': {}}, self.envelope | {'version': True}, {'version': 2, 'ciphertext': '!'}, self.envelope | {'_id': 'account:someone'}]:
             self.assertEqual(self.public.put('/v2/documents/progress', headers=authorization, json=body).status_code, 400)
-        for categories in [['progress'], [{}], [], ['addons', 'addons']]:
-            self.assertEqual(self.public.post('/v2/invitations', headers=authorization, json={'kind': 'share', 'categories': categories}).status_code, 400)
         self.assertEqual(self.public.put('/v2/documents/progress', headers=authorization, content=b'x' * 1_048_577).status_code, 413)
 
     def test_expired_and_revoked_invitations_cannot_be_redeemed(self):
@@ -240,7 +201,7 @@ class GatewayTests(unittest.TestCase):
         self.store.put(invitation)
         result = self.public.post('/v2/redeem', json={'code': account['invitation']['code'], 'deviceName': 'Phone'})
         self.assertEqual(result.status_code, 410)
-        invitation = self.app.state.service.invitation(account['accountID'], 'device')
+        invitation = self.app.state.service.invitation(account['accountID'])
         self.admin.delete('/admin/access/' + invitation['id'], headers=self.admin_headers)
         result = self.public.post('/v2/redeem', json={'code': invitation['code'], 'deviceName': 'Phone'})
         self.assertEqual(result.status_code, 410)

@@ -3,10 +3,9 @@ import Foundation
 extension AccountSync {
     public enum Status: Equatable, Sendable {
         case off, ready, waiting, syncing, upToDate, failed
-        case choosingInitialSetup, choosingSettings, choosingPlayback, choosingSharedSettings, choosingRemaining
+        case choosingInitialSetup, choosingSettings, choosingPlayback
         /// A pending choice was previewed again because something changed before it applied.
         case choosingAgain(ChangedBy)
-        case sharedSetupJoined, sharedSetupLeft, sharedSetupChanged
 
         public enum ChangedBy: Sendable { case thisDevice, anotherDevice, syncing }
 
@@ -21,14 +20,9 @@ extension AccountSync {
             case .choosingInitialSetup: "Choose the initial setup"
             case .choosingSettings: "Choose conflicting settings"
             case .choosingPlayback: "Choose whether to keep removed titles"
-            case .choosingSharedSettings: "Choose shared settings"
-            case .choosingRemaining: "Choose remaining changes"
             case .choosingAgain(.thisDevice): "Changed on this device. Choose again."
             case .choosingAgain(.anotherDevice): "Changed on another device. Choose again."
             case .choosingAgain(.syncing): "Changed while syncing. Choose again."
-            case .sharedSetupJoined: "Shared setup connected"
-            case .sharedSetupLeft: "Shared setup disconnected"
-            case .sharedSetupChanged: "Shared setup changed. Sync again."
             }
         }
     }

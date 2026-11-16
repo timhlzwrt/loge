@@ -22,7 +22,7 @@ dialog{color:inherit;background:#202124;border:1px solid #44464b;border-radius:1
 <div id="notice" class="notice" role="status" hidden></div>
 <form id="unlock">
 <div class="eyebrow">Your sync server</div><h1>Manage your sync.</h1>
-<p>Manage accounts, connected devices and the setups they share.</p>
+<p>Manage accounts and their connected devices.</p>
 <div id="signInOption" hidden><a id="signIn" class="button" href="/oidc/login">Sign in</a></div>
 <label for="token">Administrator code</label><input id="token" type="password" autocomplete="off" spellcheck="false" required autofocus>
 <button type="submit" id="unlockButton">Unlock panel</button><small>Your code stays in this browser tab for this session. Encrypted settings and playback data stay private.</small>
@@ -32,12 +32,11 @@ dialog{color:inherit;background:#202124;border:1px solid #44464b;border-radius:1
 <button data-view="accounts" aria-current="page">Accounts <span id="accountsCount">0</span></button>
 <button data-view="devices">Devices <span id="devicesCount">0</span></button>
 <button data-view="invitations">Invitations <span id="invitationsCount">0</span></button>
-<button data-view="groups">Shared setups <span id="groupsCount">0</span></button>
 </nav><p class="sidebar-note"><strong>Private by design</strong>This panel manages access. It cannot read synced settings or playback, or recover encryption keys.</p></aside>
 <main class="main">
-<div class="section-heading"><div><h1 id="viewTitle" tabindex="-1">Accounts</h1><p id="viewDescription">Each account keeps its own playback progress. Addons and settings can be shared separately.</p></div><button id="newAccount">Create account</button></div>
+<div class="section-heading"><div><h1 id="viewTitle" tabindex="-1">Accounts</h1><p id="viewDescription">Each account keeps its own addons, settings and playback progress.</p></div><button id="newAccount">Create account</button></div>
 <div class="toolbar"><input id="search" type="search" aria-label="Search accounts" placeholder="Search accounts…" autocomplete="off"><small id="resultCount" role="status"></small><button id="reload" class="quiet">Refresh</button></div>
-<section id="accounts" aria-label="Accounts"></section><section id="devices" aria-label="Devices" hidden></section><section id="invitations" aria-label="Invitations" hidden></section><section id="groups" aria-label="Shared setups" hidden></section>
+<section id="accounts" aria-label="Accounts"></section><section id="devices" aria-label="Devices" hidden></section><section id="invitations" aria-label="Invitations" hidden></section>
 <p class="page-footer" id="viewFooter">Disabling an account pauses access for all of its devices.</p>
 </main></div>
 <dialog id="createDialog" aria-labelledby="createTitle"><form id="create"><h2 id="createTitle">Create an account</h2><p>Give it a name the account owner will recognise. You’ll get a one-time code to connect their first device.</p><label for="name">Display name</label><input id="name" maxlength="80" autocomplete="off" placeholder="e.g. Alex" required><div id="createNotice" class="dialog-notice" role="status"></div><div class="dialog-actions"><button type="button" class="secondary" id="cancelCreate">Cancel</button><button type="submit">Create account</button></div></form></dialog>
@@ -46,12 +45,11 @@ dialog{color:inherit;background:#202124;border:1px solid #44464b;border-radius:1
 <script>
 const $=id=>document.getElementById(id);
 const views={
-  accounts:{title:'Accounts',description:'Each account keeps its own playback progress. Addons and settings can be shared separately.',empty:'No accounts yet',hint:'Create an account to connect the first device.',footer:'Disabling an account pauses access for all of its devices.'},
+  accounts:{title:'Accounts',description:'Each account keeps its own addons, settings and playback progress.',empty:'No accounts yet',hint:'Create an account to connect the first device.',footer:'Disabling an account pauses access for all of its devices.'},
   devices:{title:'Devices',description:'Devices connected to accounts on this server.',empty:'No connected devices',hint:'Create a device code from Accounts, then enter it in loge.',footer:'Revocation takes effect on the next request. Previously downloaded data stays on the device.'},
-  invitations:{title:'Invitations',description:'Unused codes for connecting a device or joining a shared setup.',empty:'No pending invitations',hint:'New device and sharing codes appear here until used or expired.',footer:'Only unused, unexpired invitations are shown. Codes work once and expire after 24 hours.'},
-  groups:{title:'Shared setups',description:'Addons and settings shared between accounts. Playback progress stays private.',empty:'No shared setups',hint:'Use Share setup in the loge app to choose what to share.',footer:'Disabling a setup pauses access for everyone sharing it.'}
+  invitations:{title:'Invitations',description:'Unused codes for connecting a device.',empty:'No pending invitations',hint:'New device codes appear here until used or expired.',footer:'Only unused, unexpired invitations are shown. Codes work once and expire after 24 hours.'}
 };
-let adminToken='',sessionToken='',session=0,currentView='accounts',records={accounts:[],devices:[],invitations:[],groups:[]},names={},pendingAction=null;
+let adminToken='',sessionToken='',session=0,currentView='accounts',records={accounts:[],devices:[],invitations:[]},names={},pendingAction=null;
 function message(value){$('notice').textContent=value;$('notice').hidden=!value;}
 async function api(path,method='GET',data){
   const generation=session;
@@ -83,7 +81,7 @@ function showInvitation(invite,name){
 }
 function render(){
   const query=$('search').value.trim().toLocaleLowerCase();const view=views[currentView];const container=$(currentView);container.replaceChildren();
-  const items=records[currentView].filter(item=>[item.displayName,item.name,item.kind,(item.accountID||item.ownerID)?owner(item.accountID||item.ownerID):''].filter(Boolean).join(' ').toLocaleLowerCase().includes(query));
+  const items=records[currentView].filter(item=>[item.displayName,item.name,item.kind,item.accountID?owner(item.accountID):''].filter(Boolean).join(' ').toLocaleLowerCase().includes(query));
   $('resultCount').textContent=items.length+' '+(items.length===1?'item':'items');
   for(const item of items){
     let row;
@@ -93,11 +91,8 @@ function render(){
       actions.push(actionButton(item.enabled?'Disable':'Enable',()=>confirmAction((item.enabled?'Disable':'Enable')+' account',item.enabled?'Pause access for every device on '+item.displayName+'? You can enable the account again.':'Restore device access for '+item.displayName+'?',()=>update('/admin/accounts/'+item.id,'PATCH',{enabled:!item.enabled})),item.enabled));
       const count=records.devices.filter(device=>device.accountID===item.id).length;
       row=entry(item.displayName,count+' '+(count===1?'device':'devices'),actions,item.enabled?'Enabled':'Disabled');
-    }else if(currentView==='groups'){
-      const categories={addons:'Addons',playback:'Playback settings',appearance:'Appearance'};
-      row=entry(item.name,owner(item.ownerID)+' · '+item.categories.map(value=>categories[value]||value).join(', '),[actionButton(item.enabled?'Disable':'Enable',()=>confirmAction((item.enabled?'Disable':'Enable')+' shared setup',(item.enabled?'Pause':'Restore')+' sharing for '+item.name+'?',()=>update('/admin/groups/'+item.id,'PATCH',{enabled:!item.enabled})),item.enabled)],item.enabled?'Enabled':'Disabled');
     }else{
-      const device=currentView==='devices';const label=device?item.name:(item.kind==='device'?'Device invitation':'Sharing invitation');
+      const device=currentView==='devices';const label=device?item.name:'Device invitation';
       const detail=owner(item.accountID)+' · '+(device?'Connected '+date(item.createdAt):'Expires '+date(item.expiresAt));
       row=entry(label,detail,[actionButton('Revoke',()=>confirmAction(device?'Revoke device':'Revoke invitation',device?'Disconnect '+item.name+'? To reconnect, the owner will need a new code.':'Invalidate this unused code for '+owner(item.accountID)+'?',()=>update('/admin/access/'+item.id,'DELETE')),true)]);
     }
@@ -114,7 +109,7 @@ function selectView(id,focus=false){
 async function refresh(){
   const generation=session;const [accounts,access]=await Promise.all([api('/admin/accounts'),api('/admin/access')]);if(generation!==session)return;
   names=Object.fromEntries(accounts.map(account=>[account.id,account.displayName]));
-  records={accounts,devices:access.devices.filter(item=>!item.revoked),invitations:access.invitations.filter(item=>!item.revoked&&item.expiresAt>Date.now()/1000),groups:access.groups};
+  records={accounts,devices:access.devices.filter(item=>!item.revoked),invitations:access.invitations.filter(item=>!item.revoked&&item.expiresAt>Date.now()/1000)};
   for(const key of Object.keys(views))$(key+'Count').textContent=records[key].length;
   render();
 }

@@ -9,6 +9,7 @@ struct SettingsView: View {
     @Environment(MDBListAccount.self) private var mdblist
     @Environment(AccountSync.self) private var sync
     @AppStorage(Accent.storageKey) private var accent = Accent.white
+    @AppStorage(HomeLayout.storageKey) private var homeLayout: Data?
 
     var body: some View {
         SettingsPage("Settings") { sections }
@@ -43,6 +44,11 @@ struct SettingsView: View {
         PlaybackSettingsSection()
 
         Section {
+            NavigationLink {
+                HomeSettingsView()
+            } label: {
+                LabeledContent("Home", value: HomeLayout(storedData: homeLayout) == .default ? "Default" : "Customized")
+            }
             NavigationLink {
                 SettingsPage("Accent Color") { AccentSettingsSection() }
             } label: {
@@ -131,6 +137,9 @@ struct AddonsSettingsView: View {
     @State private var isInstalling = false
     @State private var installError: AddonStore.InstallError?
     @State private var removing: InstalledAddon?
+    #if !os(tvOS)
+    @State private var isSharing = false
+    #endif
 
     var body: some View {
         SettingsPage("Addons") {
@@ -222,7 +231,7 @@ struct AddonsSettingsView: View {
                     .disabled(isManifestURLEmpty || isInstalling)
                 }
                 if let installError {
-                    Text(message(for: installError))
+                    Text(Self.message(for: installError))
                         .foregroundStyle(.red)
                 }
             } header: {
@@ -232,7 +241,29 @@ struct AddonsSettingsView: View {
                 Text("Paste the URL with the Remote keyboard on your iPhone, or add the addon on a device connected to Sync.")
                 #endif
             }
+
+            Section {
+                #if !os(tvOS)
+                Button("Share Setup…") { isSharing = true }
+                    .disabled(store.addons.isEmpty)
+                #endif
+                NavigationLink("Import Setup…") { ImportSetupView() }
+            } footer: {
+                #if os(tvOS)
+                Text("Add the addons someone sent you. Nothing stays connected afterwards.")
+                #else
+                Text("Send someone a copy of your addons, or add the ones they sent you. Nothing stays connected afterwards.")
+                #endif
+            }
         }
+        #if !os(tvOS)
+        .sheet(isPresented: $isSharing) {
+            NavigationStack { ShareSetupView() }
+                #if os(macOS)
+                .frame(minWidth: 520, minHeight: 560)
+                #endif
+        }
+        #endif
         #if os(tvOS)
         .fullScreenCover(item: $removing) { addon in
             AddonRemovalConfirmation(host: addon.host) { store.remove(addon.id) }
@@ -286,7 +317,7 @@ struct AddonsSettingsView: View {
         }
     }
 
-    private func message(for error: AddonStore.InstallError) -> String {
+    static func message(for error: AddonStore.InstallError) -> String {
         switch error {
         case .invalidURL: "That isn't a manifest URL. It should end in /manifest.json."
         case .alreadyInstalled: "This addon is already installed."

@@ -1,21 +1,9 @@
 import CryptoKit
 import Foundation
 
-public enum SyncCategory: String, Codable, CaseIterable, Sendable, Hashable {
+/// The parts of `SyncedSettings`; once also what a shared setup could cover.
+enum SyncCategory: String, Codable, CaseIterable, Sendable, Hashable {
     case addons, playback, appearance
-    public var name: String {
-        switch self {
-        case .addons: "Addons"
-        case .playback: "Playback preferences"
-        case .appearance: "Appearance"
-        }
-    }
-}
-
-public struct SyncGroup: Codable, Equatable, Sendable, Identifiable {
-    public let id: String
-    public let name: String
-    public let categories: Set<SyncCategory>
 }
 
 public struct SyncDevice: Codable, Equatable, Sendable, Identifiable {
@@ -28,7 +16,6 @@ public struct AccountSyncIdentity: Codable, Sendable {
     public let accountID: String
     public let displayName: String
     public let deviceID: String
-    public let groups: [SyncGroup]
 }
 
 struct AccountSyncRedemption: Decodable, Sendable {
@@ -38,32 +25,26 @@ struct AccountSyncRedemption: Decodable, Sendable {
     let deviceID: String
 }
 
-/// What a code lets its holder do: start an account, add one of its devices, or join a shared setup.
+/// What a code lets its holder do: start an account, or add one of its devices. Codes for
+/// the shared setups of earlier versions no longer decode.
 enum AccountSyncCodeKind: String, Codable, Sendable {
-    case account, device, share
+    case account, device
 }
 
 /// What one device hands another, as base64 JSON: the server, a one-use invitation and,
-/// for one's own devices or a shared setup, the key that decrypts it.
+/// for one's own devices, the key that decrypts the account.
 struct AccountSyncCode: Codable {
     var version = 2
     let kind: AccountSyncCodeKind
     let endpoint: String
     let code: String
     var key: String?
-    var groupID: String?
-    var categories: Set<SyncCategory>?
-    var groups: [AccountSync.Grant]?
 
-    init(kind: AccountSyncCodeKind, endpoint: String, code: String, key: String? = nil, groupID: String? = nil,
-         categories: Set<SyncCategory>? = nil, groups: [AccountSync.Grant]? = nil) {
+    init(kind: AccountSyncCodeKind, endpoint: String, code: String, key: String? = nil) {
         self.kind = kind
         self.endpoint = endpoint
         self.code = code
         self.key = key
-        self.groupID = groupID
-        self.categories = categories
-        self.groups = groups
     }
 
     init(decoding string: String) throws {
@@ -82,7 +63,6 @@ struct AccountSyncInvitation: Decodable, Sendable {
     let id: String
     let code: String
     let expiresAt: String
-    let groupID: String?
 }
 
 struct AccountSyncDocument: Codable, Sendable {
@@ -187,24 +167,13 @@ struct AccountSyncClient: Sendable {
         guard written.ok, !written.rev.isEmpty else { throw SyncError.invalidResponse }
         return written.rev
     }
-    func invite(kind: AccountSyncCodeKind, categories: Set<SyncCategory> = [],
-                groupID: String? = nil) async throws -> AccountSyncInvitation {
-        struct Request: Encodable { let kind: AccountSyncCodeKind; let name: String; let categories: [SyncCategory]; let groupID: String? }
-        let sorted = categories.sorted { $0.rawValue < $1.rawValue }
-        return try await send("POST", "invitations",
-                              body: Request(kind: kind, name: "Shared setup", categories: sorted, groupID: groupID))
+    func inviteDevice() async throws -> AccountSyncInvitation {
+        struct Request: Encodable { let kind: AccountSyncCodeKind }
+        return try await send("POST", "invitations", body: Request(kind: .device))
     }
     func revokeInvitation(_ id: String) async throws {
         _ = try await request("DELETE", "invitations/\(try identifier(id))")
     }
-    func join(code: String) async throws -> SyncGroup {
-        struct Request: Encodable { let code: String }
-        return try await send("POST", "join", body: Request(code: code))
-    }
-    func leaveGroup(_ id: String) async throws {
-        _ = try await request("DELETE", "groups/\(try identifier(id))/membership")
-    }
-    func groupResource(_ id: String) throws -> String { "groups/\(try identifier(id))/document" }
 
     private func identifier(_ string: String) throws -> String {
         guard !string.isEmpty, string.utf8.count <= 128,

@@ -7,8 +7,7 @@ struct SyncSettingsView: View {
     @Environment(PlaybackSession.self) private var playback
     @State private var connectionCode = ""
     @State private var recoveryKey = ""
-    @State private var presentedSheet: SyncSheet?
-    @State private var leaving: SyncGroup?
+    @State private var isAddingDevice = false
 
     var body: some View {
         SettingsPage("Sync") {
@@ -40,34 +39,11 @@ struct SyncSettingsView: View {
                         .disabled(sync.isSyncing)
                 }
                 Section {
-                    Button { presentedSheet = .device } label: {
+                    Button { isAddingDevice = true } label: {
                         Label("Add my device", systemImage: "plus.rectangle.on.rectangle")
                     }
-                    Button { presentedSheet = .share } label: {
-                        Label("Share setup", systemImage: "person.2")
-                    }
-                    Button("Join shared setup") { presentedSheet = .join }
                 } footer: {
-                    Text("Your devices share playback progress. Other people only receive the setup categories you choose.")
-                }
-                if !sync.sharedGroups.isEmpty {
-                    Section {
-                        ForEach(sync.sharedGroups) { group in
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(group.name).font(.headline)
-                                Text(SyncCategory.allCases.filter { group.categories.contains($0) }.map(\.name).joined(separator: ", "))
-                                    .foregroundStyle(.secondary)
-                                Button("Leave shared setup", role: .destructive) { leaving = group }
-                                    #if os(iOS)
-                                    // Otherwise the whole row is the button, and a tap on the name leaves.
-                                    .buttonStyle(.borderless)
-                                    #endif
-                                    .disabled(sync.isSyncing)
-                            }
-                        }
-                    } header: { SettingsHeader("Shared setup") } footer: {
-                        Text("Leaving a setup you created stops sharing for everyone. Other setups are removed only from your account.")
-                    }
+                    Text("Your devices share playback progress, addons and preferences.")
                 }
                 Section {
                     NavigationLink("Connection & recovery") {
@@ -159,23 +135,13 @@ struct SyncSettingsView: View {
                 Section { Text(message).foregroundStyle(.red) }
             }
         }
-        .sheet(item: $presentedSheet) { sheet in
+        .sheet(isPresented: $isAddingDevice) {
             NavigationStack {
-                SyncSharingView(mode: sheet)
+                AddDeviceView()
             }
             #if os(macOS)
             .frame(minWidth: 520, minHeight: 620)
             #endif
-        }
-        .confirmationDialog(
-            "Leave \(leaving?.name ?? "shared setup")?",
-            isPresented: Binding(get: { leaving != nil }, set: { if !$0 { leaving = nil } }),
-            titleVisibility: .visible,
-            presenting: leaving
-        ) { group in
-            Button("Leave", role: .destructive) { Task { await sync.leaveGroup(id: group.id) } }
-        } message: { _ in
-            Text("If you created this setup, sharing stops for everyone in it. Otherwise only your account leaves.")
         }
     }
 
@@ -195,72 +161,28 @@ struct SyncSettingsView: View {
     }
 }
 
-private enum SyncSheet: String, Identifiable {
-    case device, share, join
-    var id: Self { self }
-    var title: String {
-        #if os(tvOS)
-        switch self {
-        case .device: "Device"
-        case .share: "Share"
-        case .join: "Join"
-        }
-        #else
-        switch self {
-        case .device: "Add my device"
-        case .share: "Share setup"
-        case .join: "Join shared setup"
-        }
-        #endif
-    }
-}
-
-private struct SyncSharingView: View {
-    let mode: SyncSheet
-    @Environment(AccountSync.self) private var sync
+private struct AddDeviceView: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var categories: Set<SyncCategory> = [.addons]
+    @Environment(AccountSync.self) private var sync
     @State private var code = ""
     @State private var isWorking = false
     @State private var errorMessage: String?
 
     var body: some View {
-        SettingsPage(mode.title) {
-            if mode == .join {
+        #if os(tvOS)
+        let title = "Device"
+        #else
+        let title = "Add my device"
+        #endif
+        SettingsPage(title) {
+            if code.isEmpty {
                 Section {
-                    SecureField("Invitation code", text: $code)
-                        .autocorrectionDisabled()
-                        #if !os(macOS)
-                        .textInputAutocapitalization(.never)
-                        #endif
-                    Button("Join shared setup", action: join)
-                        // `joinShare` returns without a word while a sync runs or a choice waits.
-                        .disabled(code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isWorking
-                                  || sync.isSyncing || sync.needsChoice)
-                } footer: {
-                    Text("Shared addon and preference changes sync for everyone in the group. Your playback progress stays private.")
-                }
-            } else if code.isEmpty {
-                if mode == .share {
-                    Section {
-                        categoryToggle("Addons", category: .addons)
-                        categoryToggle("Playback preferences", category: .playback)
-                        categoryToggle("Appearance", category: .appearance)
-                    } header: { SettingsHeader("What to share") } footer: {
-                        Text("Members share future changes to these categories. Playback progress and account access are never included.")
-                    }
-                } else {
-                    Section {
-                        Text("""
-                            This connects another device to your personal account, including playback \
-                            progress. Use Share setup when inviting another person.
-                            """)
-                            .foregroundStyle(.secondary)
-                    }
+                    Text("This connects another of your own devices to your account, including playback progress.")
+                        .foregroundStyle(.secondary)
                 }
                 Section {
                     Button("Create connection code", action: createCode)
-                        .disabled(isWorking || (mode == .share && categories.isEmpty))
+                        .disabled(isWorking)
                 }
             } else {
                 Section {
@@ -277,10 +199,10 @@ private struct SyncSharingView: View {
                         ShareLink("Share code", item: code)
                         #endif
                 } footer: {
-                    Text("This code expires and works once. Share it only with the intended person or device.")
+                    Text("This code expires and works once. Use it only on your own device.")
                 }
             }
-            if isWorking { Section { ProgressView(mode == .join ? "Joining…" : "Creating code…") } }
+            if isWorking { Section { ProgressView("Creating code…") } }
             if let errorMessage { Section { Text(errorMessage).foregroundStyle(.red) } }
             #if os(tvOS)
             // The toolbar's Done doesn't show on tvOS; Menu also closes the sheet.
@@ -290,38 +212,13 @@ private struct SyncSharingView: View {
         .toolbar { Button("Done") { dismiss() } }
     }
 
-    private func categoryToggle(_ title: String, category: SyncCategory) -> some View {
-        Toggle(title, isOn: Binding(get: { categories.contains(category) }, set: { enabled in
-            if enabled { categories.insert(category) } else { categories.remove(category) }
-        }))
-    }
-
-    private func join() {
-        isWorking = true
-        errorMessage = nil
-        Task {
-            await sync.joinShare(code: code)
-            isWorking = false
-            // Failures land on the Sync page behind this sheet, so they're repeated here.
-            if sync.status == .sharedSetupJoined && sync.errorMessage == nil {
-                dismiss()
-            } else {
-                errorMessage = sync.errorMessage ?? "Couldn't join the shared setup. Try again."
-            }
-        }
-    }
-
     private func createCode() {
         isWorking = true
         errorMessage = nil
         Task {
             defer { isWorking = false }
             do {
-                if mode == .device {
-                    code = try await sync.makeDeviceCode()
-                } else {
-                    code = try await sync.makeShareCode(categories: categories)
-                }
+                code = try await sync.makeDeviceCode()
             } catch let error as SyncError {
                 errorMessage = error.localizedDescription
             } catch {

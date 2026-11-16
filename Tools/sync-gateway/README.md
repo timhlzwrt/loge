@@ -1,7 +1,7 @@
 # Account sync gateway
 
-The gateway adds isolated accounts, device enrollment and selective live setup
-sharing in front of one private CouchDB application database. That database
+The gateway adds isolated accounts and device enrollment in front of one private
+CouchDB application database. That database
 holds account metadata, hashed device/invitation credentials and encrypted
 payloads. CouchDB is never exposed as a multi-user document API: its database
 permissions cannot isolate individual documents from other database members, so
@@ -73,25 +73,22 @@ The administration container must reach the issuer over HTTPS. A sign-in lasts
 memory, and restarting the container ends all sign-ins.
 
 The page supports account creation/disabling, new enrollment codes, device and
-invitation revocation, and shared-setup disabling. Disabling or revoking stops
-future API access; it cannot erase data already downloaded by another device.
-Run one public gateway worker: its membership lock makes the cross-document
-category checks atomic within this deployment. Device invitation consumption and
-all encrypted-document writes independently use CouchDB revision checks.
+and invitation revocation. Disabling or revoking stops future API access; it
+cannot erase data already downloaded by another device. Device invitation
+consumption and all encrypted-document writes use CouchDB revision checks.
 
 ## API
 
 The endpoint entered into the app ends in `/v2`. Public paths:
 
 - `POST /redeem`: `{code, deviceName, hasRecoveryKey}` -> device token/account metadata.
-- `GET /me`: account, current device and authoritative shared-group metadata.
+- `GET /me`: account and current device (`groups` is always empty; older apps require it).
 - `GET/PUT /documents/configuration` and `/documents/progress`: private account envelopes.
-- `GET/PUT /groups/{id}/document`: shared envelopes, checked against membership.
-- `POST /invitations`: device invitation or shared group/category invitation.
-- `POST /join`: redeem a share invitation while signed into a different account.
+- `POST /invitations`: `{kind: "device"}` -> a device invitation.
 - `GET /devices`, `DELETE /devices/{id}`: list/revoke your own devices.
 - `GET /invitations`, `DELETE /invitations/{id}`: list/revoke your invitations.
-- `DELETE /groups/{id}/membership`: leave a joined group; an owner stops sharing the group for everyone.
+- `/join`, `/groups/*` and `share` invitations, the shared setups of earlier versions:
+  410 Gone. See [Updating from shared setups](../../docs/SYNC.md#updating-from-shared-setups).
 
 All except redemption/health require `Authorization: Bearer <device token>`.
 Tokens/codes are random 256-bit capabilities; only SHA-256 digests are stored.
@@ -100,11 +97,8 @@ concurrent redemptions cannot both succeed. Administrative and public applicatio
 run separately and do not register each other's routes.
 
 Encrypted envelopes contain `{version:2,ciphertext,_rev?}`. `ciphertext` is base64
-AES-GCM data encrypted by the app; revision conflicts return 409. Group categories
-are `addons`, `playback` (audio/subtitle preferences), and `appearance`. Personal
-watch progress is never a sharing category. A code from an existing device includes the
-private profile key; a sharing code includes only its separate group key. An
-initial administrator enrollment creates a key on the first device of a new
+AES-GCM data encrypted by the app; revision conflicts return 409. A code from an
+existing device includes the account's key. An initial administrator enrollment creates a key on the first device of a new
 account. Enrollment for an existing account requires its recovery key and
 returns 428 without consuming the code when the key is missing.
 
@@ -117,7 +111,7 @@ python3 -m venv /tmp/loge-gateway-tests
 ```
 
 The suite covers user isolation, document conflicts, simultaneous enrollment,
-revocation, expiry, local-admin CSRF/Host checks and shared-group scope. Live tests
+revocation, expiry, local-admin CSRF/Host checks and the retired shared-setup routes. Live tests
 must use disposable accounts and revoke their device tokens afterward.
 
 Dependencies: [FastAPI](https://pypi.org/project/fastapi/),

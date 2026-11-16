@@ -42,19 +42,11 @@ struct SyncGatewayContractTests {
         #expect(try sent("redeem") == keys("redeem", "request"))
 
         try respond("me", with: "me")
-        #expect(try await client.me().groups.first?.categories == [.addons])
+        #expect(try await client.me().deviceID == "0123")
 
         try respond("invitations", with: "inviteDevice")
-        _ = try await client.invite(kind: .device)
+        #expect(try await client.inviteDevice().code == "device-code")
         #expect(try sent("invitations") == keys("inviteDevice", "request"))
-
-        try respond("invitations", with: "inviteShare")
-        #expect(try await client.invite(kind: .share, categories: [.addons]).groupID != nil)
-        #expect(try sent("invitations") == keys("inviteShare", "request"))
-
-        try respond("join", with: "join")
-        #expect(try await client.join(code: "share-code").categories == [.addons])
-        #expect(try sent("join") == keys("join", "request"))
 
         try respond("documents/progress", with: "getDocument")
         let document = try #require(try await client.fetch("documents/progress"))

@@ -16,20 +16,18 @@ import Synchronization
 }
 
 final class AccountGatewayProtocol: StubURLProtocol, @unchecked Sendable {
-    struct Invitation { let account: String; let group: String? }
-    struct Group { let owner: String; var members: Set<String>; let categories: [String] }
+    struct Invitation { let account: String }
     // The fixture's JSON dictionaries are read and mutated only inside `state`'s lock.
     struct State: @unchecked Sendable {
         var invites: [String: Invitation] = [:]
         var devices: [String: String] = [:]
-        var groups: [String: Group] = [:]
         var documents: [String: [String: Any]] = [:]
         var revision = 0
         var hooks: [String: @MainActor @Sendable () -> Void] = [:]
         var isOffline = false
         mutating func respond(method: String, path: String, token: String?, body: [String: Any]) -> (Int, [String: Any]) {
             if path == "redeem", method == "POST", let code = body["code"] as? String,
-               let invite = invites[code], invite.group == nil {
+               let invite = invites[code] {
                 let existing = documents.keys.contains { $0.hasPrefix(invite.account + "/documents/") }
                 if existing, body["hasRecoveryKey"] as? Bool != true { return (428, [:]) }
                 invites[code] = nil
@@ -38,41 +36,15 @@ final class AccountGatewayProtocol: StubURLProtocol, @unchecked Sendable {
             }
             guard let token, let account = devices[token] else { return (401, [:]) }
             if path == "me" {
-                let metadata: [[String: Any]] = groups.compactMap { id, group in
-                    group.members.contains(account) ? ["id": id, "name": "Shared setup", "categories": group.categories] : nil
-                }
-                return (200, ["accountID": account, "displayName": account, "deviceID": token, "groups": metadata])
+                return (200, ["accountID": account, "displayName": account, "deviceID": token, "groups": []])
             }
-            if path == "invitations", method == "POST" {
+            if path == "invitations", method == "POST", body["kind"] as? String == "device" {
                 let code = UUID().uuidString
-                if body["kind"] as? String == "share" {
-                    let groupID = body["groupID"] as? String ?? UUID().uuidString
-                    if groups[groupID] == nil { groups[groupID] = Group(owner: account, members: [account], categories: body["categories"] as? [String] ?? []) }
-                    invites[code] = Invitation(account: account, group: groupID)
-                    return (200, ["id": code, "code": code, "expiresAt": "2099-01-01T00:00:00Z", "groupID": groupID])
-                }
-                invites[code] = Invitation(account: account, group: nil)
+                invites[code] = Invitation(account: account)
                 return (200, ["id": code, "code": code, "expiresAt": "2099-01-01T00:00:00Z"])
             }
-            if path == "join", let code = body["code"] as? String, let invite = invites.removeValue(forKey: code),
-               let id = invite.group, var group = groups[id] {
-                group.members.insert(account); groups[id] = group
-                return (200, ["id": id, "name": "Shared setup", "categories": group.categories])
-            }
-            if path.hasPrefix("groups/"), path.hasSuffix("/membership"), method == "DELETE" {
-                let id = String(path.split(separator: "/")[1])
-                guard var group = groups[id], group.members.contains(account) else { return (404, [:]) }
-                if group.owner == account { groups[id] = nil }
-                else { group.members.remove(account); groups[id] = group }
-                return (200, ["ok": true])
-            }
-            let key: String
-            if path.hasPrefix("documents/") { key = account + "/" + path }
-            else if path.hasPrefix("groups/") {
-                let id = String(path.split(separator: "/")[1])
-                guard groups[id]?.members.contains(account) == true else { return (403, [:]) }
-                key = path
-            } else { return (404, [:]) }
+            guard path.hasPrefix("documents/") else { return (404, [:]) }
+            let key = account + "/" + path
             if method == "GET" { return documents[key].map { (200, $0) } ?? (404, [:]) }
             if method == "PUT" {
                 guard body["_rev"] as? String == documents[key]?["_rev"] as? String else { return (409, [:]) }
