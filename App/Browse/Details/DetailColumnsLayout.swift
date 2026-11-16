@@ -19,7 +19,7 @@ extension View {
 /// cast and information on the right, and full-width sections below both.
 ///
 /// A layout rather than two sets of stacks: it swaps with a `VStackLayout` on rotation while the
-/// sections keep their identity, so the chosen season and loaded reviews survive.
+/// sections keep their identity, so the chosen season survives.
 struct DetailColumnsLayout: Layout {
     /// Where the side column starts, low enough that the artwork above it stays clear.
     let sideTop: CGFloat

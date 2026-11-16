@@ -265,7 +265,7 @@ struct PersonView: View {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: Metrics.posterWidth), spacing: Metrics.rowSpacing, alignment: .top)],
                           alignment: .leading, spacing: Metrics.rowSpacing) {
                     ForEach(visible) { title in
-                        // By value, as festival and genre tiles: a view-built destination left
+                        // By value, as genre tiles: a view-built destination left
                         // the links inside the resolved details dead.
                         NavigationLink(value: title) {
                             TMDBCreditTile(title: title)

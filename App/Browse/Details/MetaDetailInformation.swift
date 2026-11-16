@@ -36,7 +36,7 @@ struct InformationSection: View {
                     }
                 }
             }
-            // At the reviews' width, so the page's text ends on one line on a portrait iPad.
+            // At the reading width, so the page's text ends on one line on a portrait iPad.
             .readingWidth()
             #if os(tvOS)
             .padding(20)

@@ -68,31 +68,5 @@ final class TMDBFilmographyTests: XCTestCase {
         waitForExpectations(timeout: 30)
         screenshot("tmdb-credit-opened")
     }
-
-    @MainActor
-    func testDiscoveryDirectorOpensTMDBCredits() throws {
-        guard ProcessInfo.processInfo.environment["UI_FLOWS"] != nil,
-              let credentialPath = ProcessInfo.processInfo.environment["TMDB_TEST_TOKEN_FILE"] else {
-            throw XCTSkip("Requires UI flows and a temporary TMDB credential file.")
-        }
-        continueAfterFailure = false
-        let app = XCUIApplication()
-        app.launchArguments += ["--tmdb-ui-test"]
-        app.launchEnvironment["TMDB_TEST_TOKEN_FILE"] = credentialPath
-        app.launch()
-        defer { app.terminate() }
-        let home = app.tabBars.buttons["Home"].firstMatch
-        (home.exists ? home : app.buttons["Home"].firstMatch).tap()
-        let director = app.scrollViews["popular-directors"].buttons.firstMatch
-        for _ in 0..<22 {
-            if director.exists && director.isHittable { break }
-            app.swipeUp(velocity: .fast)
-        }
-        XCTAssertTrue(director.waitForExistence(timeout: 10))
-        director.tap()
-        XCTAssertTrue(app.staticTexts["Filmography"].waitForExistence(timeout: 30))
-        XCTAssertTrue(app.segmentedControls.buttons.matching(NSPredicate(format: "label BEGINSWITH 'All ('")).firstMatch.exists)
-        screenshot("tmdb-director-filmography")
-    }
 }
 #endif

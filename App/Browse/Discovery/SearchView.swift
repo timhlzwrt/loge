@@ -250,7 +250,7 @@ struct SearchView: View {
                         #if !os(tvOS)
                         .buttonStyle(.plain)
                         #endif
-                        // One-off titles, such as a festival winner's "Find title", needn't cost the whole list.
+                        // A one-off search can go without clearing the whole list.
                         .contextMenu {
                             Button("Remove", systemImage: "trash", role: .destructive) { forget(term) }
                         }
