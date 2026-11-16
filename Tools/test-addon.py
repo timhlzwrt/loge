@@ -13,6 +13,7 @@ Requesting /tracks.mov?fail-once=<anything> fails the first request for that que
 /tracks.mov?hang=<anything> answers only after a minute.
 For the folded source list and the autoplay status lines (the `sources-*` screens of
 `--discovery-ui-test`), run `python3 Tools/test-addon.py --port 8769 --many --delay 5`.
+`--catalog` adds a movie catalog, "Test Picks", to add as a Home shelf.
 """
 import json
 import argparse
@@ -30,6 +31,7 @@ parser.add_argument("--tracks-file", type=Path, help="Local multi-audio MOV for 
 parser.add_argument("--name", help="Name for a separate playback fixture addon and its source")
 parser.add_argument("--many", action="store_true", help="Twelve 1080p sources, enough for the list to fold them")
 parser.add_argument("--delay", type=float, default=0, help="Seconds to wait before answering a stream request")
+parser.add_argument("--catalog", action="store_true", help="A movie catalog, for adding a Home shelf")
 args = parser.parse_args() if __name__ == "__main__" else parser.parse_args([])
 PORT = args.port
 BASE = f"http://{args.host}:{PORT}"
@@ -92,6 +94,11 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path.startswith("/stream/"):
             time.sleep(args.delay)
             self.send_json({"streams": STREAMS})
+        elif self.path.startswith("/catalog/movie/test-picks") and args.catalog:
+            self.send_json({"metas": [{"id": id, "type": "movie", "name": name,
+                                       "poster": f"https://images.metahub.space/poster/small/{id}/img"}
+                                      for id, name in [("tt0816692", "Interstellar"), ("tt2543164", "Arrival"),
+                                                       ("tt1856101", "Blade Runner 2049")]]})
         elif self.path.startswith("/subtitles/"):
             self.send_json({"subtitles": SUBTITLES})
         elif self.path.startswith("/subs/") and self.path.endswith(".srt"):
@@ -163,12 +170,19 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     if args.many:
-        STREAMS = [{"name": "Test\n1080p", "description": f"Big Buck Bunny · Copy {index} · WEB-DL H.264 AAC\n{index} GB",
+        # Flags and HDR on some copies, and none on others, and rising bitrates, for the sources Filter.
+        flags = ["🇬🇧", "🇩🇪", "🇬🇧 🇩🇪", ""]
+        STREAMS = [{"name": "Test\n1080p",
+                    "description": f"Big Buck Bunny · Copy {index} · WEB-DL H.264{' HDR10' if index % 3 == 0 else ''} AAC"
+                                   f"\n{index} GB {flags[index % 4]}\nOverall: {index * 5} Mbps",
                     "url": MKV, "behaviorHints": {"filename": f"Big_Buck_Bunny_{index}.mkv"}} for index in range(1, 13)]
     if TRACKS_FILE:
         MANIFEST["name"] = args.name or "Playback Test Streams"
         STREAMS = [{"name": args.name or "Local Multi Track", "url": f"{BASE}/tracks.mov",
                     "behaviorHints": {"videoSize": TRACKS_FILE.stat().st_size}}]
+    if args.catalog:
+        MANIFEST["resources"].append("catalog")
+        MANIFEST["catalogs"] = [{"type": "movie", "id": "test-picks", "name": "Test Picks"}]
     print(f"Serving on {BASE}", flush=True)
     sys.stdout.flush()
     ThreadingHTTPServer((args.bind, PORT), Handler).serve_forever()

@@ -7,34 +7,29 @@ import SwiftUI
 @MainActor @Observable
 final class HomeFocus {
     var title: MetaPreview?
-    var collection: FilmCollection?
-    var director: TMDBPopularDirector?
     var genre: DiscoveryCatalogs.Genre?
 
     func show(_ title: MetaPreview) {
         self.title = title
-        collection = nil
-        director = nil
         genre = nil
     }
 
     /// Genres name themselves over their still, rather than leave the last title on screen.
     func show(_ genre: DiscoveryCatalogs.Genre) {
         self.genre = genre
-        collection = nil
-        director = nil
     }
 }
 
 /// Like the TV app: the focused poster's backdrop fills the screen and its
 /// details sit above the rows, so browsing doesn't require opening anything.
 struct TVHome: View {
-    let sources: [CatalogSource]
+    let rows: [HomeLayout.Row]
     @State private var focus = HomeFocus()
     /// Returning to Home runs `.task` again; its artwork is already cached by then.
     @State private var prefetched = false
 
     var body: some View {
+        let sources = rows.catalogs
         ZStack(alignment: .topLeading) {
             TVHomeBackdrop(focus: focus)
 
@@ -45,48 +40,26 @@ struct TVHome: View {
                     .frame(height: 400, alignment: .bottomLeading)
                     .padding(.horizontal, Metrics.gutter)
                     .padding(.bottom, 40)
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        // Lazy: building every row at once made each focus move dirty all of them.
-                        LazyVStack(alignment: .leading, spacing: 24) {
-                            ContinueWatchingRow(onFocus: focus.show)
-                            UpcomingRow(onFocus: focus.show)
-                            MyListRow(onFocus: focus.show)
-                            RecommendedRow(onFocus: focus.show)
-                            ForEach(sources.prefix(3)) { source in
+                ScrollView {
+                    // Lazy: building every row at once made each focus move dirty all of them.
+                    LazyVStack(alignment: .leading, spacing: 24) {
+                        ForEach(rows) { row in
+                            switch row {
+                            case .catalog(let source):
                                 CatalogRow(source: source, page: sources, isPrimary: source == sources.first,
                                            onFocus: focus.show)
+                            case .genres: GenreRow(onFocus: focus.show)
+                            case .continueWatching: ContinueWatchingRow(onFocus: focus.show)
+                            case .watchLater: MyListRow(onFocus: focus.show)
+                            case .recommended: RecommendedRow(onFocus: focus.show)
                             }
-                            GenreRow(onFocus: focus.show)
-                            ForEach(sources.dropFirst(3)) { source in
-                                CatalogRow(source: source, page: sources, onFocus: focus.show)
-                            }
-                            DiscoveryCollectionRow(title: "Film Festivals", collections: FilmCollection.festivals) {
-                                focus.director = nil
-                                focus.genre = nil
-                                focus.collection = $0
-                                proxy.scrollTo("festival-row", anchor: .top)
-                            }
-                            .id("festival-row")
-                            PopularDirectorsRow(onFocus: { director in
-                                focus.collection = nil
-                                focus.genre = nil
-                                focus.director = director
-                                proxy.scrollTo("director-row", anchor: .top)
-                            }, onFallbackFocus: { collection in
-                                focus.director = nil
-                                focus.genre = nil
-                                focus.collection = collection
-                                proxy.scrollTo("director-row", anchor: .top)
-                            })
-                            .id("director-row")
                         }
-                        .scrollTargetLayout()
-                        .padding(.bottom, 60)
                     }
-                    // Moving focus down a row scrolls by whole rows, so the focused row keeps its title.
-                    .scrollTargetBehavior(.viewAligned)
+                    .scrollTargetLayout()
+                    .padding(.bottom, 60)
                 }
+                // Moving focus down a row scrolls by whole rows, so the focused row keeps its title.
+                .scrollTargetBehavior(.viewAligned)
             }
         }
         .background(Color.canvas)
@@ -105,7 +78,7 @@ struct TVHome: View {
     }
 }
 
-/// The focused title's backdrop, hidden while a festival or director has focus.
+/// The focused title's or genre's backdrop.
 struct TVHomeBackdrop: View {
     let focus: HomeFocus
     /// The backdrop on screen, which changes only once the next one has been decoded, so
@@ -113,8 +86,7 @@ struct TVHomeBackdrop: View {
     @State private var shown: String?
 
     var body: some View {
-        let isHidden = focus.collection != nil || focus.director != nil
-        let url = isHidden ? nil : focus.genre?.still ?? focus.title?.featuredBackground
+        let url = focus.genre?.still ?? focus.title?.featuredBackground
         ZStack {
             // Each backdrop is its own view, so the crossfade blends two layers on the GPU.
             // Animating one image view's content instead redrew both images on the CPU every frame.
@@ -122,7 +94,6 @@ struct TVHomeBackdrop: View {
                 .id(shown)
                 .transition(.opacity)
         }
-        .opacity(isHidden ? 0 : 1)
         .ignoresSafeArea()
         .overlay {
             // Darken the left and bottom, where the text and rows sit.
@@ -142,7 +113,7 @@ struct TVHomeBackdrop: View {
     }
 }
 
-/// The focused title's logo, info line and synopsis, or the focused festival or director.
+/// The focused title's logo, info line and synopsis, or the focused genre.
 struct TVHomeHeader: View {
     let focus: HomeFocus
     @Environment(TMDBAccount.self) private var tmdb
@@ -154,33 +125,7 @@ struct TVHomeHeader: View {
         // The clear base keeps the header's height while nothing is focused yet.
         ZStack(alignment: .bottomLeading) {
             Color.clear
-            if let director = focus.director {
-                HStack(spacing: 32) {
-                    // Without a photo the name stands alone, rather than beside an empty frame.
-                    if director.portraitURL != nil {
-                        Artwork(url: director.portraitURL)
-                            .frame(width: Metrics.personSize, height: Metrics.personSize * 1.25)
-                            .clipShape(.rect(cornerRadius: Metrics.posterRadius))
-                    }
-                    VStack(alignment: .leading, spacing: 14) {
-                        Text(director.name).font(.system(size: 64, weight: .bold))
-                        Text("Director").font(.metaLine).foregroundStyle(.secondary)
-                    }
-                }
-            } else if let collection = focus.collection {
-                HStack(spacing: 32) {
-                    CollectionArtwork(collection: collection)
-                        .frame(width: collection.isFestival ? Metrics.posterWidth * 1.4 : Metrics.personSize,
-                               height: Metrics.personSize * 1.25)
-                        .clipShape(.rect(cornerRadius: Metrics.posterRadius))
-                    VStack(alignment: .leading, spacing: 14) {
-                        Text(collection.name).font(.system(size: 64, weight: .bold))
-                        Text(collection.isFestival ? "\(collection.subtitle) winners" : "Directed films")
-                            .font(.metaLine)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            } else if let genre = focus.genre {
+            if let genre = focus.genre {
                 VStack(alignment: .leading, spacing: 14) {
                     Text(genre.name).font(.system(size: 64, weight: .bold))
                     Text("Popular now and the best of all time").font(.metaLine).foregroundStyle(.secondary)
