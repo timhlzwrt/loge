@@ -2,7 +2,7 @@
 
 Sync is optional. loge has no default sync server. Your own server can carry
 private playback progress, addon setup and preferences across your devices, with
-separate accounts and deliberately shared setup categories.
+a separate account for each person.
 
 ## Connect an account
 
@@ -30,28 +30,68 @@ an immediate push. On leaving, the app asks the system for time to finish that p
 how much it gets depends on the operating system, so a suspended device may deliver
 its pending changes the next time it opens.
 
-## Share setup with another person
+The setup syncs too: addons, playback preferences and appearance (accent color and
+Home's shelves). Home's arrangement is one setting: edits on two devices before they
+sync are a conflict loge asks about, like other settings. Addon shelves name the addon
+by its manifest ID, never its URL, and a device without that addon keeps the shelf
+without showing it.
 
-Use **Share setup**, select **Addons**, **Playback preferences**, and/or
-**Appearance**, then create a new code. Addons are selected by default. The other
-person connects their own account first, then selects **Join shared setup**.
+## Give someone your addons
 
-This creates a live shared setup: subsequent changes to selected categories sync
-for everyone in that group. Only one group can control each category for an
-account. Leaving a joined group stops future sharing with your account; leaving
-a group you created stops it for all its members. The local management page can
-also disable groups and revoke invitations.
+Sharing with another person doesn't need sync or a server. In **Settings → Addons**,
+select **Share Setup…** on iPhone, iPad or Mac. Choose whether to include your
+playback preferences (audio and subtitle language, maximum bitrate), then share the
+link or copy the code. The other person opens the link, or pastes it or the code
+into **Settings → Addons → Import Setup…** (on Apple TV with the phone's Remote
+keyboard). They see the addons' hosts, then choose **Add to My Addons**, which keeps
+theirs and adds the ones they don't have, or **Replace My Addons**, which removes
+the others once every addon in the setup has installed.
 
-Playback progress is always private to the account and is never included in a
-sharing invitation. An addon invitation includes only the separate group's
-access/key, not your account credential or personal progress key.
+It is a one-time copy: later changes on either side stay where they're made. The
+code contains your addons' full addresses, which often include account keys (a
+debrid service, for example). Anyone with it can use them, so send it only to
+people you trust. Nothing in it is sent to a sync server.
+
+## Updating from shared setups
+
+Earlier versions could share setup categories live between accounts. That was
+replaced by the copy above. Update the apps first, then the gateway:
+
+1. When updated, a device that was in a shared setup keeps the addons and
+   preferences it shows. They become the account's own again: its next sync keeps
+   these values over the account's older copy, and the shared setup's key is
+   deleted from Keychain.
+2. Then update the gateway and run `bootstrap.py` again (see
+   [Host the service](#host-the-service)). Old app versions calling the removed
+   endpoints get HTTP 410 Gone.
+
+The groups and their encrypted documents stay in the database unused. To delete
+them, run this on the server from `/opt/loge-sync`; it uses CouchDB's administrator
+login from `secrets/bootstrap.json`:
+
+```sh
+sudo python3 - <<'END'
+import base64, json, urllib.request
+password = json.load(open('secrets/bootstrap.json'))['admin']
+headers = {'Authorization': 'Basic ' + base64.b64encode(('loge-admin:' + password).encode()).decode(),
+           'Content-Type': 'application/json'}
+def call(path, body=None):
+    data = json.dumps(body).encode() if body is not None else None
+    request = urllib.request.Request('http://127.0.0.1:5984/loge/' + path, data, headers)
+    return json.load(urllib.request.urlopen(request))
+rows = call('_all_docs?include_docs=true')['rows']
+old = [row['doc'] for row in rows if row['id'].startswith(('group:', 'shared:'))
+       or (row['id'].startswith('invitation:') and row['doc'].get('kind') == 'share')]
+call('_bulk_docs', {'docs': [{'_id': doc['_id'], '_rev': doc['_rev'], '_deleted': True} for doc in old]})
+print(len(old), 'documents deleted')
+END
+```
 
 ## Privacy, devices and recovery
 
 Configurations and progress are AES-GCM encrypted on-device. The database stores
-ciphertext, account/group metadata and hashes of random device/invitation tokens.
-Personal accounts and shared setups use separate encryption keys. Device tokens
-and keys stay in Keychain. Treat connection codes as secrets: share them only
+ciphertext, account metadata and hashes of random device/invitation tokens.
+Device tokens and keys stay in Keychain. Treat connection codes as secrets: share them only
 with the intended recipient.
 
 Under **Connection & recovery**, inspect/revoke connected devices and save the
@@ -62,16 +102,16 @@ device. To recover, enter the original key under **Advanced → Recover an exist
 account**, then return and connect using the administrator's new code.
 
 Disconnecting returns to the previous local library/setup. Each account's local
-Watch Later, custom lists and remembered sources remain separate on that device;
+Watch Later and remembered sources remain separate on that device;
 these are not currently synchronized. Stream URLs, account tokens and connection
-measurements are never included in shared setup payloads.
+measurements are never included in synced setup.
 
 ## Host the service
 
 Requirements: Linux, Docker Compose, Python 3 for bootstrap, an HTTPS reverse
 proxy, and a hostname pointing at your server. This uses one private CouchDB
 application database behind an authenticated gateway. The gateway enforces
-account and group ownership; direct CouchDB membership does not isolate users'
+account ownership; direct CouchDB membership does not isolate users'
 documents.
 
 1. Copy [Tools/sync-gateway](../Tools/sync-gateway) to `/opt/loge-sync`, then
@@ -94,7 +134,7 @@ documents.
    their own enrollment code.
 
 The management page supports creating/disabling accounts, issuing enrollment
-codes, revoking devices/invitations and disabling shared setups. It cannot show
+codes and revoking devices/invitations. It cannot show
 or decrypt the user's addons, preferences or playback history.
 
 Back up `/opt/loge-sync/data`, server secrets and configuration. Preserve numeric

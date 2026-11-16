@@ -40,24 +40,25 @@ binary dependencies and what has—and has not—been tested on OS 26.
 ### Find something worth watching
 
 - **Artwork-led Home:** popular films and series, IMDb favourites, Letterboxd
-  lists, genres, festival winners and directors.
+  lists and genres. Settings → Home hides and reorders shelves and adds catalogs
+  from installed addons; the arrangement syncs with your account.
 - **Title details:** seasons, episodes, Up Next, watched actions, the IMDb
-  rating, and the trailer, which opens on YouTube from the More menu. With a TMDB
+  rating, and the trailer, which opens on YouTube from the More menu (not on
+  Apple TV, which has no browser). With a TMDB
   token, cast and crew, and for a film that belongs to a series its other films
   in release order. With an MDBList key, the Letterboxd score and Rotten
   Tomatoes' Tomatometer beside the IMDb rating; each score opens the title on
   its site.
-- **People and festivals:** TMDB-backed portraits and filmographies, role
-  filters, member reviews, and dated festival editions with award filters.
+- **People:** TMDB-backed portraits and filmographies with role filters.
   TMDB features require your own read access token.
 - **Recommendations:** with a TMDB token, "More Like This" on titles and a Recommended row on
   Home built from what you watched and saved. TMDB supplies the suggestions and
   the ranking happens on your device; TMDB sees only the title lookups.
-- **Your library:** Continue Watching, Watch Later, custom lists and history
-  grouped by day. Search includes recent queries.
-- **New and upcoming episodes:** for series you are watching, an episode that
-  has come out since you finished the one before appears in Continue Watching,
-  and an Upcoming row on Home lists the next air dates.
+- **Your library:** Continue Watching, Watch Later and the last 12 titles you
+  finished, under Recently Watched in My Lists. Search
+  includes recent queries.
+- **New episodes:** for series you are watching, an episode that has come out
+  since you finished the one before appears in Continue Watching.
 
 ### Choose a source, not a mystery filename
 
@@ -65,8 +66,8 @@ binary dependencies and what has—and has not—been tested on OS 26.
   file size and bitrate parsed when the provider supplies them.
 - Remembered source selection, automatic fallback and a connection-aware
   recommendation once the device has measured playback download speed.
-- A configurable size limit for automatic series-source selection; the default
-  is **50 GB per episode**. Movies and manual selections are unrestricted.
+- A filter by audio language, HDR and bitrate, and a maximum bitrate for the
+  sources Play and Up Next pick by themselves; the default is **100 Mbps**.
 
 ### Play with mpv
 
@@ -86,11 +87,14 @@ display or output combination. See [limitations](#know-the-limits) and the
 ### Continue on your other devices
 
 **Self-hosted sync** carries movie/episode progress, watched state, ordered addons
-and preferences between your devices. Separate accounts can share selected setup
-categories without sharing viewing progress. Payloads are encrypted on-device;
-there is **no default hosted service**. [Set up private sync →](docs/SYNC.md)
+and preferences between your devices. Payloads are encrypted on-device; there is
+**no default hosted service**. [Set up private sync →](docs/SYNC.md)
 
-**What stays local:** Watch Later, custom lists and remembered stream selections
+**Share Setup** in Settings → Addons sends someone a one-time copy of your addons,
+optionally with your playback preferences, as a link or code. It needs no server
+and nothing stays connected.
+
+**What stays local:** Watch Later and remembered stream selections
 are not synchronized. Changes made offline stay on the device and are sent on
 reconnect.
 
@@ -187,7 +191,7 @@ Initial builds download the vendored MPVKit binary dependencies. See
 - [Architecture and data flow](docs/APP_OVERVIEW.md)
 - [Platform requirements and verification](docs/REQUIREMENTS.md)
 - [Installation, accounts and troubleshooting](docs/INSTALLATION.md)
-- [Private sync and shared setups](docs/SYNC.md)
+- [Private sync and setup copies](docs/SYNC.md)
 - [Playback diagnostics and performance](docs/PLAYBACK_PERFORMANCE.md)
 - [Mac updater signing and publishing](docs/MAC_UPDATES.md)
 - [CI](https://github.com/timhlzwrt/loge/actions/workflows/ci.yml) ·
