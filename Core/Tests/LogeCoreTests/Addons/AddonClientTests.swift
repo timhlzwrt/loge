@@ -175,14 +175,18 @@ struct AddonClientTests {
         await #expect(throws: AddonError.unavailable(.notConnectedToInternet)) { try await offline.manifest() }
         let garbage = try AddonClient(manifestURL: "https://garbage.example/manifest.json", session: session)
         await #expect(throws: AddonError.invalidResponse) { try await garbage.streams(type: "movie", id: "tt1") }
+        // Screens tell a request they abandoned from a failure by this type alone.
+        let cancelled = try AddonClient(manifestURL: "https://cancelled.example/manifest.json", session: session)
+        await #expect(throws: CancellationError.self) { try await cancelled.manifest() }
     }
 }
 
 private final class AddonFailureProtocol: StubURLProtocol, @unchecked Sendable {
     override func startLoading() {
         guard let url = request.url else { return }
-        if url.host() == "offline.example" {
-            client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
+        if url.host() == "offline.example" || url.host() == "cancelled.example" {
+            let code: URLError.Code = url.host() == "offline.example" ? .notConnectedToInternet : .cancelled
+            client?.urlProtocol(self, didFailWithError: URLError(code))
             return
         }
         respond(200, body: Data("<html>".utf8))

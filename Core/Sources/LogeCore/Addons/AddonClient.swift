@@ -107,13 +107,15 @@ public struct AddonClient: Sendable {
         do { return try JSONDecoder().decode(type, from: data) } catch { throw AddonError.invalidResponse }
     }
 
-    /// Cancellation is passed on as is, so callers can tell it from a failure.
+    /// Cancellation is thrown as `CancellationError`, so callers can tell it from a failure.
     func data(from url: URL) async throws -> Data {
         let data: Data
         let response: URLResponse
         do {
             (data, response) = try await session.data(from: url)
-        } catch let error as URLError where error.code != .cancelled {
+        } catch let error as URLError where error.code == .cancelled {
+            throw CancellationError()
+        } catch let error as URLError {
             throw AddonError.unavailable(error.code)
         }
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {

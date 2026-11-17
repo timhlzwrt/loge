@@ -102,7 +102,7 @@ struct TMDBAccountTests {
             try await task.value
             Issue.record("Cancelled validation saved a token")
         } catch {
-            #expect(error is CancellationError || (error as? URLError)?.code == .cancelled)
+            #expect(error is CancellationError)
         }
         #expect(storage.writes == 0)
         #expect(!account.isConfigured)

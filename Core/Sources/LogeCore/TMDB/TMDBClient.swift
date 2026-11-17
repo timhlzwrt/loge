@@ -250,7 +250,7 @@ public struct TMDBClient: Sendable {
         do {
             (data, response) = try await session.data(for: request)
         } catch {
-            if error is CancellationError || (error as? URLError)?.code == .cancelled { throw error }
+            if error is CancellationError || (error as? URLError)?.code == .cancelled { throw CancellationError() }
             try Task.checkCancellation()
             throw TMDBError.unavailable
         }
