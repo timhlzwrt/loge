@@ -16,3 +16,8 @@ __pycache__/
 
 # Personal signing settings; see Config/Signing.xcconfig.
 Config/Local.xcconfig
+
+# Local agent files, kept off the repository.
+AGENTS.md
+.agents/
+.claude/
