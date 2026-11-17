@@ -36,49 +36,40 @@ public final class TMDBAccount {
     @ObservationIgnored private var identityCache = ResponseCache<TMDBIdentityKey, String?>(capacity: 256, lifetime: .seconds(3_600))
     @ObservationIgnored private var collectionCache = ResponseCache<Int, TMDBCollection>(capacity: 32, lifetime: .seconds(3_600))
 
-    public var client: TMDBClient? {
+    var client: TMDBClient? {
         _ = revision
         return readAccessToken.map { TMDBClient(readAccessToken: $0, session: session) }
     }
 
     public func details(imdbID: String, type: String) async throws -> TMDBDetails {
-        guard let client else { throw TMDBError.unauthorized }
-        let revision = revision
-        let details = try await detailsCache.value(for: TMDBTitleKey(imdbID: imdbID, type: type)) {
-            try await client.details(imdbID: imdbID, type: type)
+        try await cached(in: detailsCache, TMDBTitleKey(imdbID: imdbID, type: type)) {
+            try await $0.details(imdbID: imdbID, type: type)
         }
-        try Task.checkCancellation()
-        guard self.revision == revision else { throw CancellationError() }
-        return details
     }
 
     public func personDetails(id: Int) async throws -> TMDBPersonDetails {
-        guard let client else { throw TMDBError.unauthorized }
-        let revision = revision
-        let person = try await peopleCache.value(for: id) { try await client.person(id: id) }
-        try Task.checkCancellation()
-        guard self.revision == revision else { throw CancellationError() }
-        return person
+        try await cached(in: peopleCache, id) { try await $0.person(id: id) }
     }
 
     public func collection(id: Int) async throws -> TMDBCollection {
-        guard let client else { throw TMDBError.unauthorized }
-        let revision = revision
-        let collection = try await collectionCache.value(for: id) { try await client.collection(id: id) }
-        try Task.checkCancellation()
-        guard self.revision == revision else { throw CancellationError() }
-        return collection
+        try await cached(in: collectionCache, id) { try await $0.collection(id: id) }
     }
 
     public func imdbID(tmdbID: Int, type: String) async throws -> String? {
+        try await cached(in: identityCache, TMDBIdentityKey(tmdbID: tmdbID, type: type)) {
+            try await $0.imdbID(tmdbID: tmdbID, type: type)
+        }
+    }
+
+    /// A response that arrives after the token changed belongs to the old one, so it's dropped.
+    private func cached<Key, Value>(in cache: ResponseCache<Key, Value>, _ key: Key,
+                                    fetch: @escaping @Sendable (TMDBClient) async throws -> Value) async throws -> Value {
         guard let client else { throw TMDBError.unauthorized }
         let revision = revision
-        let imdbID = try await identityCache.value(for: TMDBIdentityKey(tmdbID: tmdbID, type: type)) {
-            try await client.imdbID(tmdbID: tmdbID, type: type)
-        }
+        let value = try await cache.value(for: key) { try await fetch(client) }
         try Task.checkCancellation()
         guard self.revision == revision else { throw CancellationError() }
-        return imdbID
+        return value
     }
 
     public convenience init(session: URLSession = .shared) {
