@@ -23,7 +23,8 @@ targets:
     supportedDestinations: [iOS, tvOS, macOS]
     sources:
       - path: App
-      - path: Vendor/Sparkle-LICENSE.txt
+        excludes: [ThirdParty/PROVENANCE.md, ThirdParty/Sparkle-LICENSE.txt]
+      - path: App/ThirdParty/Sparkle-LICENSE.txt
         buildPhase: resources
         destinationFilters: [macOS]
     # Merged with the generated Info.plist; holds keys that have no build setting.

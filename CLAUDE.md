@@ -30,13 +30,13 @@ features, proposals, scope). History of individual changes is in git and the PRs
   preferences inline; About (version, build commit, credits) and Data Sources, which holds
   all attribution rather than putting it under artwork.
 - `web/` — the project page for loge.tjh.li: static HTML/CSS in tjh.li's design, no scripts
-  or build step; screenshots are web-sized copies from `docs/screenshots`. Cloudflare Pages
+  or build step; `web/images` also serves the README and SideStore source. Cloudflare Pages
   (project `loge`), deployed by `.github/workflows/web.yml` when `web/` changes on main.
 - `Tools/sync-gateway` — self-hostable account sync (gateway in front of a private CouchDB,
   local admin page); see docs/SYNC.md. Personal infrastructure lives in a separate private repo.
-- `Tools/run-device.sh` — Debug build onto the connected iPhone/iPad with the free Personal Team.
-- `Tools/install.sh` — Release build of origin/main (own checkout in `.build/install`) onto a
-  device chosen from a menu: a reachable iPhone/iPad, the Apple TV via atvloadly, or all.
+- `Tools/install.sh` — the one install script: Release of origin/main (own checkout in
+  `.build/install`) or this checkout, onto a reachable iPhone/iPad (free Personal Team), the
+  Apple TV via atvloadly, or all, from a menu or named.
 - `Tools/test-addon.py` — local stream addon at `http://127.0.0.1:8765/manifest.json` with
   test streams (MKV, HEVC, multi-track HLS, header-protected, broken, torrent).
 - `Tools/render-icons.swift` — regenerates `App/Assets.xcassets` (icons, top shelf, accent).
@@ -65,15 +65,15 @@ xcodegen generate                                   # after adding/removing file
 xcodebuild -project loge.xcodeproj -scheme loge -destination 'generic/platform=iOS Simulator' -derivedDataPath .build/xcode build
 # also: 'generic/platform=tvOS Simulator' and 'platform=macOS'
 Tools/build-ipa.sh [iOS|tvOS]                       # unsigned .ipa files in .build/ipa
-Tools/install-tv.sh                                 # build tvOS, upload to atvloadly for the Apple TV
-Tools/run-device.sh [--console|--no-launch]         # build, install, launch on the iPhone/iPad
-Tools/install.sh [--here]                           # latest main (or this checkout) on a device picked from a menu
+Tools/install.sh                                    # latest main on a device picked from a menu
+Tools/install.sh --debug --launch phone             # this checkout, Debug, on the iPhone/iPad (--console streams output)
+Tools/install.sh --here tv                          # this checkout on the Apple TV via atvloadly
 ```
 
-Devices normally install from the SideStore source. `run-device.sh` signs with the free
+Devices normally install from the SideStore source. `install.sh` signs phones with the free
 Personal Team in Xcode; the phone needs Developer Mode and the developer trusted once; free
 installs expire after 7 days. atvloadly runs on a home-network server (`ATVLOADLY`, default in
-`install-tv.sh`) and re-signs nightly 03:00–06:30. A free Apple ID allows 3 sideloaded apps
+`install.sh`) and re-signs nightly 03:00–06:30. A free Apple ID allows 3 sideloaded apps
 at once across Xcode, Sideloadly and atvloadly.
 
 On-demand UI tests (need network and installed addons; skipped otherwise):
@@ -218,7 +218,7 @@ keeps Movie/Series labels because it can mix both.
   it still resumes by fraction, so keep that path.
 - Trailers open on YouTube (addon `trailers`, or TMDB's list when connected); nothing in the
   app can play them, and Apple TV has no browser, so it offers none.
-- `App/ScoreLogos.xcassets` holds IMDb's mark as a template SVG: its plate from Wikimedia
+- `App/ThirdParty/Logos.xcassets` holds IMDb's mark as a template SVG: its plate from Wikimedia
   Commons with the lettering merged into one even-odd path, because a template image keeps only alpha.
 - Live sync: `AccountSync.startLiveUpdates()` on launch and on return, `stopLiveUpdates()` on
   background (the Mac rarely backgrounds, so it keeps listening). The listener ends quietly on a

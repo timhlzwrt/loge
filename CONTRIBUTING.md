@@ -8,9 +8,16 @@ them. iPhone/iPad and Apple TV are equal primary platforms; preserve Mac behavio
 
 ## Local setup
 
-Use the verified Xcode 27.2 toolchain and XcodeGen. The generated `.xcodeproj` is ignored;
-edit `project.yml` and regenerate it rather than committing project-file edits.
-Runtime minimums are documented separately in [Requirements](docs/REQUIREMENTS.md).
+Use the verified Xcode 27.2 toolchain (Swift 6.4.2, Swift 6 language mode) and XcodeGen
+2.46.0. The generated `.xcodeproj` is ignored; edit `project.yml` and regenerate it rather
+than committing project-file edits.
+
+The OS 26 minimum comes from SwiftUI's Liquid Glass APIs (`glassEffect`,
+`GlassEffectContainer`, `backgroundExtensionEffect`), used without older-OS fallbacks;
+MPVKit itself goes back to iOS/tvOS 15 and macOS 12. The minimum is set in
+`project.yml` (`options.deploymentTarget`) and `Core/Package.swift` (`platforms`), which
+must stay aligned, and advertised as `minOSVersion` by `Tools/sidestore-source.py`.
+Supporting an older OS would need real availability fallbacks, not just lower numbers.
 
 ```sh
 xcodegen generate
@@ -60,6 +67,13 @@ HDR output, display matching, physical remote gestures or real cross-device hand
 If contributors supply hardware or live-service results, report those separately.
 Include screenshots for visual changes and state which platforms could not be tested.
 See the maintainer's [testing scope](ROADMAP.md#a-note-from-the-maintainer).
+
+The screenshots in `web/images` (used by the README, the project page and the SideStore
+source) are real captures from the iPhone 18 Pro and Apple TV 4K simulators, showing only
+*Night of the Living Dead* (1968), which is in the public domain, from the Internet Archive's
+copies through a throwaway local addon. When replacing them, show only public-domain or
+self-made material (no posters, backdrops, logos or portraits of real titles, including
+artwork behind sheets), never setup fields or addon URLs, and keep the existing sizes.
 
 ## Keep changes focused
 
