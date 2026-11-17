@@ -31,10 +31,10 @@ public final class TMDBAccount {
     @ObservationIgnored private let session: URLSession
     @ObservationIgnored private let storage: TokenStorage
     @ObservationIgnored private var connectionID = UUID()
-    @ObservationIgnored private var detailsCache = TMDBResponseCache<TMDBTitleKey, TMDBDetails>(capacity: 128, lifetime: .seconds(1_800))
-    @ObservationIgnored private var peopleCache = TMDBResponseCache<Int, TMDBPersonDetails>(capacity: 32, lifetime: .seconds(3_600))
-    @ObservationIgnored private var identityCache = TMDBResponseCache<TMDBIdentityKey, String?>(capacity: 256, lifetime: .seconds(3_600))
-    @ObservationIgnored private var collectionCache = TMDBResponseCache<Int, TMDBCollection>(capacity: 32, lifetime: .seconds(3_600))
+    @ObservationIgnored private var detailsCache = ResponseCache<TMDBTitleKey, TMDBDetails>(capacity: 128, lifetime: .seconds(1_800))
+    @ObservationIgnored private var peopleCache = ResponseCache<Int, TMDBPersonDetails>(capacity: 32, lifetime: .seconds(3_600))
+    @ObservationIgnored private var identityCache = ResponseCache<TMDBIdentityKey, String?>(capacity: 256, lifetime: .seconds(3_600))
+    @ObservationIgnored private var collectionCache = ResponseCache<Int, TMDBCollection>(capacity: 32, lifetime: .seconds(3_600))
 
     public var client: TMDBClient? {
         _ = revision
@@ -167,10 +167,10 @@ public final class TMDBAccount {
 
     private func resetMetadataCaches() {
         // Swapping instances isolates in-flight responses from the next credential revision.
-        detailsCache = TMDBResponseCache(capacity: 128, lifetime: .seconds(1_800))
-        peopleCache = TMDBResponseCache(capacity: 32, lifetime: .seconds(3_600))
-        identityCache = TMDBResponseCache(capacity: 256, lifetime: .seconds(3_600))
-        collectionCache = TMDBResponseCache(capacity: 32, lifetime: .seconds(3_600))
+        detailsCache = ResponseCache(capacity: 128, lifetime: .seconds(1_800))
+        peopleCache = ResponseCache(capacity: 32, lifetime: .seconds(3_600))
+        identityCache = ResponseCache(capacity: 256, lifetime: .seconds(3_600))
+        collectionCache = ResponseCache(capacity: 32, lifetime: .seconds(3_600))
     }
 
     private static let service = "li.tjh.MediaApp.tmdb"
@@ -204,57 +204,4 @@ private struct TMDBTitleKey: Hashable, Sendable {
 private struct TMDBIdentityKey: Hashable, Sendable {
     var tmdbID: Int
     var type: String
-}
-
-/// Bounded process memory only. A cancelled screen cannot cancel the shared
-/// request or discard its result while another screen or prefetch still needs it.
-actor TMDBResponseCache<Key: Hashable & Sendable, Value: Sendable> {
-    private struct Entry {
-        var value: Value
-        var expiresAt: ContinuousClock.Instant
-    }
-    private struct Flight {
-        var id: UUID
-        var task: Task<Value, Error>
-    }
-    private var entries: [Key: Entry] = [:]
-    private var inFlight: [Key: Flight] = [:]
-    private let capacity: Int
-    private let lifetime: Duration
-
-    init(capacity: Int, lifetime: Duration) {
-        self.capacity = max(1, capacity)
-        self.lifetime = lifetime
-    }
-
-    func value(for key: Key, fetch: @escaping @Sendable () async throws -> Value) async throws -> Value {
-        try Task.checkCancellation()
-        if let entry = entries[key], entry.expiresAt > ContinuousClock.now { return entry.value }
-        entries[key] = nil
-        let flight: Flight
-        if let pending = inFlight[key] {
-            flight = pending
-        } else {
-            flight = Flight(id: UUID(), task: Task { try await fetch() })
-            inFlight[key] = flight
-        }
-        do {
-            let value = try await flight.task.value
-            if inFlight[key]?.id == flight.id {
-                inFlight[key] = nil
-                let now = ContinuousClock.now
-                entries = entries.filter { $0.value.expiresAt > now }
-                entries[key] = Entry(value: value, expiresAt: now + lifetime)
-                if entries.count > capacity, let oldest = entries.min(by: { $0.value.expiresAt < $1.value.expiresAt })?.key {
-                    entries[oldest] = nil
-                }
-            }
-            // Store a successful shared response even if this particular waiter left.
-            try Task.checkCancellation()
-            return value
-        } catch {
-            if inFlight[key]?.id == flight.id { inFlight[key] = nil }
-            throw error
-        }
-    }
 }

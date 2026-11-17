@@ -1,19 +1,12 @@
 import Foundation
 import LogeCore
 
-/// The user's preferred audio and subtitle languages, stored as ISO 639-1 codes.
-/// The values are `SyncedSettings`', so a sync account can carry them.
+/// What the playback preferences, stored under `SyncedSettings.Key` so a sync account can
+/// carry them, mean to the app. Languages are ISO 639-1 codes.
 enum PlaybackPreferences {
-    static let audioKey = SyncedSettings.Key.audioLanguage
-    static let defaultAudioLanguage = SyncedSettings().audioLanguage
-    static let subtitleKey = SyncedSettings.Key.subtitleLanguage
-    static let subtitleScaleKey = SyncedSettings.Key.subtitleScale
-    static let maximumBitrateKey = SyncedSettings.Key.maximumBitrate
-    static let defaultMaximumBitrate = SyncedSettings().maximumBitrate
-
     /// In Mbps; 0 for no limit.
     static var maximumBitrate: Int {
-        UserDefaults.standard.object(forKey: maximumBitrateKey) as? Int ?? defaultMaximumBitrate
+        UserDefaults.standard.object(forKey: SyncedSettings.Key.maximumBitrate) as? Int ?? SyncedSettings().maximumBitrate
     }
 
     static let subtitleScales: [(name: String, scale: Double)] = Array(

@@ -79,9 +79,21 @@ public struct StreamProvider: Sendable, Identifiable {
 
     public var id: String { manifestURL }
 
+    private struct CacheKey: Hashable, Sendable {
+        let manifestURL: String
+        let type: String
+        let id: String
+    }
+    /// Aggregating addons such as AIOStreams take seconds to answer, so the details screen
+    /// asks ahead and the sources screen joins that request, finished or not. Debrid links
+    /// stay valid much longer, but a list this old may miss newly cached releases. Empty lists
+    /// aren't kept: aggregators answer with none when their upstream times out.
+    private static let cache = ResponseCache<CacheKey, [StreamSource]>(capacity: 64, lifetime: .seconds(600)) { !$0.isEmpty }
+
     public func streams(type: String, id: String) async throws -> [StreamSource] {
         let manifestURL = manifestURL
-        return try await StreamCache.shared.streams(manifestURL: manifestURL, type: type, id: id) {
+        let key = CacheKey(manifestURL: manifestURL, type: type, id: id)
+        return try await Self.cache.value(for: key) {
             try await AddonClient(manifestURL: manifestURL).streams(type: type, id: id)
         }
     }

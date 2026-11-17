@@ -255,8 +255,8 @@ final class PlaybackSession {
         hasRememberedSource = false
         lastRecordedPosition = 0
         let defaults = UserDefaults.standard
-        let audio = defaults.string(forKey: PlaybackPreferences.audioKey) ?? PlaybackPreferences.defaultAudioLanguage
-        let subtitles = defaults.string(forKey: PlaybackPreferences.subtitleKey) ?? ""
+        let audio = defaults.string(forKey: SyncedSettings.Key.audioLanguage) ?? SyncedSettings().audioLanguage
+        let subtitles = defaults.string(forKey: SyncedSettings.Key.subtitleLanguage) ?? SyncedSettings().subtitleLanguage
         isOpeningFile = true
         needsEstimatedSeek = false
         estimatedResumeFraction = resumeEstimatedProgress
@@ -272,7 +272,7 @@ final class PlaybackSession {
         }
         externalSubtitles?.cancel()
         externalSubtitles = Task { await findSubtitles(for: request, preferring: subtitles) }
-        let scale = defaults.object(forKey: PlaybackPreferences.subtitleScaleKey) as? Double ?? 1
+        let scale = defaults.object(forKey: SyncedSettings.Key.subtitleScale) as? Double ?? SyncedSettings().subtitleScale
         player.setSubtitleScale(scale)
         player.load(
             request.url,
@@ -282,7 +282,7 @@ final class PlaybackSession {
             audioLanguage: audio.isEmpty ? nil : audio,
             subtitleLanguage: subtitles.isEmpty ? nil : subtitles,
             // The languages subtitles are most likely turned on in: the sound's and the device's.
-            hiddenSubtitleLanguages: [audio.isEmpty ? PlaybackPreferences.defaultAudioLanguage : audio]
+            hiddenSubtitleLanguages: [audio.isEmpty ? SyncedSettings().audioLanguage : audio]
                 + Locale.preferredLanguages.prefix(1).compactMap { Locale(identifier: $0).language.languageCode?.identifier }
         )
         if episodesChanged {

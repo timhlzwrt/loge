@@ -20,7 +20,7 @@ struct SourcesView: View {
     /// Audio and picture are chosen per list; the bitrate is the setting, so it carries over.
     @State private var audioLanguage: String?
     @State private var picture = SourceSelection.Filter.Picture.any
-    @AppStorage(PlaybackPreferences.maximumBitrateKey) private var maximumBitrate = PlaybackPreferences.defaultMaximumBitrate
+    @AppStorage(SyncedSettings.Key.maximumBitrate) private var maximumBitrate = SyncedSettings().maximumBitrate
     /// Show all lifts the bitrate limit for this list without changing the setting.
     @State private var ignoresBitrateLimit = false
     #if os(tvOS)
