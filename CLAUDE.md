@@ -19,14 +19,14 @@ features, proposals, scope). History of individual changes is in git and the PRs
 - `Core/` — `LogeCore` Swift package, no UI, grouped by domain: Addons (protocol client,
   routing in user order, `AddonStore`, `StreamDetails`, `SourceSelection`, `SetupCode`), Library
   (`LibraryStore`: progress, My List, history, Recently Watched, remembered sources; `EpisodeSchedule`: new
-  episodes of the series being watched), Playback, Discovery (`HomeLayout`: Home's shelves), TMDB, Sync (`SyncedSettings`), plus `Keychain` and `Accent`.
+  episodes of the series being watched), Playback, Discovery (`HomeLayout`: Home's shelves), TMDB, Sync (`SyncedSettings`), plus `Keychain`.
   All persistence is `UserDefaults` because tvOS can purge app files.
 - `App/Browse/` — by screen: Components, Home, Details, Sources, People, Discovery.
 - `App/Player/` — `PlaybackSession` (owns the playback in progress, outliving the player
   screen for Picture in Picture), `MPVPlayer` (libmpv, AVFoundation video layer),
   `ScrubPreview` (a second, silent mpv for timeline thumbnails), `PlayerView`, controls and
   menus, `PictureInPicture`, `NowPlaying`, next-episode countdown, tvOS remote swipe reader.
-- `App/Settings/` — an index of pages: Sync, addons, TMDB, Home's shelves, accent; playback
+- `App/Settings/` — an index of pages: Sync, addons, TMDB, Home's shelves; playback
   preferences inline; About (version, build commit, credits) and Data Sources, which holds
   all attribution rather than putting it under artwork.
 - `web/` — the project page for loge.tjh.li: static HTML/CSS in tjh.li's design, no scripts
@@ -127,8 +127,9 @@ Distributed as a SideStore source (each user signs with a free Apple ID; Apple T
 Sideloadly/atvloadly); no paid developer account. MPVKit player, vendored with an AVFoundation
 video output. Addons are added as manifest URLs. Cross-device sync is the optional self-hosted
 account sync, never iCloud or a default hosted server; it carries progress, addons, playback
-preferences and appearance (accent and Home's layout, one field, conflicts asked about); Trakt support was removed in November
-2026 (`RetiredTraktData` deletes its saved keys at launch). Sync is one person's devices only:
+preferences and Home's layout (one field, conflicts asked about); Trakt support was removed in November
+2026 (`RetiredTraktData` deletes its saved keys at launch), and the accent colour setting the
+same month: the app is always white. Sync is one person's devices only:
 the live shared setups between accounts were removed the same month for a one-time setup copy
 (`SetupCode`, `loge://setup#loge-setup-1:…`, base64url of deflated JSON; Share Setup on
 iPhone/iPad/Mac, Import Setup everywhere). A device that was in a group drops its grants and

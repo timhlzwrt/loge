@@ -90,7 +90,7 @@ struct HomeLayoutTests {
         var layout = HomeLayout.default
         layout.add(layout.addableCatalogs(of: addon)[0], of: addon)
         layout.move(fromOffsets: [6], toOffset: 0)
-        let settings = SyncedSettings(accent: .mint, homeLayout: layout)
+        let settings = SyncedSettings(homeLayout: layout)
         #expect(try JSONDecoder().decode(SyncedSettings.self, from: JSONEncoder().encode(settings)) == settings)
         #expect(try settings.validated() == settings)
 

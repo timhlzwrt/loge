@@ -25,7 +25,7 @@ release dates. This roadmap reflects the source as of **12 November 2026**.
 - [x] New episodes of followed series in Continue Watching, trailers opened on YouTube (not on Apple TV), and the other films of a film series
   on a movie's page (TMDB).
 - [x] Arranged Home shelves (Settings → Home): hide, reorder, add installed addons'
-  catalogs and reset, synced with the account's appearance settings.
+  catalogs and reset, synced with the account's setup.
 - [x] Optional encrypted self-hosted accounts with progress, watched state,
   addons and preferences; offline merging, the newest position winning, and a
   choice when a title was removed on one device and played on another.

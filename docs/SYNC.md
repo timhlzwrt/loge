@@ -30,9 +30,8 @@ an immediate push. On leaving, the app asks the system for time to finish that p
 how much it gets depends on the operating system, so a suspended device may deliver
 its pending changes the next time it opens.
 
-The setup syncs too: addons, playback preferences and appearance (accent color and
-Home's shelves). Home's arrangement is one setting: edits on two devices before they
-sync are a conflict loge asks about, like other settings. Addon shelves name the addon
+The setup syncs too: addons, playback preferences and Home's shelves. Home's
+arrangement is one setting: edits on two devices before they sync are a conflict loge asks about, like other settings. Addon shelves name the addon
 by its manifest ID, never its URL, and a device without that addon keeps the shelf
 without showing it.
 

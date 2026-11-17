@@ -2,7 +2,7 @@ import LogeCore
 import SwiftUI
 
 /// Which shelves Home shows, and in what order. Saved in `UserDefaults`, from where sync
-/// carries it with the appearance settings.
+/// carries it with the setup.
 struct HomeSettingsView: View {
     @Environment(AddonStore.self) private var store
     @AppStorage(HomeLayout.storageKey) private var storedLayout: Data?

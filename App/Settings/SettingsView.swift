@@ -7,7 +7,6 @@ struct SettingsView: View {
     @Environment(AddonStore.self) private var store
     @Environment(TMDBAccount.self) private var tmdb
     @Environment(AccountSync.self) private var sync
-    @AppStorage(Accent.storageKey) private var accent = Accent.white
     @AppStorage(HomeLayout.storageKey) private var homeLayout: Data?
 
     var body: some View {
@@ -42,11 +41,6 @@ struct SettingsView: View {
                 HomeSettingsView()
             } label: {
                 LabeledContent("Home", value: HomeLayout(storedData: homeLayout) == .default ? "Default" : "Customized")
-            }
-            NavigationLink {
-                SettingsPage("Accent Color") { AccentSettingsSection() }
-            } label: {
-                LabeledContent("Accent Color", value: accent.name)
             }
         }
 

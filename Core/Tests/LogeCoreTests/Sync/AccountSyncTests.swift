@@ -39,7 +39,7 @@ struct AccountSyncTests {
         let code = try await first.makeDeviceCode()
         let (second, addons, library, defaults, storage) = fixture()
         library.record(movie("local-only"), position: 120, duration: 1000)
-        defaults.set("coral", forKey: "accentColor")
+        defaults.set("de", forKey: "subtitleLanguage")
         await second.connect(code: code)
         #expect(second.needsChoice)
         let before = AccountGatewayProtocol.state.withLock { $0.revision }
@@ -50,7 +50,7 @@ struct AccountSyncTests {
         #expect(AccountGatewayProtocol.state.withLock { $0.revision } == before)
         await reopened.resolve(useLocal: true)
         #expect(!reopened.needsChoice && reopened.errorMessage == nil)
-        #expect(defaults.string(forKey: "accentColor") == "coral")
+        #expect(defaults.string(forKey: "subtitleLanguage") == "de")
         try reopened.disconnect(); try first.disconnect()
     }
 
@@ -58,10 +58,10 @@ struct AccountSyncTests {
         reset()
         let (account, addons, library, defaults, storage) = fixture()
         try addons.replaceManifestURLs(["https://local.example/manifest.json"])
-        defaults.set("mint", forKey: "accentColor")
+        defaults.set("fr", forKey: "subtitleLanguage")
         await account.connect(code: try enrollment("alice")); await account.resolve(useLocal: false)
         try addons.replaceManifestURLs(["https://private.example/manifest.json"])
-        defaults.set("coral", forKey: "accentColor")
+        defaults.set("de", forKey: "subtitleLanguage")
         storage.failRemove = true
         #expect(throws: (any Error).self) { try account.disconnect() }
         #expect(account.isConnected && addons.addons.first?.host == "private.example")
@@ -71,10 +71,10 @@ struct AccountSyncTests {
                                  session: .shared)
         #expect(!broken.isConnected && library.activeProfileID == nil)
         #expect(addons.addons.first?.host == "local.example")
-        #expect(defaults.string(forKey: "accentColor") == "mint")
+        #expect(defaults.string(forKey: "subtitleLanguage") == "fr")
         let reopened = restored(storage: storage, addons: addons, library: library, defaults: defaults)
         #expect(reopened.isConnected && addons.addons.first?.host == "private.example")
-        #expect(defaults.string(forKey: "accentColor") == "coral")
+        #expect(defaults.string(forKey: "subtitleLanguage") == "de")
         try reopened.disconnect()
         #expect(addons.addons.first?.host == "local.example")
     }
@@ -106,7 +106,7 @@ struct AccountSyncTests {
         libraryB.record(movie(), position: 300, duration: 1000)
         await second.sync(); await alice.sync()
         #expect(alice.conflictingProgressIDs == ["movie"])
-        defaultsA.set("coral", forKey: "accentColor")
+        defaultsA.set("de", forKey: "subtitleLanguage")
         libraryA.record(movie("independent"), position: 400, duration: 1000)
         await alice.sync(); await second.sync()
         #expect(alice.needsChoice)
@@ -116,7 +116,7 @@ struct AccountSyncTests {
         #expect(reopened.conflictingProgressIDs == ["movie"])
         await reopened.resolve(useLocal: false)
         #expect(!reopened.needsChoice)
-        #expect(defaultsA.string(forKey: "accentColor") == "coral")
+        #expect(defaultsA.string(forKey: "subtitleLanguage") == "de")
         try reopened.disconnect(); try second.disconnect()
     }
 
@@ -323,7 +323,7 @@ struct AccountSyncTests {
         await second.connect(code: try await alice.makeDeviceCode()); await second.resolve(useLocal: false)
         defaultsB.set("de", forKey: "audioLanguage")
         await second.sync()
-        defaultsA.set("coral", forKey: "accentColor")
+        defaultsA.set("de", forKey: "subtitleLanguage")
         AccountGatewayProtocol.state.withLock { $0.hooks["PUT documents/configuration"] = {
             defaultsA.set("fr", forKey: "audioLanguage")
         } }
@@ -331,7 +331,7 @@ struct AccountSyncTests {
         #expect(alice.status == .choosingSettings)
         await alice.resolve(useLocal: true)
         #expect(!alice.needsChoice && alice.errorMessage == nil)
-        #expect(defaultsA.string(forKey: "audioLanguage") == "fr" && defaultsA.string(forKey: "accentColor") == "coral")
+        #expect(defaultsA.string(forKey: "audioLanguage") == "fr" && defaultsA.string(forKey: "subtitleLanguage") == "de")
         try alice.disconnect(); try second.disconnect()
     }
 
@@ -396,7 +396,8 @@ struct AccountSyncTests {
         // one of the account's devices wrote it while hers came from the group.
         try addonsB.replaceManifestURLs(["https://personal.example/manifest.json"])
         defaultsB.set("fr", forKey: "audioLanguage")
-        defaultsB.set("mint", forKey: "accentColor")
+        var layout = HomeLayout.default; layout.setHidden(true, for: .genres)
+        defaultsB.set(layout.storedData, forKey: HomeLayout.storageKey)
         await second.sync()
         // Shared addons and playback preferences, as the group set them on alice's device.
         try addonsA.replaceManifestURLs(["https://shared.example/manifest.json"])
@@ -417,7 +418,7 @@ struct AccountSyncTests {
         #expect(addonsA.addons.map(\.manifestURL) == ["https://shared.example/manifest.json"])
         #expect(defaultsA.string(forKey: "audioLanguage") == "de")
         // Categories that were never shared merge as before.
-        #expect(defaultsA.string(forKey: "accentColor") == "mint")
+        #expect(HomeLayout(storedData: defaultsA.data(forKey: HomeLayout.storageKey)) == layout)
         await second.sync()
         #expect(addonsB.addons.map(\.manifestURL) == ["https://shared.example/manifest.json"])
         #expect(defaultsB.string(forKey: "audioLanguage") == "de")
@@ -444,7 +445,7 @@ struct AccountSyncTests {
         #expect(throws: SyncError.invalidEndpoint) { try AccountSyncClient(endpoint: "http://sync.example/v2") }
         #expect(throws: SyncError.invalidEndpoint) { try AccountSyncClient(endpoint: "https://u:p@sync.example/v2") }
         let key = AccountSyncCipher.generateKey()
-        let document = try AccountSyncCipher(key: key, resource: "configuration").seal(SyncedSettings(accent: .coral))
+        let document = try AccountSyncCipher(key: key, resource: "configuration").seal(SyncedSettings(subtitleLanguage: "de"))
         #expect(throws: SyncError.decryptionFailed) { try AccountSyncCipher(key: key, resource: "progress").open(document, as: SyncedSettings.self) }
         #expect(throws: SyncError.decryptionFailed) {
             try AccountSyncCipher(key: AccountSyncCipher.generateKey(), resource: "configuration").open(document, as: SyncedSettings.self)
@@ -493,8 +494,8 @@ struct AccountSyncTests {
         await alice.resolve(useLocal: false); await bob.resolve(useLocal: false)
         try #require(alice.errorMessage == nil && bob.errorMessage == nil)
         try addonsA.replaceManifestURLs(["https://first.example/manifest.json", "https://second.example/manifest.json"])
-        defaultsA.set("coral", forKey: "accentColor")
-        defaultsB.set("mint", forKey: "accentColor")
+        defaultsA.set("de", forKey: "subtitleLanguage")
+        defaultsB.set("fr", forKey: "subtitleLanguage")
         libraryA.record(movie("private-a"), position: 140, duration: 1000)
         await alice.sync(); await bob.sync()
         let deviceCode = try await alice.makeDeviceCode()
@@ -510,8 +511,8 @@ struct AccountSyncTests {
         await bob.sync(); await alice.sync(); await second.sync()
         #expect(addonsA.addons.map(\.manifestURL) == ["https://first.example/manifest.json", "https://second.example/manifest.json"])
         #expect(libraryA.progress["private-b"] == nil)
-        #expect(defaultsB.string(forKey: "accentColor") == "mint")
-        #expect(defaultsSecond.string(forKey: "accentColor") == "coral")
+        #expect(defaultsB.string(forKey: "subtitleLanguage") == "fr")
+        #expect(defaultsSecond.string(forKey: "subtitleLanguage") == "de")
         librarySecond.record(movie("private-a"), position: 220, duration: 1000)
         await second.sync(); await alice.sync()
         #expect(libraryA.progress["private-a"]?.position == 220)

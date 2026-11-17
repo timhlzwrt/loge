@@ -23,7 +23,6 @@ struct LogeApp: App {
     @State private var openedSetup: OpenedSetup?
     #endif
     @Environment(\.scenePhase) private var scenePhase
-    @AppStorage(Accent.storageKey) private var accent = Accent.white
 
     init() {
         // Artwork is fetched through the shared session; the default cache is too
@@ -108,8 +107,8 @@ struct LogeApp: App {
                 .environment(accountSync)
                 .environment(schedule)
                 .preferredColorScheme(.dark)
-                // White unless the user picks another accent: artwork carries the colour.
-                .tint(accent.color)
+                // White: artwork carries the colour.
+                .tint(.white)
                 .task {
                     #if DEBUG
                     if ProcessInfo.processInfo.arguments.contains("--sync-ui-test") {
@@ -191,7 +190,7 @@ struct LogeApp: App {
                 .environment(tmdb)
                 .environment(accountSync)
                 .frame(minWidth: 640, minHeight: 360)
-                .tint(accent.color)
+                .tint(.white)
                 .preferredColorScheme(.dark)
                 .navigationTitle(playback.current?.title ?? "")
         }

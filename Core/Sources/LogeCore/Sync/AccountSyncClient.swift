@@ -1,7 +1,8 @@
 import CryptoKit
 import Foundation
 
-/// The parts of `SyncedSettings`; once also what a shared setup could cover.
+/// The parts of `SyncedSettings`, appearance being Home's layout; once also what a shared
+/// setup could cover.
 enum SyncCategory: String, Codable, CaseIterable, Sendable, Hashable {
     case addons, playback, appearance
 }

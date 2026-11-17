@@ -7,12 +7,12 @@ struct SyncedSettingsTests {
     @Test func independentEditsMergeAndRemovalDoesNotReturn() {
         let base = SyncedSettings(addonURLs: ["https://a.example/manifest.json"])
         var local = base; local.addonURLs = []; local.audioLanguage = "de"
-        var remote = base; remote.accent = .mint
+        var remote = base; remote.maximumBitrate = 25
         let result = SyncedSettings.merged(base: base, local: local, remote: remote)
         #expect(result.conflicts.isEmpty)
         #expect(result.settings.addonURLs.isEmpty)
         #expect(result.settings.audioLanguage == "de")
-        #expect(result.settings.accent == .mint)
+        #expect(result.settings.maximumBitrate == 25)
     }
 
     @Test func concurrentReorderingAndRemovalNeedChoice() {
@@ -49,8 +49,6 @@ struct SyncedSettingsTests {
         invalid = SyncedSettings(addonURLs: ["https://a.example/not-a-manifest"])
         #expect(throws: SyncError.invalidData) { try invalid.validated() }
         #expect(throws: SyncError.invalidKey) { try AccountSyncCipher(key: "short", resource: "configuration") }
-        let unknownAccent = Data(#"{"addonURLs":[],"audioLanguage":"en","subtitleLanguage":"","subtitleScale":1,"maximumBitrate":50,"accent":"purple"}"#.utf8)
-        #expect(throws: (any Error).self) { try JSONDecoder().decode(SyncedSettings.self, from: unknownAccent) }
         invalid = SyncedSettings(maximumBitrate: 40)
         #expect(throws: SyncError.invalidData) { try invalid.validated() }
     }
@@ -66,10 +64,14 @@ struct SyncedSettingsTests {
         #expect(try decoded(#""maximumBitrate":25,"maximumSourceGigabytes":50,"#).maximumBitrate == 25)
         #expect(try decoded(#""maximumSourceGigabytes":0,"#).audioLanguage == "de")
 
-        // Older versions require a size limit in a valid range.
+        // The accent setting is gone: any colour a released build wrote is ignored.
+        #expect(try decoded(#""maximumBitrate":25,"accent":"coral","#).maximumBitrate == 25)
+
+        // Older versions require a size limit in a valid range, and the accent they offered.
         let settings = SyncedSettings(maximumBitrate: 25)
         let object = try #require(try JSONSerialization.jsonObject(with: JSONEncoder().encode(settings)) as? [String: Any])
         #expect(object["maximumSourceGigabytes"] as? Int == 50)
+        #expect(object["accent"] as? String == "white")
         #expect(try JSONDecoder().decode(SyncedSettings.self, from: JSONEncoder().encode(settings)) == settings)
         var unlimited = settings; unlimited.maximumBitrate = 0
         let unlimitedObject = try #require(try JSONSerialization.jsonObject(with: JSONEncoder().encode(unlimited)) as? [String: Any])
@@ -97,7 +99,7 @@ struct SyncedSettingsTests {
     @MainActor @Test func unsetPreferencesReadAsDefaultsAndWrittenOnesReadBack() {
         let defaults = UserDefaults(suiteName: "SyncedSettingsTests-\(UUID().uuidString)")!
         #expect(SyncedSettings(addonURLs: [], defaults: defaults) == SyncedSettings())
-        let settings = SyncedSettings(audioLanguage: "de", accent: .coral)
+        let settings = SyncedSettings(audioLanguage: "de", maximumBitrate: 25)
         settings.writePreferences(to: defaults)
         #expect(SyncedSettings(addonURLs: [], defaults: defaults) == settings)
     }
