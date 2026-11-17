@@ -25,6 +25,8 @@ final class AccountGatewayProtocol: StubURLProtocol, @unchecked Sendable {
         var revision = 0
         var hooks: [String: @MainActor @Sendable () -> Void] = [:]
         var isOffline = false
+        /// Documents an older gateway doesn't know, refused as it refuses them.
+        var unknownDocuments: Set<String> = []
         mutating func respond(method: String, path: String, token: String?, body: [String: Any]) -> (Int, [String: Any]) {
             if path == "redeem", method == "POST", let code = body["code"] as? String,
                let invite = invites[code] {
@@ -43,7 +45,7 @@ final class AccountGatewayProtocol: StubURLProtocol, @unchecked Sendable {
                 invites[code] = Invitation(account: account)
                 return (200, ["id": code, "code": code, "expiresAt": "2099-01-01T00:00:00Z"])
             }
-            guard path.hasPrefix("documents/") else { return (404, [:]) }
+            guard path.hasPrefix("documents/"), !unknownDocuments.contains(path) else { return (404, [:]) }
             let key = account + "/" + path
             if method == "GET" { return documents[key].map { (200, $0) } ?? (404, [:]) }
             if method == "PUT" {

@@ -76,6 +76,16 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual(self.public.get('/v2/documents/progress').status_code, 401)
         self.assertEqual(self.public.get('/admin/accounts', headers=self.admin_headers).status_code, 404)
 
+    def test_watch_later_is_a_private_document_and_counts_as_existing_data(self):
+        a, auth_a = self.account('A')
+        _, auth_b = self.account('B')
+        self.assertEqual(self.public.put('/v2/documents/watchLater', headers=auth_a, json=self.envelope).status_code, 200)
+        self.assertEqual(self.public.get('/v2/documents/watchLater', headers=auth_a).status_code, 200)
+        self.assertEqual(self.public.get('/v2/documents/watchLater', headers=auth_b).status_code, 404)
+        self.assertEqual(self.public.put('/v2/documents/other', headers=auth_a, json=self.envelope).status_code, 404)
+        invitation = self.admin.post('/admin/accounts/' + a['accountID'] + '/invitation', headers=self.admin_headers).json()
+        self.assertEqual(self.public.post('/v2/redeem', json={'code': invitation['code'], 'deviceName': 'New'}).status_code, 428)
+
     def test_device_enrollment_consumes_code_once_under_concurrent_requests(self):
         created = self.app.state.service.create_account('A')
         code = created['invitation']['code']

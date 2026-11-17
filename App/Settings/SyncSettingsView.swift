@@ -24,6 +24,10 @@ struct SyncSettingsView: View {
                             Text("Last synced \(date, style: .relative) ago")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
+                        if sync.watchLaterNeedsNewerServer {
+                            Text("Update the sync server to sync Watch Later")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
                     }
                     .padding(.vertical, 8)
                     Button("Sync Now") { Task { await sync.sync() } }

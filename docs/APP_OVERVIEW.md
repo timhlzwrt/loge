@@ -37,7 +37,7 @@ navigation destinations.
    six hours) and works out from the
    library which episode is new since the last one was finished.
 7. `AccountSync` optionally connects to the self-hosted account gateway, carrying
-   encrypted progress, watched state, addon setup and preferences between one
+   encrypted progress, watched state, Watch Later, addon setup and preferences between one
    person's devices. See [Private sync](SYNC.md).
 8. `SetupCode` is a one-time copy of the addons, and optionally the playback
    preferences, that one person sends another as a `loge://setup#…` link or a code.
@@ -171,7 +171,7 @@ old subtitle work cannot attach to a replacement file.
 The [roadmap](../ROADMAP.md) tracks simulator/automated-test priorities and proposed
 features. Real-device testing isn't planned because of maintainer time constraints.
 
-- The self-hosted account syncs playback and setup separately; keep its ownership
+- The self-hosted account syncs playback, Watch Later and setup separately; keep its ownership
   boundaries explicit in tests.
 - Exercise subtitle sizing, supported Picture in Picture flows and
   background/foreground playback in simulators. Simulator checks cannot establish

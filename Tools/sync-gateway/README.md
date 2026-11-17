@@ -83,7 +83,8 @@ The endpoint entered into the app ends in `/v2`. Public paths:
 
 - `POST /redeem`: `{code, deviceName, hasRecoveryKey}` -> device token/account metadata.
 - `GET /me`: account and current device (`groups` is always empty; older apps require it).
-- `GET/PUT /documents/configuration` and `/documents/progress`: private account envelopes.
+- `GET/PUT /documents/configuration`, `/documents/progress` and `/documents/watchLater`:
+  private account envelopes.
 - `POST /invitations`: `{kind: "device"}` -> a device invitation.
 - `GET /devices`, `DELETE /devices/{id}`: list/revoke your own devices.
 - `GET /invitations`, `DELETE /invitations/{id}`: list/revoke your invitations.

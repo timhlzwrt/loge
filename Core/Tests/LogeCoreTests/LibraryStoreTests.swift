@@ -269,6 +269,46 @@ struct LibraryStoreTests {
         #expect(LibraryStore(defaults: defaults).saved.map(\.id) == ["tt1", "tt4"])
     }
 
+    @Test func watchLaterKeepsDatesAndTitlesFromOlderBuildsStayBelowNewOnes() throws {
+        defaults.set(Data(#"[{"id":"tt9","type":"series","name":"Show"},{"id":"tt1","type":"movie","name":"Movie"}]"#.utf8), forKey: "savedTitles")
+        let store = LibraryStore(defaults: defaults)
+        let now = Date.now
+        store.toggleSaved(MetaPreview(id: "tt2", type: "movie", name: "New"), at: now)
+        let entries = store.watchLaterSyncSnapshot.entries
+        #expect(entries.map(\.title.id) == ["tt2", "tt9", "tt1"])
+        #expect(entries[0].addedAt == now && entries[2].addedAt < entries[1].addedAt)
+        #expect(entries[1].addedAt < Date(timeIntervalSince1970: 60))
+
+        // A removal anywhere, at any real time, wins over an undated title.
+        let removed = WatchLaterSyncSnapshot(removals: ["tt9": now - 1_000_000])
+        try store.applyWatchLaterSyncSnapshot(.merged(local: store.watchLaterSyncSnapshot, remote: removed))
+        #expect(LibraryStore(defaults: defaults).saved.map(\.id) == ["tt2", "tt1"])
+    }
+
+    @Test func watchLaterMergeTakesTheLatestActionAndDropsOldRemovals() {
+        let now = Date.now
+        func entry(_ id: String, _ added: Date, poster: String? = nil) -> WatchLaterSyncSnapshot.Entry {
+            .init(title: MetaPreview(id: id, type: "movie", name: id, poster: poster, description: "local only"), addedAt: added)
+        }
+        let local = WatchLaterSyncSnapshot(entries: [entry("readded", now - 5), entry("removedLater", now - 20), entry("bare", now - 30)],
+                                           removals: ["old": now - 91 * 86_400, "recent": now - 89 * 86_400])
+        let remote = WatchLaterSyncSnapshot(entries: [entry("new", now - 1), entry("bare", now - 30, poster: "https://img/p")],
+                                            removals: ["readded": now - 10, "removedLater": now - 15])
+        let merged = WatchLaterSyncSnapshot.merged(local: local, remote: remote, now: now)
+        #expect(merged.entries.map(\.title.id) == ["new", "readded", "bare"])
+        #expect(merged.removals.keys.sorted() == ["recent", "removedLater"])
+        #expect(merged.entries.last?.title.poster == "https://img/p")
+        // Only what My Lists draws syncs.
+        #expect(merged.entries.allSatisfy { $0.title.description == nil })
+        #expect(WatchLaterSyncSnapshot.merged(local: remote, remote: local, now: now) == merged)
+
+        let store = LibraryStore(defaults: defaults)
+        store.toggleSaved(MetaPreview(id: "tt1", type: "movie", name: "Movie"), at: now - 100 * 86_400)
+        store.toggleSaved(MetaPreview(id: "tt1", type: "movie", name: "Movie"), at: now - 95 * 86_400)
+        store.toggleSaved(MetaPreview(id: "tt2", type: "movie", name: "Other"), at: now)
+        #expect(store.watchLaterSyncSnapshot.removals.isEmpty)
+    }
+
     @Test func fillsArtworkMissingFromSavedEntries() async throws {
         let store = LibraryStore(defaults: defaults)
         let bare = MetaPreview(id: "tt9", type: "series", name: "Show")

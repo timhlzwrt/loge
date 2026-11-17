@@ -1,7 +1,7 @@
 # Self-hosted sync
 
 Sync is optional. loge has no default sync server. Your own server can carry
-private playback progress, addon setup and preferences across your devices, with
+private playback progress, Watch Later, addon setup and preferences across your devices, with
 a separate account for each person.
 
 ## Connect an account
@@ -30,10 +30,19 @@ an immediate push. On leaving, the app asks the system for time to finish that p
 how much it gets depends on the operating system, so a suspended device may deliver
 its pending changes the next time it opens.
 
+Watch Later syncs as its own document. For each title the latest action wins,
+adding or removing, without asking; the list stays newest-added first. Removals are
+remembered for 90 days, so a device that was offline longer can bring back a title
+removed meanwhile. Connecting a device adds its Watch Later to the account's, whichever
+setup you choose. Gateways from before Watch Later synced refuse the document: the
+Sync page then says **Update the sync server to sync Watch Later**, Watch Later stays
+on each device and everything else keeps syncing. Redeploy the gateway (see
+[Host the service](#host-the-service)) to sync it.
+
 The setup syncs too: addons, playback preferences and Home's shelves. Home's
-arrangement is one setting: edits on two devices before they sync are a conflict loge asks about, like other settings. Addon shelves name the addon
-by its manifest ID, never its URL, and a device without that addon keeps the shelf
-without showing it.
+arrangement is one setting: edits on two devices before they sync are a conflict loge
+asks about, like other settings. Addon shelves name the addon by its manifest ID,
+never its URL, and a device without that addon keeps the shelf without showing it.
 
 ## Give someone your addons
 
@@ -88,7 +97,7 @@ END
 
 ## Privacy, devices and recovery
 
-Configurations and progress are AES-GCM encrypted on-device. The database stores
+Configurations, progress and Watch Later are AES-GCM encrypted on-device. The database stores
 ciphertext, account metadata and hashes of random device/invitation tokens.
 Device tokens and keys stay in Keychain. Treat connection codes as secrets: share them only
 with the intended recipient.
@@ -100,9 +109,8 @@ code, but cannot recover encrypted data without your recovery key or a connected
 device. To recover, enter the original key under **Advanced → Recover an existing
 account**, then return and connect using the administrator's new code.
 
-Disconnecting returns to the previous local library/setup. Each account's local
-Watch Later and remembered sources remain separate on that device;
-these are not currently synchronized. Stream URLs, account tokens and connection
+Disconnecting returns to the previous local library/setup. Each account's
+remembered sources remain separate on that device and are not synchronized. Stream URLs, account tokens and connection
 measurements are never included in synced setup.
 
 ## Host the service

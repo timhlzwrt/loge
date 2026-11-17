@@ -86,6 +86,9 @@ enum DiscoveryFixture {
         // States that need a sync server, in stores kept apart from the app's.
         case "settings-review", "settings-failed":
             SettingsView().accountFixture()
+        // The Sync page itself: pushed pages take the app's account, not the fixture's.
+        case "settings-old-server":
+            SyncSettingsView().accountFixture()
         // The first featured series, started at S2, E3: its carousel page says where Play resumes.
         case "carousel-resume":
             CarouselResumeFixture()
@@ -268,7 +271,7 @@ private extension View {
 }
 
 extension DiscoveryFixture {
-    /// One account state: a review pending, or a failed sync.
+    /// One account state: a review pending, a failed sync, or a server too old for Watch Later.
     static let accountStores: (addons: AddonStore, library: LibraryStore, sync: AccountSync) = {
         let suite = "loge.account-states-fixture"
         let defaults = UserDefaults(suiteName: suite) ?? .standard
@@ -278,6 +281,8 @@ extension DiscoveryFixture {
         let sync = AccountSync(addons: addons, library: library, defaults: defaults, temporaryConnection: true)
         if screenName == "settings-review" {
             sync.showForTesting(status: .choosingInitialSetup, needsChoice: true)
+        } else if screenName == "settings-old-server" {
+            sync.showForTesting(status: .upToDate, needsChoice: false, watchLaterNeedsNewerServer: true)
         } else {
             sync.showForTesting(status: .failed, needsChoice: false)
         }

@@ -29,6 +29,8 @@ release dates. This roadmap reflects the source as of **12 November 2026**.
 - [x] Optional encrypted self-hosted accounts with progress, watched state,
   addons and preferences; offline merging, the newest position winning, and a
   choice when a title was removed on one device and played on another.
+- [x] Watch Later synced with the account (November 2026): the latest addition or
+  removal wins per title, removals kept 90 days, never part of a setup copy.
 - [x] Expiring device invitations, device revocation and a local service
   administration page.
 - [x] A one-time setup copy (addons, optionally playback preferences) as a link
@@ -85,18 +87,7 @@ suites instead of creating another test harness. See the
 These are proposals, not promised releases. Agree on scope and interaction design
 before implementation.
 
-### 1. Sync Watch Later
-
-Playback progress and setup already sync through the optional self-hosted account;
-Watch Later should be considered separately. Carry its titles and deliberate removals
-between a person's devices, with defined offline-merge rules. Keep it private to the
-account, not part of a setup copy.
-This would expand sync scope and needs agreement before implementation.
-
-**Test target:** independent stores converge after concurrent additions and
-removals; reconnect doesn't resurrect deleted entries; another account can't read them.
-
-### 2. Search installed addons
+### 1. Search installed addons
 
 Search currently uses the built-in movie and series feeds. Offer opt-in search of
 installed catalogs that advertise search support, preserving addon order and showing
@@ -128,9 +119,8 @@ scrolls first. Keep measured regressions separate from speculative rewrites.
   from TMDB's suggestions) or Letterboxd account integration.
 - Interface localization is not scheduled; the UI is currently English.
 
-Watch Later/custom-list sync is **not implemented**. Any expansion of the
-current sync contract needs an explicit scope decision, not an unchecked
-feature claim.
+Any expansion of the current sync contract needs an explicit scope decision, not an
+unchecked feature claim.
 
 ## Help move this forward
 

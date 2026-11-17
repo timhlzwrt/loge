@@ -34,7 +34,7 @@ dialog{color:inherit;background:#202124;border:1px solid #44464b;border-radius:1
 <button data-view="invitations">Invitations <span id="invitationsCount">0</span></button>
 </nav><p class="sidebar-note"><strong>Private by design</strong>This panel manages access. It cannot read synced settings or playback, or recover encryption keys.</p></aside>
 <main class="main">
-<div class="section-heading"><div><h1 id="viewTitle" tabindex="-1">Accounts</h1><p id="viewDescription">Each account keeps its own addons, settings and playback progress.</p></div><button id="newAccount">Create account</button></div>
+<div class="section-heading"><div><h1 id="viewTitle" tabindex="-1">Accounts</h1><p id="viewDescription">Each account keeps its own addons, settings, playback progress and Watch Later.</p></div><button id="newAccount">Create account</button></div>
 <div class="toolbar"><input id="search" type="search" aria-label="Search accounts" placeholder="Search accounts…" autocomplete="off"><small id="resultCount" role="status"></small><button id="reload" class="quiet">Refresh</button></div>
 <section id="accounts" aria-label="Accounts"></section><section id="devices" aria-label="Devices" hidden></section><section id="invitations" aria-label="Invitations" hidden></section>
 <p class="page-footer" id="viewFooter">Disabling an account pauses access for all of its devices.</p>
@@ -45,7 +45,7 @@ dialog{color:inherit;background:#202124;border:1px solid #44464b;border-radius:1
 <script>
 const $=id=>document.getElementById(id);
 const views={
-  accounts:{title:'Accounts',description:'Each account keeps its own addons, settings and playback progress.',empty:'No accounts yet',hint:'Create an account to connect the first device.',footer:'Disabling an account pauses access for all of its devices.'},
+  accounts:{title:'Accounts',description:'Each account keeps its own addons, settings, playback progress and Watch Later.',empty:'No accounts yet',hint:'Create an account to connect the first device.',footer:'Disabling an account pauses access for all of its devices.'},
   devices:{title:'Devices',description:'Devices connected to accounts on this server.',empty:'No connected devices',hint:'Create a device code from Accounts, then enter it in loge.',footer:'Revocation takes effect on the next request. Previously downloaded data stays on the device.'},
   invitations:{title:'Invitations',description:'Unused codes for connecting a device.',empty:'No pending invitations',hint:'New device codes appear here until used or expired.',footer:'Only unused, unexpired invitations are shown. Codes work once and expire after 24 hours.'}
 };

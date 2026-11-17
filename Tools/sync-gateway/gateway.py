@@ -25,6 +25,8 @@ ADMIN_LOGIN_SECONDS = 600
 ID = re.compile(r"^[a-f0-9]{32}$")
 # Invitation and device records are named by the SHA-256 digest of their secret.
 RECORD_ID = re.compile(r"^[a-f0-9]{64}$")
+# Each account's encrypted documents; anything else is not found, as older gateways answer watchLater.
+DOCUMENTS = ("configuration", "progress", "watchLater")
 
 
 def checked(identifier, pattern=ID):
@@ -139,7 +141,7 @@ class Service:
             if not owner or not owner.get("enabled"):
                 fail(410, "Invitation is no longer available.")
             requires_key = any(self.store.get("document:" + owner["id"] + ":" + item) is not None
-                                                    for item in ("configuration", "progress"))
+                                                    for item in DOCUMENTS)
             if requires_key and not has_recovery_key:
                 fail(428, "This account already has encrypted data. Enter its recovery key or use Add My Device on a connected device.")
             document["consumed"] = True
@@ -468,7 +470,7 @@ def create_app(store=None, mode=None, admin_secret=None, admin_login=None):
 
     def resource(request, resource):
         account, _ = service.authenticate(request)
-        if resource not in ("configuration", "progress"):
+        if resource not in DOCUMENTS:
             fail(404, "Document not found.")
         return "document:" + account["id"] + ":" + resource
 

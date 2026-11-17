@@ -84,16 +84,15 @@ display or output combination. See [limitations](#know-the-limits) and the
 
 ### Continue on your other devices
 
-**Self-hosted sync** carries movie/episode progress, watched state, ordered addons
-and preferences between your devices. Payloads are encrypted on-device; there is
+**Self-hosted sync** carries movie/episode progress, watched state, Watch Later,
+ordered addons and preferences between your devices. Payloads are encrypted on-device; there is
 **no default hosted service**. [Set up private sync →](docs/SYNC.md)
 
 **Share Setup** in Settings → Addons sends someone a one-time copy of your addons,
 optionally with your playback preferences, as a link or code. It needs no server
 and nothing stays connected.
 
-**What stays local:** Watch Later and remembered stream selections
-are not synchronized. Changes made offline stay on the device and are sent on
+**What stays local:** remembered stream selections are not synchronized. Changes made offline stay on the device and are sent on
 reconnect.
 
 ## Install and start watching

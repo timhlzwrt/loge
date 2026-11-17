@@ -2,7 +2,7 @@ import CryptoKit
 import Foundation
 import Observation
 
-/// One person's sync account on this device: their setup and playback progress.
+/// One person's sync account on this device: their setup, playback progress and Watch Later.
 ///
 /// Methods that return something, such as a connection code, throw. The rest run in the
 /// background of the Sync screen and report through `status` and `errorMessage`.
@@ -15,6 +15,9 @@ public final class AccountSync {
     public private(set) var lastSync: Date?
     public private(set) var needsChoice = false
     public private(set) var devices: [SyncDevice] = []
+    /// The server refused the Watch Later document, as gateways from before it synced do.
+    /// Watch Later then stays on this device while everything else syncs.
+    public private(set) var watchLaterNeedsNewerServer = false
     /// Runs before the library and setup switch to another person's, so playback can stop.
     @ObservationIgnored public var beforeProfileChange: (() -> Void)?
     public var displayName: String? { connection?.displayName }
@@ -84,8 +87,10 @@ public final class AccountSync {
         /// Categories this device last took from a shared setup, until the next sync makes
         /// its values for them the account's.
         var formerlyShared: Set<SyncCategory>?
+        var watchLater: WatchLaterSyncSnapshot?
         enum CodingKeys: String, CodingKey {
             case setup = "profile", progress, lastSync, initialImport, pendingProgressBase, pendingProgressIDs, formerlyShared
+            case watchLater
         }
     }
     private struct InitialImport: Codable {
@@ -116,8 +121,10 @@ public final class AccountSync {
     }
     private static let setupPath = "documents/configuration"
     private static let progressPath = "documents/progress"
+    private static let watchLaterPath = "documents/watchLater"
     private static let setupResource = "configuration"
     private static let progressResource = "progress"
+    private static let watchLaterResource = "watchLater"
     private static func baselineKey(_ profileID: String) -> String { "accountSyncBaseline.\(profileID)" }
 
     @ObservationIgnored private let library: LibraryStore
@@ -134,6 +141,7 @@ public final class AccountSync {
     @ObservationIgnored private var isCheckQueued = false
     @ObservationIgnored private var lastObservedSettings: SyncedSettings?
     @ObservationIgnored private var lastObservedProgress: PlaybackSyncSnapshot?
+    @ObservationIgnored private var lastObservedWatchLater: WatchLaterSyncSnapshot?
 
     public convenience init(addons: AddonStore, library: LibraryStore, defaults: UserDefaults = .standard) {
         self.init(addons: addons, library: library, defaults: defaults, storage: Self.keychainStorage, session: .shared)
@@ -151,8 +159,9 @@ public final class AccountSync {
     }
     #if DEBUG
     /// UI checks show how a connected account's states read, without a server.
-    public func showForTesting(status: Status, needsChoice: Bool) {
+    public func showForTesting(status: Status, needsChoice: Bool, watchLaterNeedsNewerServer: Bool = false) {
         isConnected = true
+        self.watchLaterNeedsNewerServer = watchLaterNeedsNewerServer
         self.status = status
         self.needsChoice = needsChoice
     }
@@ -238,6 +247,7 @@ public final class AccountSync {
             beforeProfileChange?()
             let localSettings = try localSetup.current.validated()
             let localProgress = try library.playbackSyncSnapshot.validated()
+            let localWatchLater = try library.watchLaterSyncSnapshot.validated()
             try localSetup.rememberBeforeConnecting(localSettings)
             let pendingBaselines = Baselines(initialImport: InitialImport(settings: localSettings, progress: localProgress))
             try saveBaselines(pendingBaselines, connection: proposed)
@@ -245,6 +255,8 @@ public final class AccountSync {
             connection = proposed
             isConnected = true
             try activateProfiles(for: proposed)
+            // Watch Later is never chosen between: this device's titles join the account's.
+            try library.applyWatchLaterSyncSnapshot(.merged(local: library.watchLaterSyncSnapshot, remote: localWatchLater))
             baselines = pendingBaselines
             choice = Choice(settings: SettingsChoice(local: localSettings, remote: remoteSetup?.settings ?? SyncedSettings(),
                                                      revision: setupDocument?.revision),
@@ -266,6 +278,7 @@ public final class AccountSync {
         choice = nil
         needsChoice = false
         devices = []
+        watchLaterNeedsNewerServer = false
         isConnected = false
         isSyncing = false
         lastSync = nil
@@ -296,6 +309,7 @@ public final class AccountSync {
             }
             if choice?.settings == nil { try await syncSetup(client: client, id: id) }
             try await syncProgress(client: client, id: id)
+            try await syncWatchLater(client: client, id: id)
             lastSync = .now
             baselines.lastSync = lastSync
             try saveBaselines()
@@ -382,6 +396,30 @@ public final class AccountSync {
                 needsChoice = true
                 status = .choosingPlayback
             }
+        }
+    }
+
+    private func syncWatchLater(client: AccountSyncClient, id: UUID) async throws {
+        guard let connection else { return }
+        let cipher = try AccountSyncCipher(key: connection.key, resource: Self.watchLaterResource)
+        do {
+            try await retryingConflicts {
+                let document = try await client.fetch(Self.watchLaterPath)
+                try ensureCurrent(id)
+                let remote = try openWatchLater(document, key: connection.key)
+                let result = WatchLaterSyncSnapshot.merged(local: try library.watchLaterSyncSnapshot.validated(), remote: remote)
+                // Written even when empty: an older gateway answers only a write with its refusal.
+                if result != remote || document == nil {
+                    _ = try await client.put(cipher.seal(result), resource: Self.watchLaterPath, revision: document?.revision)
+                    try ensureCurrent(id)
+                }
+                // Merged again, so a title saved or removed meanwhile isn't undone.
+                try library.applyWatchLaterSyncSnapshot(.merged(local: library.watchLaterSyncSnapshot, remote: result))
+                baselines.watchLater = result
+                watchLaterNeedsNewerServer = false
+            }
+        } catch SyncError.httpStatus(404) {
+            watchLaterNeedsNewerServer = true
         }
     }
 
@@ -655,6 +693,12 @@ public final class AccountSync {
             .open(document, as: PlaybackSyncSnapshot.self).validated()
     }
 
+    private func openWatchLater(_ document: AccountSyncDocument?, key: String) throws -> WatchLaterSyncSnapshot {
+        guard let document else { return WatchLaterSyncSnapshot() }
+        return try AccountSyncCipher(key: key, resource: Self.watchLaterResource)
+            .open(document, as: WatchLaterSyncSnapshot.self).validated()
+    }
+
     private func client(_ connection: Connection) throws -> AccountSyncClient {
         try AccountSyncClient(endpoint: connection.endpoint, token: connection.token, session: session)
     }
@@ -706,6 +750,7 @@ public final class AccountSync {
     private func rememberObserved() {
         lastObservedSettings = localSetup.current
         lastObservedProgress = library.playbackSyncSnapshot
+        lastObservedWatchLater = library.watchLaterSyncSnapshot
     }
 
     /// Saving progress writes several defaults keys at once; one check covers them all.
@@ -724,12 +769,12 @@ public final class AccountSync {
         guard isConnected, choice?.initial != true else { return }
         let settings = localSetup.current
         let progress = library.playbackSyncSnapshot
-        let settingsChanged = settings != lastObservedSettings
-        guard settingsChanged || progress != lastObservedProgress else { return }
+        // Settings and Watch Later changes are deliberate and few; playback progress changes every few seconds.
+        let deliberate = settings != lastObservedSettings || library.watchLaterSyncSnapshot != lastObservedWatchLater
+        guard deliberate || progress != lastObservedProgress else { return }
         rememberObserved()
         if !isSyncing { status = .waiting }
-        // Settings changes are deliberate and few; playback progress changes every few seconds.
-        schedule(after: settingsChanged ? 1 : 15)
+        schedule(after: deliberate ? 1 : 15)
     }
 
     private func schedule(after seconds: Double) {
@@ -748,7 +793,8 @@ public final class AccountSync {
         rememberObserved()
         if isConnected, !needsChoice, errorMessage == nil,
            localSetup.current != baselines.setup?.settings
-            || library.playbackSyncSnapshot != baselines.progress { schedule(after: 1) }
+            || library.playbackSyncSnapshot != baselines.progress
+            || !watchLaterNeedsNewerServer && library.watchLaterSyncSnapshot != baselines.watchLater { schedule(after: 1) }
     }
 
     private func fail(_ error: Error) {

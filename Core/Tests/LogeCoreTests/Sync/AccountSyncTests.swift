@@ -296,6 +296,81 @@ struct AccountSyncTests {
         try alice.disconnect(); try second.disconnect()
     }
 
+    func title(_ id: String) -> MetaPreview { MetaPreview(id: id, type: "movie", name: id) }
+
+    @Test func watchLaterConvergesAfterConcurrentAdditionsAndRemovals() async throws {
+        reset()
+        let now = Date.now
+        let (alice, _, libraryA, _, _) = fixture()
+        libraryA.toggleSaved(title("before"), at: now - 100)
+        await alice.connect(code: try enrollment("alice")); await alice.resolve(useLocal: true)
+        libraryA.toggleSaved(title("shared"), at: now - 50)
+        libraryA.toggleSaved(title("readded"), at: now - 50)
+        await alice.sync()
+        let (second, _, libraryB, _, _) = fixture()
+        libraryB.toggleSaved(title("own"), at: now - 90)
+        await second.connect(code: try await alice.makeDeviceCode()); await second.resolve(useLocal: false)
+        await second.sync()
+        // Each device's list from before connecting joins the account's, whichever setup was kept.
+        #expect(Set(libraryB.saved.map(\.id)) == ["before", "shared", "readded", "own"])
+
+        libraryA.toggleSaved(title("shared"), at: now - 10)
+        libraryA.toggleSaved(title("fromA"), at: now - 8)
+        libraryA.toggleSaved(title("readded"), at: now - 6)
+        libraryB.toggleSaved(title("fromB"), at: now - 9)
+        libraryB.toggleSaved(title("readded"), at: now - 7)
+        libraryB.toggleSaved(title("readded"), at: now - 5)
+        await second.sync(); await alice.sync(); await second.sync()
+        #expect(alice.errorMessage == nil && !alice.needsChoice && !second.needsChoice)
+        #expect(libraryA.saved.map(\.id) == ["readded", "fromA", "fromB", "own", "before"])
+        #expect(libraryB.saved.map(\.id) == libraryA.saved.map(\.id))
+        #expect(libraryA.watchLaterSyncSnapshot == libraryB.watchLaterSyncSnapshot)
+        try alice.disconnect(); try second.disconnect()
+        #expect(libraryB.saved.map(\.id) == ["own"])
+    }
+
+    @Test func reconnectingDoesNotBringBackRemovedWatchLaterTitles() async throws {
+        reset()
+        let now = Date.now
+        let (alice, _, libraryA, _, _) = fixture()
+        await alice.connect(code: try enrollment("alice")); await alice.resolve(useLocal: true)
+        let (second, _, libraryB, _, _) = fixture()
+        libraryB.toggleSaved(title("gone"), at: now - 100)
+        await second.connect(code: try await alice.makeDeviceCode()); await second.resolve(useLocal: false)
+        await second.sync(); await alice.sync()
+        #expect(libraryA.isSaved("gone"))
+        try second.disconnect()
+        #expect(libraryB.isSaved("gone"))
+
+        libraryA.toggleSaved(title("gone"), at: now - 10)
+        await alice.sync()
+        await second.connect(code: try await alice.makeDeviceCode()); await second.resolve(useLocal: false)
+        await second.sync(); await alice.sync()
+        #expect(!libraryB.isSaved("gone") && !libraryA.isSaved("gone"))
+        try alice.disconnect(); try second.disconnect()
+    }
+
+    @Test func olderGatewayKeepsWatchLaterOnTheDeviceAndSyncsTheRest() async throws {
+        reset()
+        AccountGatewayProtocol.state.withLock { $0.unknownDocuments = ["documents/watchLater"] }
+        let (alice, _, libraryA, _, _) = fixture()
+        await alice.connect(code: try enrollment("alice")); await alice.resolve(useLocal: true)
+        libraryA.toggleSaved(title("kept"))
+        libraryA.record(movie(), position: 100, duration: 1000)
+        await alice.sync()
+        #expect(alice.watchLaterNeedsNewerServer && alice.errorMessage == nil && alice.status == .upToDate)
+        #expect(libraryA.isSaved("kept"))
+        let (second, _, libraryB, _, _) = fixture()
+        await second.connect(code: try await alice.makeDeviceCode()); await second.resolve(useLocal: false)
+        #expect(libraryB.progress["movie"]?.position == 100 && !libraryB.isSaved("kept"))
+
+        // Once the gateway is updated, the next sync carries it.
+        AccountGatewayProtocol.state.withLock { $0.unknownDocuments = [] }
+        await alice.sync(); await second.sync()
+        #expect(!alice.watchLaterNeedsNewerServer && libraryB.isSaved("kept"))
+        try alice.disconnect(); try second.disconnect()
+    }
+
     @Test func writeAfterAnotherDeviceSavedIsRetriedAgainstTheNewRevision() async throws {
         reset()
         let (alice, _, library, _, _) = fixture()

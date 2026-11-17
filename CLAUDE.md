@@ -91,7 +91,7 @@ logs; Instruments over the network to it drops after about a second.
 `recommended`, `my-lists`, `details`, `details-collection`, `series`, `details-unmatched`,
 `details-busy`, `sources-folded|autoplay`
 (need `Tools/test-addon.py --port 8769 --many --delay 5`), `sources-empty(-sheet)`,
-`settings-review|failed`, `carousel-resume`. The playback fixture also takes
+`settings-review|failed|old-server`, `carousel-resume`. The playback fixture also takes
 `PLAYBACK_FIXTURE_NEXT=late`, `PLAYBACK_FIXTURE_SHORT_URL` and `?hang=`.
 
 ## Conventions
@@ -110,7 +110,7 @@ logs; Instruments over the network to it drops after about a second.
   (`App/Browse/Components/BrowseComponents.swift`), iPad/landscape via size classes. Phone-only
   behaviour checks the device (`Metrics.isPhone`), not the size class, so a narrow iPad window
   keeps its tabs.
-- Expanding sync scope (e.g. Watch Later) or changing visible UI/interaction design
+- Expanding sync scope (e.g. remembered sources) or changing visible UI/interaction design
   needs the user's agreement on a concrete proposal first.
 - No co-author or "generated with" lines in commits or PRs; commit only when asked.
 
@@ -126,10 +126,11 @@ stay out of this repo.
 Distributed as a SideStore source (each user signs with a free Apple ID; Apple TV via
 Sideloadly/atvloadly); no paid developer account. MPVKit player, vendored with an AVFoundation
 video output. Addons are added as manifest URLs. Cross-device sync is the optional self-hosted
-account sync, never iCloud or a default hosted server; it carries progress, addons, playback
-preferences and Home's layout (one field, conflicts asked about); Trakt support was removed in November
-2026, and the accent colour setting the
-same month: the app is always white. Sync is one person's devices only:
+account sync, never iCloud or a default hosted server; it carries progress, Watch Later (its own
+`watchLater` document: per title the latest addition or removal wins, removals kept 90 days,
+no prompts; an older gateway's 404 keeps it on the device), addons, playback preferences and
+Home's layout (one field, conflicts asked about); Trakt support was removed in November 2026,
+and the accent colour setting the same month: the app is always white. Sync is one person's devices only:
 the live shared setups between accounts were removed the same month for a one-time setup copy
 (`SetupCode`, `loge://setup#loge-setup-1:…`, base64url of deflated JSON; Share Setup on
 iPhone/iPad/Mac, Import Setup everywhere). A device that was in a group drops its grants and
@@ -242,8 +243,6 @@ keeps Movie/Series labels because it can mix both.
   gateway's retired `/v2/join` and `/v2/groups` routes and `groups: []`.
 - ROADMAP.md lists the remaining verification item (OS runtime smoke tests) and the proposed
   features; agree on scope before building any of them.
-- Cross-device sync: reviewed and fixed; proposed expansion (Watch Later)
-  awaits a decision.
 - Top Shelf is on hold: atvloadly installs the extension and its App Group
   (`group.li.tjh.MediaApp.<team ID>`, read from the embedded profile), but tvOS never launches
   it; the reason is only in the Apple TV's live log (branch `claude/top-shelf-test`).
