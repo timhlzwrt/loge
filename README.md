@@ -3,208 +3,50 @@
 </p>
 
 <p align="center">
-  A SwiftUI Stremio addon client for <strong>iPhone, iPad, Apple TV and Mac</strong>.<br>
-  Browse films and series, choose your source, and play with mpv.
+  A native Stremio addon client for <strong>iPhone, iPad, Apple TV and Mac</strong>.<br>
+  Browse films and series, choose a source, and play it with mpv.
 </p>
 
 <p align="center">
   <a href="https://github.com/timhlzwrt/loge/releases/latest"><strong>Download</strong></a> ·
-  <a href="docs/INSTALLATION.md">Install & set up</a> ·
-  <a href="#features">Features</a> ·
+  <a href="docs/INSTALLATION.md">Install</a> ·
   <a href="ROADMAP.md">Roadmap</a> ·
   <a href="CONTRIBUTING.md">Contribute</a>
 </p>
 
 ![The loge player on a landscape iPhone, paused on Night of the Living Dead](docs/screenshots/iphone-player.jpg)
 
-**Your addons provide the streams.** Cinemeta supplies built-in movie and series
-catalogs, search and IMDb ratings. Add a playback addon to watch. loge does not
-host, bundle or sell content; only use sources you are entitled to access.
+Your addons provide the streams. loge doesn't host, bundle or sell content; only use
+sources you are entitled to access. loge plays direct HTTP(S) streams only: no torrents,
+and no downloads.
 
-## Platforms
+## Install
 
-- **iPhone:** iOS 26.0 or later. Portrait browsing, landscape playback.
-- **iPad:** iPadOS 26.0 or later. Adaptive browsing and full-screen playback.
-- **Apple TV:** tvOS 26.0 or later. Focus-driven browsing and Siri Remote controls.
-- **Mac:** macOS 26.0 or later. A separate player window and
-  signed in-app updates. The distributed build is for Apple silicon.
+loge is pre-1.0 and not in the App Store. It needs iOS, iPadOS, tvOS or macOS 26.
 
-These are the deployment minimums for this source revision, not the SDK version
-used to build it. The inspected **`build-97`** downloads still require **tvOS 27**
-and **macOS 27**; newly built binaries use the corrected OS 26 targets.
-[Requirements and verification](docs/REQUIREMENTS.md) explains the API floor,
-binary dependencies and what has—and has not—been tested on OS 26.
+- **iPhone / iPad:** sideload `loge-iOS.ipa`, or add the SideStore source.
+- **Apple TV:** sideload `loge-tvOS.ipa` with atvloadly or Sideloadly.
+- **Mac:** open `loge-macOS.dmg` (Apple silicon, not notarized; updates through Sparkle).
 
-## Features
+Then add your addon's `manifest.json` URL in **Settings → Addons**. The
+[installation guide](docs/INSTALLATION.md) covers signing, updates and troubleshooting.
+Sync between your devices is optional and self-hosted: see [docs/SYNC.md](docs/SYNC.md).
 
-### Find something worth watching
-
-- **Artwork-led Home:** popular films and series, IMDb favourites, Letterboxd
-  lists and genres. Settings → Home hides and reorders shelves and adds catalogs
-  from installed addons; the arrangement syncs with your account.
-- **Title details:** seasons, episodes, Up Next, watched actions, the IMDb
-  rating, and the trailer, which opens on YouTube from the More menu (not on
-  Apple TV, which has no browser). With a TMDB
-  token, cast and crew, and for a film that belongs to a series its other films
-  in release order. The IMDb rating opens the title on IMDb.
-- **People:** TMDB-backed portraits and filmographies with role filters.
-  TMDB features require your own read access token.
-- **Recommendations:** with a TMDB token, "More Like This" on titles and a Recommended row on
-  Home built from what you watched and saved. TMDB supplies the suggestions and
-  the ranking happens on your device; TMDB sees only the title lookups.
-- **Your library:** Continue Watching, Watch Later and the last 12 titles you
-  finished, under Recently Watched in My Lists. Search
-  includes recent queries.
-- **New episodes:** for series you are watching, an episode that has come out
-  since you finished the one before appears in Continue Watching.
-
-### Choose a source, not a mystery filename
-
-- Streams from installed addons, grouped by resolution with HDR, codec, audio,
-  file size and bitrate parsed when the provider supplies them.
-- Remembered source selection, automatic fallback and a connection-aware
-  recommendation once the device has measured playback download speed.
-- A filter by audio language, HDR and bitrate, and a maximum bitrate for the
-  sources Play and Up Next pick by themselves; the default is **100 Mbps**.
-
-### Play with mpv
-
-- Hardware decoding and an AVFoundation video output, with HDR support dependent
-  on the device, display and source.
-- Embedded and external subtitles, subtitle addons, preferred audio/subtitle
-  languages, subtitle sizing, and audio/subtitle timing adjustment.
-- Timeline previews, playback speed, chapter/community-based intro, recap and
-  credits skips when timing data is available, and an automatic next episode.
-- Picture in Picture where supported, system Now Playing controls, an iOS
-  AirPlay audio route picker, and Apple TV frame-rate/dynamic-range matching.
-
-Hardware-sensitive features are implemented, not a promise of every codec,
-display or output combination. See [limitations](#know-the-limits) and the
-[testing scope](ROADMAP.md#a-note-from-the-maintainer).
-
-### Continue on your other devices
-
-**Self-hosted sync** carries movie/episode progress, watched state, Watch Later,
-ordered addons and preferences between your devices. Payloads are encrypted on-device; there is
-**no default hosted service**. [Set up private sync →](docs/SYNC.md)
-
-**Share Setup** in Settings → Addons sends someone a one-time copy of your addons,
-optionally with your playback preferences, as a link or code. It needs no server
-and nothing stays connected.
-
-**What stays local:** remembered stream selections are not synchronized. Changes made offline stay on the device and are sent on
-reconnect.
-
-## Install and start watching
-
-loge is **pre-1.0**, not in the App Store, and distributed through
-[GitHub Releases](https://github.com/timhlzwrt/loge/releases).
-
-- **iPhone / iPad:** download `loge-iOS.ipa` and sign it with a sideloading tool
-  such as [iloader](https://github.com/nab138/iloader). A SideStore / AltStore
-  Classic source is also available in the [installation guide](docs/INSTALLATION.md).
-- **Apple TV:** download `loge-tvOS.ipa` and install with a tvOS-capable tool such
-  as [atvloadly](https://github.com/bitxeno/atvloadly) or
-  [Sideloadly](https://sideloadly.io).
-- **Mac:** download `loge-macOS.dmg` and drag loge into Applications. The app is
-  self-signed, **not notarized**; the first launch needs macOS's **Open Anyway**
-  approval. Later updates are verified by Sparkle.
-
-A free Apple ID can sign the iOS/tvOS builds; those signatures need refreshing
-every seven days. Mac installation does not use that seven-day signing cycle.
-Follow the [platform-specific instructions](docs/INSTALLATION.md) for signing,
-Gatekeeper, updates and troubleshooting.
-
-**First run:** open **Settings → Addons**, install your provider's configured
-`/manifest.json` URL, open a title, and choose **Sources**. Built-in catalogs do
-not imply that a playable source is available. No loge or TMDB account is
-required for basic browsing and playback.
-
-## Screenshots
-
-<p align="center">
-  <img src="docs/screenshots/iphone-sources.jpg" width="300" alt="Sources sheet with a 4K remux, a 1080p BluRay and an SD file, each with size and bitrate">
-</p>
-
-![loge on Apple TV, paused on Night of the Living Dead](docs/screenshots/tv-player.jpg)
-
-Real app captures, not mockups. They show *Night of the Living Dead* (1968), which
-is in the public domain, so no third-party artwork appears.
-[Capture notes →](docs/screenshots/README.md)
-
-## Know the limits
-
-- **Direct HTTP(S) streams only.** No torrent engine, info-hash playback or magnet
-  support. An addon/service must turn those into a playable video URL.
-- **No offline downloads.** Streaming is the playback model; downloads are out of scope.
-- **No subtitles in Picture in Picture.** The current subtitle layer is separate
-  from the video layer captured by PiP.
-- **No Apple TV Top Shelf extension.** Continue Watching inside the app works;
-  system Home Screen integration is on hold.
-- **English interface only.** Audio and subtitle language preferences are separate.
-- **Recommendations and filmographies need a TMDB token.** Without one, Home has only
-  its discovery feeds and a person's page lists only the title it was opened from.
-  There is no Letterboxd account sync, and the only score is IMDb's.
-
-### Testing scope
-
-**A note from the maintainer:** I don't have the time to carry out real-device testing,
-so it isn't planned or required for releases. Testing focuses on iPhone, iPad and
-Apple TV simulators, alongside automated tests and Mac builds.
-
-Simulator results aren't hardware certification: HDR output, HDMI display matching,
-physical Siri Remote gestures and actual screen-lock recovery remain unverified by
-this testing process. They aren't pending roadmap tasks.
-
-The [roadmap](ROADMAP.md) separates shipped work, simulator coverage and proposed
-features. Report reproducible problems through the
-[issue forms](https://github.com/timhlzwrt/loge/issues/new/choose)—never include
-configured addon URLs, stream credentials, connection codes or recovery keys.
-
-## Build from source
-
-These instructions are verified with **Xcode 27.2 / Swift 6.4.2** and
-[XcodeGen](https://github.com/yonaskolb/XcodeGen), in Swift 6 language mode.
-The app needs OS 26-era APIs; the oldest working Xcode version has not been
-established. Older toolchains are not verified; the runtime target remains OS 26.
+## Build
 
 ```sh
-git clone https://github.com/timhlzwrt/loge.git
-cd loge
 xcodegen generate
 (cd Core && swift test)
-xcodebuild build -project loge.xcodeproj -scheme loge \
-  -destination 'generic/platform=iOS Simulator' \
-  -derivedDataPath .build/xcode SWIFT_TREAT_WARNINGS_AS_ERRORS=YES
+xcodebuild build -project loge.xcodeproj -scheme loge -destination 'generic/platform=iOS Simulator'
 ```
 
-For Apple TV use `generic/platform=tvOS Simulator`; for Mac use `platform=macOS`.
-Initial builds download the vendored MPVKit binary dependencies. See
-[Contributing](CONTRIBUTING.md) for all checks, fixture-based UI tests and packaging.
+[CONTRIBUTING.md](CONTRIBUTING.md) has the full checks, and
+[docs/APP_OVERVIEW.md](docs/APP_OVERVIEW.md) explains how the app is put together.
 
-### Project guides
+## Licence
 
-- [Architecture and data flow](docs/APP_OVERVIEW.md)
-- [Platform requirements and verification](docs/REQUIREMENTS.md)
-- [Installation, accounts and troubleshooting](docs/INSTALLATION.md)
-- [Private sync and setup copies](docs/SYNC.md)
-- [Playback diagnostics and performance](docs/PLAYBACK_PERFORMANCE.md)
-- [Mac updater signing and publishing](docs/MAC_UPDATES.md)
-- [CI](https://github.com/timhlzwrt/loge/actions/workflows/ci.yml) ·
-  [Release workflow](https://github.com/timhlzwrt/loge/actions/workflows/release.yml)
-
-## Licence and credits
-
-loge is source-available under the [PolyForm Noncommercial License 1.0.0](LICENSE):
-free to use, change and share for any non-commercial purpose, not for commercial use.
-Playback uses [mpv](https://mpv.io) and
-[FFmpeg](https://ffmpeg.org) through the LGPL build of
-[MPVKit](https://github.com/mpvkit/MPVKit) (1.1.0-n9.0.2, mpv 0.41.0).
-The [vendored patches and rebuild instructions](Vendor/MPVKit) are included.
-Mac updates use [Sparkle](https://sparkle-project.org), with its
-[licence and third-party notices](Vendor/Sparkle-LICENSE.txt).
-
-Film artwork and metadata belong to their respective owners. Full data-source
-and image credits are in **Settings → About → Data Sources**. This product uses
-the TMDB API but is not endorsed or certified by TMDB. loge is an independent
-project, not an official Stremio application.
+[PolyForm Noncommercial 1.0.0](LICENSE). Playback uses [mpv](https://mpv.io) and
+[FFmpeg](https://ffmpeg.org) through the LGPL build of [MPVKit](https://github.com/mpvkit/MPVKit)
+([patches](Vendor/MPVKit)); Mac updates use [Sparkle](https://sparkle-project.org)
+([licence](Vendor/Sparkle-LICENSE.txt)). This product uses the TMDB API but is not endorsed
+or certified by TMDB. loge is an independent project, not an official Stremio application.
