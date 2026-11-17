@@ -1,6 +1,6 @@
 # Install and set up loge
 
-[Back to loge](../README.md) · [Platform requirements](REQUIREMENTS.md)
+[Back to loge](../README.md)
 
 loge is pre-1.0 and is not in the App Store. Only download official builds from
 [timhlzwrt/loge Releases](https://github.com/timhlzwrt/loge/releases).
@@ -8,9 +8,9 @@ The iOS and tvOS `.ipa` files are unsigned; your sideloading tool signs them.
 A free Apple ID is sufficient, but its signatures expire after seven days.
 Refreshing a signature is separate from updating to a newer loge build.
 
-Current source minimums are **iOS/iPadOS 26, tvOS 26 and macOS 26**. The inspected
-`build-97` downloads require **iOS 26, tvOS 27 and macOS 27**; the lower tvOS/Mac
-minimum applies to new builds. See [Requirements](REQUIREMENTS.md).
+loge needs **iOS/iPadOS 26, tvOS 26 or macOS 26**; the Mac build is for Apple silicon
+only. There is no Android, Windows, Linux or visionOS app: a sideloading tool running on
+those systems doesn't make them loge clients.
 
 ## iPhone and iPad
 
@@ -53,7 +53,7 @@ AltStore **Classic** source, not an AltStore PAL marketplace listing.
 3. Install the IPA and arrange refreshes before the free seven-day signature
    expires. SideStore itself does not run on tvOS.
 
-For a source build, [`Tools/install-tv.sh`](../Tools/install-tv.sh) uses an
+For a source build, [`Tools/install.sh`](../Tools/install.sh) can hand the IPA to an
 atvloadly service. Set `ATVLOADLY` to your own service address; the script's
 developer-machine default is not a public loge service.
 

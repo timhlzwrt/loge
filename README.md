@@ -14,7 +14,7 @@
   <a href="CONTRIBUTING.md">Contribute</a>
 </p>
 
-![The loge player on a landscape iPhone, paused on Night of the Living Dead](docs/screenshots/iphone-player.jpg)
+![The loge player on a landscape iPhone, paused on Night of the Living Dead](web/images/iphone-player.jpg)
 
 Your addons provide the streams. loge doesn't host, bundle or sell content; only use
 sources you are entitled to access. loge plays direct HTTP(S) streams only: no torrents,
@@ -48,5 +48,5 @@ xcodebuild build -project loge.xcodeproj -scheme loge -destination 'generic/plat
 [PolyForm Noncommercial 1.0.0](LICENSE). Playback uses [mpv](https://mpv.io) and
 [FFmpeg](https://ffmpeg.org) through the LGPL build of [MPVKit](https://github.com/mpvkit/MPVKit)
 ([patches](Vendor/MPVKit)); Mac updates use [Sparkle](https://sparkle-project.org)
-([licence](Vendor/Sparkle-LICENSE.txt)). This product uses the TMDB API but is not endorsed
+([licence](App/ThirdParty/Sparkle-LICENSE.txt)). This product uses the TMDB API but is not endorsed
 or certified by TMDB. loge is an independent project, not an official Stremio application.
