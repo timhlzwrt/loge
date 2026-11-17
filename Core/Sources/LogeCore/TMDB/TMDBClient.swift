@@ -180,7 +180,7 @@ public struct TMDBClient: Sendable {
     }
 
     public func details(imdbID: String, type: String) async throws -> TMDBDetails {
-        guard imdbID.wholeMatch(of: /tt\d+/) != nil, type == MediaType.movie || type == MediaType.series else {
+        guard MediaType.isIMDbTitle(imdbID), type == MediaType.movie || type == MediaType.series else {
             throw TMDBError.notFound
         }
         let found: FindResponse = try await fetch("find/\(imdbID)", query: [

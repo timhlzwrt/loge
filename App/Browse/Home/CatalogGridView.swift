@@ -44,7 +44,7 @@ struct CatalogGridView: View {
     }
 
     private var title: String {
-        let base = catalog.id == source.catalog.id ? source.title : shown.title
+        let base = shown.title
         let filter = catalog.id == source.catalog.id ? genre : genre ?? source.defaultGenre
         return filter.map { "\(base) · \($0)" } ?? base
     }

@@ -134,7 +134,7 @@ extension [InstalledAddon] {
            let client = try? AddonClient(manifestURL: installed.manifestURL) {
             return client
         }
-        guard type == MediaType.movie || type == MediaType.series, id.hasPrefix("tt") else { return nil }
+        guard type == MediaType.movie || type == MediaType.series, MediaType.isIMDbTitle(id) else { return nil }
         return try? AddonClient(manifestURL: AddonStore.cinemetaURL)
     }
 

@@ -192,9 +192,6 @@ struct AccountSyncClient: Sendable {
         struct Request: Encodable { let kind: AccountSyncCodeKind }
         return try await send("POST", "invitations", body: Request(kind: .device))
     }
-    func revokeInvitation(_ id: String) async throws {
-        _ = try await request("DELETE", "invitations/\(try identifier(id))")
-    }
 
     private func identifier(_ string: String) throws -> String {
         guard !string.isEmpty, string.utf8.count <= 128,

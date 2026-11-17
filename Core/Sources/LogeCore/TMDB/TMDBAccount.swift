@@ -31,10 +31,14 @@ public final class TMDBAccount {
     @ObservationIgnored private let session: URLSession
     @ObservationIgnored private let storage: TokenStorage
     @ObservationIgnored private var connectionID = UUID()
-    @ObservationIgnored private var detailsCache = ResponseCache<TMDBTitleKey, TMDBDetails>(capacity: 128, lifetime: .seconds(1_800))
-    @ObservationIgnored private var peopleCache = ResponseCache<Int, TMDBPersonDetails>(capacity: 32, lifetime: .seconds(3_600))
-    @ObservationIgnored private var identityCache = ResponseCache<TMDBIdentityKey, String?>(capacity: 256, lifetime: .seconds(3_600))
-    @ObservationIgnored private var collectionCache = ResponseCache<Int, TMDBCollection>(capacity: 32, lifetime: .seconds(3_600))
+    @ObservationIgnored private var caches = MetadataCaches()
+
+    private struct MetadataCaches {
+        let details = ResponseCache<TMDBTitleKey, TMDBDetails>(capacity: 128, lifetime: .seconds(1_800))
+        let people = ResponseCache<Int, TMDBPersonDetails>(capacity: 32, lifetime: .seconds(3_600))
+        let identities = ResponseCache<TMDBIdentityKey, String?>(capacity: 256, lifetime: .seconds(3_600))
+        let collections = ResponseCache<Int, TMDBCollection>(capacity: 32, lifetime: .seconds(3_600))
+    }
 
     var client: TMDBClient? {
         _ = revision
@@ -42,21 +46,21 @@ public final class TMDBAccount {
     }
 
     public func details(imdbID: String, type: String) async throws -> TMDBDetails {
-        try await cached(in: detailsCache, TMDBTitleKey(imdbID: imdbID, type: type)) {
+        try await cached(in: caches.details, TMDBTitleKey(imdbID: imdbID, type: type)) {
             try await $0.details(imdbID: imdbID, type: type)
         }
     }
 
     public func personDetails(id: Int) async throws -> TMDBPersonDetails {
-        try await cached(in: peopleCache, id) { try await $0.person(id: id) }
+        try await cached(in: caches.people, id) { try await $0.person(id: id) }
     }
 
     public func collection(id: Int) async throws -> TMDBCollection {
-        try await cached(in: collectionCache, id) { try await $0.collection(id: id) }
+        try await cached(in: caches.collections, id) { try await $0.collection(id: id) }
     }
 
     public func imdbID(tmdbID: Int, type: String) async throws -> String? {
-        try await cached(in: identityCache, TMDBIdentityKey(tmdbID: tmdbID, type: type)) {
+        try await cached(in: caches.identities, TMDBIdentityKey(tmdbID: tmdbID, type: type)) {
             try await $0.imdbID(tmdbID: tmdbID, type: type)
         }
     }
@@ -158,10 +162,7 @@ public final class TMDBAccount {
 
     private func resetMetadataCaches() {
         // Swapping instances isolates in-flight responses from the next credential revision.
-        detailsCache = ResponseCache(capacity: 128, lifetime: .seconds(1_800))
-        peopleCache = ResponseCache(capacity: 32, lifetime: .seconds(3_600))
-        identityCache = ResponseCache(capacity: 256, lifetime: .seconds(3_600))
-        collectionCache = ResponseCache(capacity: 32, lifetime: .seconds(3_600))
+        caches = MetadataCaches()
     }
 
     private static let service = "li.tjh.MediaApp.tmdb"

@@ -8,6 +8,11 @@ import Foundation
 public enum MediaType {
     public static let movie = "movie"
     public static let series = "series"
+
+    /// IMDb's title IDs, which Cinemeta and TMDB's lookup know titles by.
+    public static func isIMDbTitle(_ id: String) -> Bool {
+        id.wholeMatch(of: /tt\d+/) != nil
+    }
 }
 
 public struct MetaPreview: Codable, Sendable, Hashable, Identifiable {

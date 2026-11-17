@@ -3,11 +3,7 @@ import Foundation
 /// Stable title links; review text and scores require licensed provider access.
 public enum ReviewLinks {
     public static func imdb(imdbID: String) -> URL? {
-        guard isIMDbTitle(imdbID) else { return nil }
+        guard MediaType.isIMDbTitle(imdbID) else { return nil }
         return URL(string: "https://www.imdb.com/title/\(imdbID)/")
-    }
-
-    private static func isIMDbTitle(_ id: String) -> Bool {
-        id.wholeMatch(of: /tt\d+/) != nil
     }
 }

@@ -65,7 +65,7 @@ public enum Recommendations {
     }
 
     private static func isTitle(_ id: String, type: String) -> Bool {
-        (type == MediaType.movie || type == MediaType.series) && id.wholeMatch(of: /tt\d+/) != nil
+        (type == MediaType.movie || type == MediaType.series) && MediaType.isIMDbTitle(id)
     }
 }
 

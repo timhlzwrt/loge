@@ -278,7 +278,7 @@ struct MetaDetailView: View {
 
     /// TMDB is asked by IMDb ID, for films and series only.
     private var isOnTMDB: Bool {
-        preview.id.wholeMatch(of: /tt\d+/) != nil
+        MediaType.isIMDbTitle(preview.id)
             && (preview.type == MediaType.movie || preview.type == MediaType.series)
     }
 

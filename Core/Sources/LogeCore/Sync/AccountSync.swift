@@ -4,8 +4,9 @@ import Observation
 
 /// One person's sync account on this device: their setup, playback progress and Watch Later.
 ///
-/// Methods that return something, such as a connection code, throw. The rest run in the
-/// background of the Sync screen and report through `status` and `errorMessage`.
+/// What the Sync screen does on a button press and waits for, such as making a device code,
+/// revoking a device or disconnecting, throws. Syncing, connecting and choosing run in the
+/// background and report through `status` and `errorMessage`.
 @MainActor @Observable
 public final class AccountSync {
     public private(set) var isConnected = false
@@ -13,7 +14,7 @@ public final class AccountSync {
     public private(set) var status = Status.off
     public private(set) var errorMessage: String?
     public private(set) var lastSync: Date?
-    public private(set) var needsChoice = false
+    public var needsChoice: Bool { choice != nil }
     public private(set) var devices: [SyncDevice] = []
     /// The server refused the Watch Later document, as gateways from before it synced do.
     /// Watch Later then stays on this device while everything else syncs.
@@ -134,7 +135,7 @@ public final class AccountSync {
     @ObservationIgnored private let session: URLSession
     @ObservationIgnored private var connection: Connection?
     @ObservationIgnored private var baselines = Baselines()
-    @ObservationIgnored private var choice: Choice?
+    private var choice: Choice?
     /// Replaced on disconnect, so results that arrive late are dropped.
     @ObservationIgnored private var generation = UUID()
     @ObservationIgnored private var observer: AccountSyncDefaultsObserver?
@@ -176,7 +177,7 @@ public final class AccountSync {
         isConnected = true
         self.watchLaterNeedsNewerServer = watchLaterNeedsNewerServer
         self.status = status
-        self.needsChoice = needsChoice
+        choice = needsChoice ? Choice(initial: false) : nil
     }
     #endif
 
@@ -215,7 +216,6 @@ public final class AccountSync {
                                 progress: ProgressChoice(local: initial?.progress ?? PlaybackSyncSnapshot(),
                                                          remote: PlaybackSyncSnapshot()),
                                 initial: true, requiresRefresh: true)
-                needsChoice = true
                 status = .choosingInitialSetup
             }
         } catch {
@@ -227,7 +227,6 @@ public final class AccountSync {
                 choice = Choice(settings: SettingsChoice(local: localSetup.current, remote: SyncedSettings()),
                                 progress: ProgressChoice(local: library.playbackSyncSnapshot, remote: PlaybackSyncSnapshot()),
                                 initial: true, requiresRefresh: true)
-                needsChoice = true
             }
             fail(error)
         }
@@ -275,7 +274,6 @@ public final class AccountSync {
                                                      revision: setupDocument?.revision),
                             progress: ProgressChoice(local: localProgress, remote: remoteProgress, revision: progressDocument?.revision),
                             initial: true)
-            needsChoice = true
             status = .choosingInitialSetup
         }
         if isConnected, wantsLiveUpdates { startLiveUpdates() }
@@ -296,7 +294,6 @@ public final class AccountSync {
         connection = nil
         baselines = Baselines()
         choice = nil
-        needsChoice = false
         devices = []
         watchLaterNeedsNewerServer = false
         isConnected = false
@@ -432,7 +429,6 @@ public final class AccountSync {
                 if var remaining = choice, remaining.progress != nil {
                     remaining.progress = nil
                     choice = remaining.settings == nil ? nil : remaining
-                    needsChoice = choice != nil
                 }
             } else {
                 baselines.pendingProgressBase = base
@@ -441,7 +437,6 @@ public final class AccountSync {
                 pendingChoice.progress = ProgressChoice(local: current, remote: result, merge: localResult,
                                                         revision: revision, base: base)
                 choice = pendingChoice
-                needsChoice = true
                 status = .choosingPlayback
             }
         }
@@ -516,7 +511,6 @@ public final class AccountSync {
             try persistConnection()
         }
         choice = nil
-        needsChoice = false
         lastSync = .now
         baselines.lastSync = lastSync
         try saveBaselines()
@@ -658,7 +652,6 @@ public final class AccountSync {
         var updated = choice ?? Choice(initial: false)
         updated.settings = pending
         choice = updated
-        needsChoice = true
         status = .choosingSettings
     }
 
