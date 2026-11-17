@@ -125,6 +125,7 @@ public final class AccountSync {
     private static let setupResource = "configuration"
     private static let progressResource = "progress"
     private static let watchLaterResource = "watchLater"
+    private static let resources: Set<String> = [setupResource, progressResource, watchLaterResource]
     private static func baselineKey(_ profileID: String) -> String { "accountSyncBaseline.\(profileID)" }
 
     @ObservationIgnored private let library: LibraryStore
@@ -142,6 +143,18 @@ public final class AccountSync {
     @ObservationIgnored private var lastObservedSettings: SyncedSettings?
     @ObservationIgnored private var lastObservedProgress: PlaybackSyncSnapshot?
     @ObservationIgnored private var lastObservedWatchLater: WatchLaterSyncSnapshot?
+    /// The server's documents as this device last read or wrote them, by path, so a fetch of
+    /// one that hasn't changed costs no download.
+    @ObservationIgnored private var documents: [String: AccountSyncDocument] = [:]
+    /// Whether the server confirmed this device's account since launch or connecting. Checked
+    /// again after it rejects the device.
+    @ObservationIgnored private var hasCheckedIdentity = false
+    /// Documents another device changed while a sync ran, synced right after it.
+    @ObservationIgnored private var queuedResources: Set<String> = []
+    @ObservationIgnored private var listener: Task<Void, Never>?
+    @ObservationIgnored private var wantsLiveUpdates = false
+    /// The server is holding a changes request for this device, so others hear of its progress soon.
+    @ObservationIgnored private var isLive = false
 
     public convenience init(addons: AddonStore, library: LibraryStore, defaults: UserDefaults = .standard) {
         self.init(addons: addons, library: library, defaults: defaults, storage: Self.keychainStorage, session: .shared)
@@ -239,9 +252,9 @@ public final class AccountSync {
                                       displayName: identity.displayName, deviceID: identity.deviceID, key: key,
                                       localSettings: try localSetup.current.validated(), requiresInitialChoice: true)
             let client = try client(proposed)
-            let setupDocument = try await client.fetch(Self.setupPath)
-            let progressDocument = try await client.fetch(Self.progressPath)
-            try ensureCurrent(id)
+            async let setupFetch = fetch(Self.setupPath, client: client, id: id)
+            async let progressFetch = fetch(Self.progressPath, client: client, id: id)
+            let (setupDocument, progressDocument) = try await (setupFetch, progressFetch)
             let remoteSetup = try openSetup(setupDocument, key: key)
             let remoteProgress = try openProgress(progressDocument, key: key)
             beforeProfileChange?()
@@ -265,6 +278,7 @@ public final class AccountSync {
             needsChoice = true
             status = .choosingInitialSetup
         }
+        if isConnected, wantsLiveUpdates { startLiveUpdates() }
     }
 
     public func disconnect() throws {
@@ -273,6 +287,12 @@ public final class AccountSync {
         generation = UUID()
         pending?.cancel()
         pending = nil
+        listener?.cancel()
+        listener = nil
+        isLive = false
+        documents = [:]
+        hasCheckedIdentity = false
+        queuedResources = []
         connection = nil
         baselines = Baselines()
         choice = nil
@@ -293,23 +313,30 @@ public final class AccountSync {
 
     // MARK: Syncing
 
-    public func sync() async {
+    public func sync() async { await sync(only: Self.resources) }
+
+    /// - Parameter resources: The documents to bring up to date: all of them, or those another
+    ///   device changed.
+    private func sync(only resources: Set<String>) async {
         if choice?.initial == true {
             if choice?.requiresRefresh == true { await refreshInitialChoice() }
             return
         }
         guard let connection else { return }
+        let resources = resources.union(queuedResources)
         await run { id in
+            queuedResources = []
             status = .syncing
             let client = try client(connection)
-            let identity = try await client.me()
-            try ensureCurrent(id)
-            guard identity.accountID == connection.accountID, identity.deviceID == connection.deviceID else {
-                throw SyncError.unauthorized
+            if !hasCheckedIdentity {
+                let identity = try await client.me()
+                try ensureCurrent(id)
+                guard identity.accountID == connection.accountID, identity.deviceID == connection.deviceID else {
+                    throw SyncError.unauthorized
+                }
+                hasCheckedIdentity = true
             }
-            if choice?.settings == nil { try await syncSetup(client: client, id: id) }
-            try await syncProgress(client: client, id: id)
-            try await syncWatchLater(client: client, id: id)
+            try await syncDocuments(resources, client: client, id: id)
             lastSync = .now
             baselines.lastSync = lastSync
             try saveBaselines()
@@ -317,12 +344,36 @@ public final class AccountSync {
         }
     }
 
+    /// Side by side: each document merges on its own. All finish before a failure is reported,
+    /// so none stops between its write and applying what it wrote.
+    private func syncDocuments(_ resources: Set<String>, client: AccountSyncClient, id: UUID) async throws {
+        let syncsSetup = resources.contains(Self.setupResource) && choice?.settings == nil
+        async let setup = failure(syncing: syncsSetup ? Self.setupResource : nil, client: client, id: id)
+        async let progress = failure(syncing: resources.contains(Self.progressResource) ? Self.progressResource : nil,
+                                     client: client, id: id)
+        async let watchLater = failure(syncing: resources.contains(Self.watchLaterResource) ? Self.watchLaterResource : nil,
+                                       client: client, id: id)
+        let failures = await [setup, progress, watchLater]
+        if let error = failures.compactMap({ $0 }).first { throw error }
+    }
+
+    private func failure(syncing resource: String?, client: AccountSyncClient, id: UUID) async -> (any Error)? {
+        do {
+            switch resource {
+            case Self.setupResource: try await syncSetup(client: client, id: id)
+            case Self.progressResource: try await syncProgress(client: client, id: id)
+            case Self.watchLaterResource: try await syncWatchLater(client: client, id: id)
+            default: break
+            }
+        } catch { return error }
+        return nil
+    }
+
     private func syncSetup(client: AccountSyncClient, id: UUID) async throws {
         guard let connection else { return }
         let cipher = try AccountSyncCipher(key: connection.key, resource: Self.setupResource)
         try await retryingConflicts {
-            let document = try await client.fetch(Self.setupPath)
-            try ensureCurrent(id)
+            let document = try await fetch(Self.setupPath, client: client, id: id)
             let incoming = try openSetup(document, key: connection.key)?.settings ?? SyncedSettings()
             let local = localSetup.current
             let merged = SyncedSettings.merged(base: setupBase(remote: incoming), local: local, remote: incoming)
@@ -335,8 +386,7 @@ public final class AccountSync {
             // Written once after leaving a shared setup even if nothing changed, so the
             // document stops carrying the shared setups' keys.
             if setup.settings != incoming || document == nil || baselines.formerlyShared != nil {
-                revision = try await client.put(cipher.seal(setup), resource: Self.setupPath, revision: document?.revision)
-                try ensureCurrent(id)
+                revision = try await put(cipher.seal(setup), Self.setupPath, revision: document?.revision, client: client, id: id)
             }
             baselines.setup = setup
             baselines.formerlyShared = nil
@@ -355,8 +405,7 @@ public final class AccountSync {
         guard let connection else { return }
         let cipher = try AccountSyncCipher(key: connection.key, resource: Self.progressResource)
         try await retryingConflicts {
-            let document = try await client.fetch(Self.progressPath)
-            try ensureCurrent(id)
+            let document = try await fetch(Self.progressPath, client: client, id: id)
             let remote = try openProgress(document, key: connection.key)
             let local = try library.playbackSyncSnapshot.validated()
             var base = baselines.progress ?? remote
@@ -368,8 +417,7 @@ public final class AccountSync {
             let result = merge.resolving(useLocal: false)
             var revision = document?.revision
             if result != remote || document == nil {
-                revision = try await client.put(cipher.seal(result), resource: Self.progressPath, revision: document?.revision)
-                try ensureCurrent(id)
+                revision = try await put(cipher.seal(result), Self.progressPath, revision: document?.revision, client: client, id: id)
             }
             let current = library.playbackSyncSnapshot
             // Against what was just uploaded, so progress saved meanwhile isn't taken for another
@@ -404,14 +452,12 @@ public final class AccountSync {
         let cipher = try AccountSyncCipher(key: connection.key, resource: Self.watchLaterResource)
         do {
             try await retryingConflicts {
-                let document = try await client.fetch(Self.watchLaterPath)
-                try ensureCurrent(id)
+                let document = try await fetch(Self.watchLaterPath, client: client, id: id)
                 let remote = try openWatchLater(document, key: connection.key)
                 let result = WatchLaterSyncSnapshot.merged(local: try library.watchLaterSyncSnapshot.validated(), remote: remote)
                 // Written even when empty: an older gateway answers only a write with its refusal.
                 if result != remote || document == nil {
-                    _ = try await client.put(cipher.seal(result), resource: Self.watchLaterPath, revision: document?.revision)
-                    try ensureCurrent(id)
+                    _ = try await put(cipher.seal(result), Self.watchLaterPath, revision: document?.revision, client: client, id: id)
                 }
                 // Merged again, so a title saved or removed meanwhile isn't undone.
                 try library.applyWatchLaterSyncSnapshot(.merged(local: library.watchLaterSyncSnapshot, remote: result))
@@ -502,8 +548,7 @@ public final class AccountSync {
         let client = context.client, connection = context.connection, id = context.id
         let settings = context.settings, progress = context.progress
         if var pending = selected.settings {
-            let latest = try await client.fetch(Self.setupPath)
-            try ensureCurrent(id)
+            let latest = try await fetch(Self.setupPath, client: client, id: id)
             if latest?.revision != pending.revision {
                 pending.remote = try openSetup(latest, key: connection.key)?.settings ?? SyncedSettings()
                 pending.revision = latest?.revision
@@ -519,8 +564,7 @@ public final class AccountSync {
             }
         }
         if var pending = selected.progress {
-            let latest = try await client.fetch(Self.progressPath)
-            try ensureCurrent(id)
+            let latest = try await fetch(Self.progressPath, client: client, id: id)
             if latest?.revision != pending.revision {
                 pending.remote = try openProgress(latest, key: connection.key)
                 pending.revision = latest?.revision
@@ -547,8 +591,7 @@ public final class AccountSync {
         let settings = pending.merge.map { $0.settings.replacing($0.conflicts, from: chosen) } ?? chosen
         let setup = AccountSetup(settings: settings)
         let cipher = try AccountSyncCipher(key: connection.key, resource: Self.setupResource)
-        let revision = try await client.put(cipher.seal(setup), resource: Self.setupPath, revision: pending.revision)
-        try ensureCurrent(id)
+        let revision = try await put(cipher.seal(setup), Self.setupPath, revision: pending.revision, client: client, id: id)
         baselines.setup = setup
         baselines.formerlyShared = nil
         let current = localSetup.current
@@ -573,8 +616,7 @@ public final class AccountSync {
         let client = context.client, connection = context.connection, starting = context.progress, id = context.id
         let progress = pending.merge?.resolving(useLocal: useLocal) ?? (useLocal ? pending.local : pending.remote)
         let cipher = try AccountSyncCipher(key: connection.key, resource: Self.progressResource)
-        let revision = try await client.put(cipher.seal(progress), resource: Self.progressPath, revision: pending.revision)
-        try ensureCurrent(id)
+        let revision = try await put(cipher.seal(progress), Self.progressPath, revision: pending.revision, client: client, id: id)
         baselines.progress = progress
         let current = library.playbackSyncSnapshot
         let rebased = PlaybackSyncSnapshot.merged(base: starting, local: current, remote: progress)
@@ -599,9 +641,9 @@ public final class AccountSync {
         guard let connection, var selected = choice, selected.initial else { return }
         await run(clearingError: false) { id in
             let client = try client(connection)
-            let setupDocument = try await client.fetch(Self.setupPath)
-            let progressDocument = try await client.fetch(Self.progressPath)
-            try ensureCurrent(id)
+            async let setupFetch = fetch(Self.setupPath, client: client, id: id)
+            async let progressFetch = fetch(Self.progressPath, client: client, id: id)
+            let (setupDocument, progressDocument) = try await (setupFetch, progressFetch)
             selected.settings?.remote = try openSetup(setupDocument, key: connection.key)?.settings ?? SyncedSettings()
             selected.settings?.revision = setupDocument?.revision
             selected.progress?.remote = try openProgress(progressDocument, key: connection.key)
@@ -618,6 +660,88 @@ public final class AccountSync {
         choice = updated
         needsChoice = true
         status = .choosingSettings
+    }
+
+    // MARK: Live updates
+
+    /// While the app is in front: keeps one request open that the server answers when another
+    /// device changes this account's documents, and syncs those. `stopLiveUpdates()` on leaving.
+    public func startLiveUpdates() {
+        wantsLiveUpdates = true
+        guard listener == nil, let connection else { return }
+        let id = generation
+        listener = Task { [weak self] in await self?.listen(connection: connection, id: id) }
+    }
+
+    public func stopLiveUpdates() {
+        wantsLiveUpdates = false
+        listener?.cancel()
+        listener = nil
+        isLive = false
+    }
+
+    /// Failures retry with a growing pause and leave the shown status alone: launch, returning
+    /// and local changes still sync and report as before.
+    private func listen(connection: Connection, id: UUID) async {
+        // Not after `stopLiveUpdates()` or a disconnect, which may have started another one.
+        defer {
+            if !Task.isCancelled, generation == id {
+                listener = nil
+                isLive = false
+            }
+        }
+        guard let client = try? client(connection) else { return }
+        var since: String?
+        var failures = 0
+        while !Task.isCancelled, generation == id {
+            do {
+                let answer = try await client.changes(since: since)
+                guard !Task.isCancelled, generation == id else { return }
+                failures = 0
+                isLive = true
+                since = answer.since
+                let changed = Self.resources.intersection(answer.changes)
+                guard !changed.isEmpty else { continue }
+                if isSyncing { queuedResources.formUnion(changed) } else { await sync(only: changed) }
+            } catch SyncError.httpStatus(404) {
+                // A gateway from before live updates; the next return to the app asks again.
+                break
+            } catch SyncError.unauthorized {
+                hasCheckedIdentity = false
+                await sync()
+                break
+            } catch {
+                guard !Task.isCancelled, generation == id else { return }
+                isLive = false
+                failures += 1
+                do { try await Task.sleep(for: .seconds(Self.retryDelay(afterFailures: failures))) } catch { return }
+            }
+        }
+    }
+
+    static func retryDelay(afterFailures failures: Int) -> Double {
+        min(60, pow(2, Double(max(failures, 1) - 1)))
+    }
+
+    /// Brings playback progress up to date before choosing where to resume, waiting at most
+    /// `limit`. A slower server leaves this device's progress to decide; the pull still finishes.
+    public func refreshProgress(within limit: Duration) async {
+        guard isConnected, choice?.initial != true else { return }
+        let (finished, signal) = AsyncStream<Void>.makeStream()
+        Task {
+            // A sync already running may have fetched before the other device's last save.
+            while isSyncing {
+                do { try await Task.sleep(for: .milliseconds(50)) } catch { break }
+            }
+            await sync(only: [Self.progressResource])
+            signal.yield()
+        }
+        let timeout = Task {
+            do { try await Task.sleep(for: limit) } catch { return }
+            signal.yield()
+        }
+        for await _ in finished { break }
+        timeout.cancel()
     }
 
     // MARK: Devices
@@ -661,7 +785,29 @@ public final class AccountSync {
         if clearingError { errorMessage = nil }
         // Runs after `fail`, so a failed operation doesn't schedule an immediate retry.
         defer { if generation == id { finish() } }
-        do { try await operation(id) } catch { if generation == id { fail(error) } }
+        do { try await operation(id) } catch {
+            guard generation == id else { return }
+            if error as? SyncError == .unauthorized { hasCheckedIdentity = false }
+            fail(error)
+        }
+    }
+
+    /// Asks with the revision this device has, so an unchanged document isn't downloaded again.
+    private func fetch(_ path: String, client: AccountSyncClient, id: UUID) async throws -> AccountSyncDocument? {
+        let document = try await client.fetch(path, cached: documents[path])
+        try ensureCurrent(id)
+        documents[path] = document
+        return document
+    }
+
+    private func put(_ document: AccountSyncDocument, _ path: String, revision: String?,
+                     client: AccountSyncClient, id: UUID) async throws -> String {
+        let written = try await client.put(document, resource: path, revision: revision)
+        try ensureCurrent(id)
+        var saved = document
+        saved.revision = written
+        documents[path] = saved
+        return written
     }
 
     private func ensureCurrent(_ id: UUID) throws {
@@ -774,7 +920,8 @@ public final class AccountSync {
         guard deliberate || progress != lastObservedProgress else { return }
         rememberObserved()
         if !isSyncing { status = .waiting }
-        schedule(after: deliberate ? 1 : 15)
+        // While the server holds a changes request, the other devices hear of it at once.
+        schedule(after: deliberate ? 1 : isLive ? 2 : 15)
     }
 
     private func schedule(after seconds: Double) {
@@ -787,14 +934,19 @@ public final class AccountSync {
         }
     }
 
-    /// Edits made while an operation ran are synced right after it.
+    /// Edits made while an operation ran, and documents another device changed meanwhile,
+    /// are synced right after it.
     private func finish() {
         isSyncing = false
         rememberObserved()
-        if isConnected, !needsChoice, errorMessage == nil,
-           localSetup.current != baselines.setup?.settings
+        guard isConnected, !needsChoice, errorMessage == nil else { return }
+        if !queuedResources.isEmpty {
+            schedule(after: 0)
+        } else if localSetup.current != baselines.setup?.settings
             || library.playbackSyncSnapshot != baselines.progress
-            || !watchLaterNeedsNewerServer && library.watchLaterSyncSnapshot != baselines.watchLater { schedule(after: 1) }
+            || !watchLaterNeedsNewerServer && library.watchLaterSyncSnapshot != baselines.watchLater {
+            schedule(after: 1)
+        }
     }
 
     private func fail(_ error: Error) {

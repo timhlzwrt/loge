@@ -47,7 +47,7 @@ struct SyncSettingsView: View {
                         Label("Add my device", systemImage: "plus.rectangle.on.rectangle")
                     }
                 } footer: {
-                    Text("Your devices share playback progress, addons and preferences.")
+                    Text("Your devices share playback progress, Watch Later, addons and preferences.")
                 }
                 Section {
                     NavigationLink("Connection & recovery") {

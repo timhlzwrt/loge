@@ -127,6 +127,7 @@ struct LogeApp: App {
                     let addons = addonStore
                     async let manifests: Void = addons.refreshManifests()
                     await accountSync.sync()
+                    accountSync.startLiveUpdates()
                     await manifests
                     await library.fillMissingArtwork(from: addonStore)
                     // After the sync, which may bring series followed on another device.
@@ -135,6 +136,7 @@ struct LogeApp: App {
                 .onChange(of: scenePhase) { _, newPhase in
                     if newPhase == .background {
                         playback.sceneDidEnterBackground()
+                        accountSync.stopLiveUpdates()
                         finishSyncingBeforeSuspension()
                         leftForeground = true
                     }
@@ -153,6 +155,7 @@ struct LogeApp: App {
                     #endif
                     Task {
                         await accountSync.sync()
+                        accountSync.startLiveUpdates()
                         await schedule.refresh(for: library, addons: addonStore)
                     }
                 }

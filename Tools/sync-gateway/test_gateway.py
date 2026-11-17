@@ -2,6 +2,7 @@ import base64
 import copy
 import json
 import threading
+import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 
@@ -23,6 +24,10 @@ class MemoryStore:
     def __init__(self):
         self.documents = {}
         self.lock = threading.Lock()
+        # As CouchDB's changes feed: a database-wide sequence, and when each document last changed.
+        self.sequence = 0
+        self.changed_at = {}
+        self.changed = threading.Condition(self.lock)
 
     def get(self, identifier):
         with self.lock:
@@ -42,7 +47,24 @@ class MemoryStore:
             saved = copy.deepcopy(document)
             saved['_rev'] = str(int(existing['_rev']) + 1) if existing else '1'
             self.documents[document['_id']] = saved
+            self.sequence += 1
+            self.changed_at[document['_id']] = self.sequence
+            self.changed.notify_all()
             return saved['_rev']
+
+    def revisions(self, identifiers):
+        with self.lock:
+            return {key: self.documents[key]['_rev'] for key in identifiers if key in self.documents}, self.sequence
+
+    def wait(self, identifiers, since, seconds):
+        deadline = time.monotonic() + seconds
+        with self.changed:
+            while True:
+                found = {key: self.documents[key]['_rev'] for key in identifiers if self.changed_at.get(key, 0) > since}
+                remaining = deadline - time.monotonic()
+                if found or remaining <= 0:
+                    return found
+                self.changed.wait(remaining)
 
 
 class GatewayTests(unittest.TestCase):
@@ -85,6 +107,59 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual(self.public.put('/v2/documents/other', headers=auth_a, json=self.envelope).status_code, 404)
         invitation = self.admin.post('/admin/accounts/' + a['accountID'] + '/invitation', headers=self.admin_headers).json()
         self.assertEqual(self.public.post('/v2/redeem', json={'code': invitation['code'], 'deviceName': 'New'}).status_code, 428)
+
+    def test_document_fetch_answers_not_modified_for_the_revision_the_device_has(self):
+        _, auth_a = self.account('A')
+        _, auth_b = self.account('B')
+        saved = self.public.put('/v2/documents/progress', headers=auth_a, json=self.envelope).json()['rev']
+        fetched = self.public.get('/v2/documents/progress', headers=auth_a)
+        self.assertEqual(fetched.headers['ETag'], '"' + saved + '"')
+        unchanged = self.public.get('/v2/documents/progress', headers=auth_a | {'If-None-Match': '"' + saved + '"'})
+        self.assertEqual((unchanged.status_code, unchanged.content), (304, b''))
+        # Another account's document with the same revision is still not found.
+        self.assertEqual(self.public.get('/v2/documents/progress', headers=auth_b | {'If-None-Match': '"' + saved + '"'}).status_code, 404)
+        self.public.put('/v2/documents/progress', headers=auth_a, json=self.envelope | {'_rev': saved})
+        changed = self.public.get('/v2/documents/progress', headers=auth_a | {'If-None-Match': '"' + saved + '"'})
+        self.assertEqual(changed.status_code, 200)
+        self.assertNotEqual(changed.json()['_rev'], saved)
+
+    def test_changes_wait_for_the_accounts_own_documents_only(self):
+        public = TestClient(create_app(self.store, changes_seconds=1))
+        a, auth_a = self.account('A')
+        b, auth_b = self.account('B')
+        self.assertEqual(public.get('/v2/changes').status_code, 401)
+        self.assertEqual(public.get('/v2/changes', headers=auth_a, params={'since': '../x'}).status_code, 400)
+        # Without a position it answers at once, naming the documents there are.
+        self.assertEqual(public.get('/v2/changes', headers=auth_a).json(), {'changes': [], 'since': ',,'})
+        public.put('/v2/documents/progress', headers=auth_a, json=self.envelope)
+        start = public.get('/v2/changes', headers=auth_a).json()
+        self.assertEqual(start['changes'], ['progress'])
+
+        def poll():
+            began = time.monotonic()
+            response = public.get('/v2/changes', headers=auth_a, params={'since': start['since']})
+            return response, time.monotonic() - began
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            waiting = pool.submit(poll)
+            time.sleep(0.2)
+            # The other account's writes neither wake this account's request nor show in it.
+            public.put('/v2/documents/progress', headers=auth_b, json=self.envelope)
+            public.put('/v2/documents/configuration', headers=auth_b, json=self.envelope)
+            response, elapsed = waiting.result()
+        self.assertGreaterEqual(elapsed, 0.9)
+        self.assertEqual(response.json(), {'changes': [], 'since': start['since']})
+        self.assertNotIn(b['accountID'], response.text)
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            waiting = pool.submit(poll)
+            time.sleep(0.2)
+            public.put('/v2/documents/watchLater', headers=auth_a, json=self.envelope)
+            response, elapsed = waiting.result()
+        self.assertLess(elapsed, 0.9)
+        self.assertEqual(response.json()['changes'], ['watchLater'])
+        # A position from before a change answers at once.
+        self.assertEqual(public.get('/v2/changes', headers=auth_a, params={'since': start['since']}).json()['changes'], ['watchLater'])
+        self.assertEqual(public.get('/v2/changes', headers=auth_a, params={'since': ''}).json()['changes'], ['progress', 'watchLater'])
 
     def test_device_enrollment_consumes_code_once_under_concurrent_requests(self):
         created = self.app.state.service.create_account('A')
@@ -169,6 +244,7 @@ class GatewayTests(unittest.TestCase):
         check('putDocument', self.public.put('/v2/documents/progress', headers=auth_a, json=CONTRACT['putDocument']['request']))
         check('getDocument', self.public.get('/v2/documents/progress', headers=auth_a))
         check('devices', self.public.get('/v2/devices', headers=auth_a))
+        check('changes', self.public.get('/v2/changes', headers=auth_a))
 
     def test_explicit_https_admin_origin_preserves_authentication_and_origin_checks(self):
         from unittest.mock import patch

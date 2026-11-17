@@ -220,6 +220,11 @@ keeps Movie/Series labels because it can mix both.
   app can play them, and Apple TV has no browser, so it offers none.
 - `App/ScoreLogos.xcassets` holds IMDb's mark as a template SVG: its plate from Wikimedia
   Commons with the lettering merged into one even-odd path, because a template image keeps only alpha.
+- Live sync: `AccountSync.startLiveUpdates()` on launch and on return, `stopLiveUpdates()` on
+  background (the Mac rarely backgrounds, so it keeps listening). The listener ends quietly on a
+  gateway's 404 and is tried again on the next return; its retries never touch `status`.
+  Documents are fetched with `If-None-Match` against an in-memory copy, so a relaunch fetches
+  them in full once; `me()` runs once per launch or connect, and again after a 401.
 - Search's keyboard reappearing after going back is the system restoring a focused field;
   clearing focus on leaving doesn't stop it.
 

@@ -371,6 +371,126 @@ struct AccountSyncTests {
         try alice.disconnect(); try second.disconnect()
     }
 
+    func requests(_ request: String) -> Int {
+        AccountGatewayProtocol.state.withLock { $0.log.filter { $0 == request }.count }
+    }
+
+    func eventually(within seconds: Double = 3, _ condition: () -> Bool) async throws -> Bool {
+        let deadline = ContinuousClock.now + .seconds(seconds)
+        while !condition() {
+            guard ContinuousClock.now < deadline else { return false }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        return true
+    }
+
+    @Test func unchangedDocumentsAreNotDownloadedAgain() async throws {
+        reset()
+        let (alice, _, libraryA, _, _) = fixture()
+        await alice.connect(code: try enrollment("alice")); await alice.resolve(useLocal: true)
+        libraryA.record(movie(), position: 100, duration: 1000)
+        await alice.sync()
+        let (second, _, libraryB, _, _) = fixture()
+        await second.connect(code: try await alice.makeDeviceCode()); await second.resolve(useLocal: false)
+        await alice.sync()
+        AccountGatewayProtocol.state.withLock { $0.log = []; $0.notModified = 0 }
+        await alice.sync()
+        // The account was confirmed by the first sync; each document is still current.
+        let log = AccountGatewayProtocol.state.withLock { $0.log }
+        #expect(Set(log) == ["GET documents/configuration", "GET documents/progress", "GET documents/watchLater"])
+        #expect(log.count == 3 && AccountGatewayProtocol.state.withLock { $0.notModified } == 3)
+        #expect(alice.status == .upToDate)
+
+        libraryB.record(movie(), position: 300, duration: 1000)
+        await second.sync()
+        AccountGatewayProtocol.state.withLock { $0.notModified = 0 }
+        await alice.sync()
+        #expect(AccountGatewayProtocol.state.withLock { $0.notModified } == 2)
+        #expect(libraryA.progress["movie"]?.position == 300)
+        try alice.disconnect(); try second.disconnect()
+    }
+
+    @Test func anotherDevicesProgressArrivesThroughTheOpenChangesRequest() async throws {
+        reset()
+        let (alice, _, libraryA, _, _) = fixture()
+        await alice.connect(code: try enrollment("alice")); await alice.resolve(useLocal: true)
+        libraryA.record(movie(), position: 100, duration: 1000)
+        await alice.sync()
+        let (second, _, libraryB, _, _) = fixture()
+        await second.connect(code: try await alice.makeDeviceCode()); await second.resolve(useLocal: false)
+        second.startLiveUpdates()
+        // The first answer names what there is; the second request is the one held open.
+        #expect(try await eventually { requests("GET changes") >= 2 })
+        libraryA.record(movie(), position: 300, duration: 1000)
+        await alice.sync()
+        #expect(try await eventually { libraryB.progress["movie"]?.position == 300 })
+        #expect(second.errorMessage == nil && !second.needsChoice)
+        second.stopLiveUpdates()
+        try alice.disconnect(); try second.disconnect()
+    }
+
+    @Test func olderGatewayWithoutChangesKeepsSyncingAsBefore() async throws {
+        reset()
+        AccountGatewayProtocol.state.withLock { $0.supportsChanges = false }
+        let (alice, _, libraryA, _, _) = fixture()
+        await alice.connect(code: try enrollment("alice")); await alice.resolve(useLocal: true)
+        await alice.sync()
+        alice.startLiveUpdates()
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(requests("GET changes") == 1)
+        #expect(alice.status == .upToDate && alice.errorMessage == nil)
+        libraryA.record(movie(), position: 100, duration: 1000)
+        await alice.sync()
+        #expect(alice.status == .upToDate && requests("GET changes") == 1)
+        alice.stopLiveUpdates()
+        try alice.disconnect()
+    }
+
+    @Test func unreachableServerIsAskedAgainWithGrowingPausesAndTheStatusStays() async throws {
+        reset()
+        #expect([1, 2, 3, 7, 30].map { AccountSync.retryDelay(afterFailures: $0) } == [1, 2, 4, 60, 60])
+        let (alice, _, _, _, _) = fixture()
+        await alice.connect(code: try enrollment("alice")); await alice.resolve(useLocal: true)
+        // The sync resolving schedules for Watch Later, which it doesn't carry, runs first.
+        try await Task.sleep(for: .milliseconds(1200))
+        #expect(alice.status == .upToDate)
+        AccountGatewayProtocol.state.withLock { $0.isOffline = true; $0.log = [] }
+        alice.startLiveUpdates()
+        // Asked at once, after one second, then after two more.
+        try await Task.sleep(for: .milliseconds(2500))
+        #expect(requests("GET changes") == 2)
+        #expect(alice.status == .upToDate && alice.errorMessage == nil)
+        alice.stopLiveUpdates()
+        AccountGatewayProtocol.state.withLock { $0.isOffline = false }
+        try alice.disconnect()
+    }
+
+    @Test func resumingPullsTheLatestProgressButWaitsNoLongerThanTheLimit() async throws {
+        reset()
+        let (alice, _, libraryA, _, _) = fixture()
+        await alice.connect(code: try enrollment("alice")); await alice.resolve(useLocal: true)
+        libraryA.record(movie(), position: 100, duration: 1000)
+        await alice.sync()
+        let (second, _, libraryB, _, _) = fixture()
+        await second.connect(code: try await alice.makeDeviceCode()); await second.resolve(useLocal: false)
+        libraryB.record(movie(), position: 300, duration: 1000)
+        await second.sync()
+        await alice.refreshProgress(within: .seconds(1))
+        #expect(libraryA.resumePosition(for: "movie") == 295)
+
+        libraryB.record(movie(), position: 500, duration: 1000)
+        await second.sync()
+        AccountGatewayProtocol.state.withLock { $0.delays["GET documents/progress"] = 3 }
+        let start = ContinuousClock.now
+        await alice.refreshProgress(within: .seconds(1))
+        let elapsed = ContinuousClock.now - start
+        #expect(elapsed >= .milliseconds(950) && elapsed < .milliseconds(1500))
+        // The server was too slow, so this device's own position decides.
+        #expect(libraryA.resumePosition(for: "movie") == 295)
+        AccountGatewayProtocol.state.withLock { $0.delays = [:] }
+        try alice.disconnect(); try second.disconnect()
+    }
+
     @Test func writeAfterAnotherDeviceSavedIsRetriedAgainstTheNewRevision() async throws {
         reset()
         let (alice, _, library, _, _) = fixture()
@@ -600,5 +720,35 @@ struct AccountSyncTests {
         #expect(second.errorMessage != nil)
         await bob.sync()
         #expect(bob.errorMessage == nil)
+    }
+}
+
+/// Round trips and wall time of one sync, over the stub with a simulated network delay.
+/// Run with LOGE_SYNC_MEASURE=1; it prints rather than asserts.
+@MainActor @Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["LOGE_SYNC_MEASURE"] != nil))
+struct AccountSyncMeasurements {
+    @Test func oneSyncWithAndWithoutAProgressChange() async throws {
+        let tests = AccountSyncTests()
+        tests.reset()
+        let (alice, _, library, _, _) = tests.fixture()
+        await alice.connect(code: try tests.enrollment("alice")); await alice.resolve(useLocal: true)
+        // A library of some size, so what a fetch downloads shows.
+        for index in 0..<200 { library.record(tests.movie("title-\(index)"), position: 100, duration: 1000) }
+        library.record(tests.movie(), position: 100, duration: 1000)
+        await alice.sync()
+        AccountGatewayProtocol.state.withLock { $0.latency = 0.05 }
+        func measure(_ name: String) async {
+            AccountGatewayProtocol.state.withLock { $0.log = []; $0.sent = 0 }
+            let start = ContinuousClock.now
+            await alice.sync()
+            let elapsed = ContinuousClock.now - start
+            let (log, sent) = AccountGatewayProtocol.state.withLock { ($0.log, $0.sent) }
+            print("MEASURE \(name): \(log.count) requests, \(sent) bytes received, \(elapsed.formatted(.units(allowed: [.milliseconds]))) — \(log.joined(separator: ", "))")
+        }
+        await measure("no change")
+        library.record(tests.movie(), position: 200, duration: 1000)
+        await measure("progress change")
+        AccountGatewayProtocol.state.withLock { $0.latency = 0 }
+        try alice.disconnect()
     }
 }
