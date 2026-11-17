@@ -17,6 +17,9 @@
   "getDocument": {
     "response": {"version": 2, "ciphertext": "eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eA==", "_rev": "1"}
   },
+  "changes": {
+    "response": {"changes": ["progress"], "since": "2-a,1-b,"}
+  },
   "devices": {
     "response": [{"id": "0123", "name": "iPhone", "createdAt": "2026-11-07T00:00:00Z"}]
   }

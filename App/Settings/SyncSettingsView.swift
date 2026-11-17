@@ -24,6 +24,10 @@ struct SyncSettingsView: View {
                             Text("Last synced \(date, style: .relative) ago")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
+                        if sync.watchLaterNeedsNewerServer {
+                            Text("Update the sync server to sync Watch Later")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
                     }
                     .padding(.vertical, 8)
                     Button("Sync Now") { Task { await sync.sync() } }
@@ -43,7 +47,7 @@ struct SyncSettingsView: View {
                         Label("Add my device", systemImage: "plus.rectangle.on.rectangle")
                     }
                 } footer: {
-                    Text("Your devices share playback progress, addons and preferences.")
+                    Text("Your devices share playback progress, Watch Later, addons and preferences.")
                 }
                 Section {
                     NavigationLink("Connection & recovery") {

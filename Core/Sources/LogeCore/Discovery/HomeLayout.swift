@@ -1,6 +1,6 @@
 import Foundation
 
-/// Which shelves Home shows and in what order. It syncs with the appearance settings, so an
+/// Which shelves Home shows and in what order. It syncs with the account's setup, so an
 /// addon's catalog is named by the addon's manifest `id`, never its URL, which can carry the
 /// user's keys; the URL is looked up among the installed addons when Home is drawn.
 public struct HomeLayout: Equatable, Sendable {

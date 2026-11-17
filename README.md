@@ -46,9 +46,7 @@ binary dependencies and what has—and has not—been tested on OS 26.
   rating, and the trailer, which opens on YouTube from the More menu (not on
   Apple TV, which has no browser). With a TMDB
   token, cast and crew, and for a film that belongs to a series its other films
-  in release order. With an MDBList key, the Letterboxd score and Rotten
-  Tomatoes' Tomatometer beside the IMDb rating; each score opens the title on
-  its site.
+  in release order. The IMDb rating opens the title on IMDb.
 - **People:** TMDB-backed portraits and filmographies with role filters.
   TMDB features require your own read access token.
 - **Recommendations:** with a TMDB token, "More Like This" on titles and a Recommended row on
@@ -86,16 +84,15 @@ display or output combination. See [limitations](#know-the-limits) and the
 
 ### Continue on your other devices
 
-**Self-hosted sync** carries movie/episode progress, watched state, ordered addons
-and preferences between your devices. Payloads are encrypted on-device; there is
+**Self-hosted sync** carries movie/episode progress, watched state, Watch Later,
+ordered addons and preferences between your devices. Payloads are encrypted on-device; there is
 **no default hosted service**. [Set up private sync →](docs/SYNC.md)
 
 **Share Setup** in Settings → Addons sends someone a one-time copy of your addons,
 optionally with your playback preferences, as a link or code. It needs no server
 and nothing stays connected.
 
-**What stays local:** Watch Later and remembered stream selections
-are not synchronized. Changes made offline stay on the device and are sent on
+**What stays local:** remembered stream selections are not synchronized. Changes made offline stay on the device and are sent on
 reconnect.
 
 ## Install and start watching
@@ -147,8 +144,7 @@ is in the public domain, so no third-party artwork appears.
 - **English interface only.** Audio and subtitle language preferences are separate.
 - **Recommendations and filmographies need a TMDB token.** Without one, Home has only
   its discovery feeds and a person's page lists only the title it was opened from.
-  Letterboxd and Rotten Tomatoes scores need an MDBList key; there is no Letterboxd
-  account sync.
+  There is no Letterboxd account sync, and the only score is IMDb's.
 
 ### Testing scope
 

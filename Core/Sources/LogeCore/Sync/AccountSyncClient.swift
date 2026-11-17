@@ -1,7 +1,8 @@
 import CryptoKit
 import Foundation
 
-/// The parts of `SyncedSettings`; once also what a shared setup could cover.
+/// The parts of `SyncedSettings`, appearance being Home's layout; once also what a shared
+/// setup could cover.
 enum SyncCategory: String, Codable, CaseIterable, Sendable, Hashable {
     case addons, playback, appearance
 }
@@ -70,6 +71,12 @@ struct AccountSyncDocument: Codable, Sendable {
     let ciphertext: String
     var revision: String?
     enum CodingKeys: String, CodingKey { case version, ciphertext; case revision = "_rev" }
+}
+
+/// What `GET /v2/changes` answers: the documents that changed, and where to wait from next.
+struct AccountSyncChanges: Decodable, Sendable {
+    let changes: [String]
+    let since: String
 }
 
 /// Each resource authenticates its own name, so one document can't be replayed as another.
@@ -152,9 +159,13 @@ struct AccountSyncClient: Sendable {
     func revokeDevice(_ id: String) async throws {
         _ = try await request("DELETE", "devices/\(try identifier(id))")
     }
-    func fetch(_ resource: String) async throws -> AccountSyncDocument? {
-        let (data, status) = try await request("GET", resource, allowMissing: true)
+    /// - Parameter cached: The document as this device last saw it. If the server still has
+    ///   that revision it says so rather than send it again, and `cached` is returned.
+    func fetch(_ resource: String, cached: AccountSyncDocument? = nil) async throws -> AccountSyncDocument? {
+        let headers = cached?.revision.map { ["If-None-Match": "\"\($0)\""] } ?? [:]
+        let (data, status) = try await request("GET", resource, headers: headers, allowMissing: true)
         if status == 404 { return nil }
+        if status == 304, let cached { return cached }
         guard let document = try? JSONDecoder().decode(AccountSyncDocument.self, from: data),
               document.revision?.isEmpty == false else { throw SyncError.invalidResponse }
         return document
@@ -166,6 +177,16 @@ struct AccountSyncClient: Sendable {
         let written: Written = try await send("PUT", resource, body: document)
         guard written.ok, !written.rev.isEmpty else { throw SyncError.invalidResponse }
         return written.rev
+    }
+    /// Held open by the server until one of the account's documents changes after `since`, or
+    /// about a minute passes. Without `since` it answers at once with every document there is.
+    func changes(since: String?) async throws -> AccountSyncChanges {
+        let (data, _) = try await request("GET", "changes", query: since.map { [URLQueryItem(name: "since", value: $0)] } ?? [],
+                                          timeout: 90)
+        guard let value = try? JSONDecoder().decode(AccountSyncChanges.self, from: data) else {
+            throw SyncError.invalidResponse
+        }
+        return value
     }
     func inviteDevice() async throws -> AccountSyncInvitation {
         struct Request: Encodable { let kind: AccountSyncCodeKind }
@@ -195,21 +216,26 @@ struct AccountSyncClient: Sendable {
         }
         return value
     }
-    private func request(_ method: String, _ path: String, body: Data? = nil, allowMissing: Bool = false) async throws -> (Data, Int) {
+    private func request(_ method: String, _ path: String, body: Data? = nil, headers: [String: String] = [:],
+                         query: [URLQueryItem] = [], timeout: TimeInterval = 20,
+                         allowMissing: Bool = false) async throws -> (Data, Int) {
         guard body.map({ $0.count <= Self.maximumBytes }) ?? true else { throw SyncError.tooLarge }
-        var request = URLRequest(url: endpoint.appending(path: path), cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+        let url = query.isEmpty ? endpoint.appending(path: path) : endpoint.appending(path: path).appending(queryItems: query)
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: timeout)
         request.httpMethod = method
         request.httpBody = body
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
         if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        for (field, value) in headers { request.setValue(value, forHTTPHeaderField: field) }
         do {
             let (bytes, response) = try await session.bytes(for: request, delegate: AccountSyncRedirectPolicy())
             guard let http = response as? HTTPURLResponse, http.url == request.url else { throw SyncError.invalidResponse }
             guard http.expectedContentLength <= Self.maximumBytes else { throw SyncError.tooLarge }
             switch http.statusCode {
             case 200...299: break
+            case 304 where headers["If-None-Match"] != nil: return (Data(), 304)
             case 404 where allowMissing: return (Data(), 404)
             case 401, 403: throw SyncError.unauthorized
             case 409: throw SyncError.conflict

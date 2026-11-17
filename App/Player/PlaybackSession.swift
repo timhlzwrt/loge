@@ -29,6 +29,7 @@ final class PlaybackSession {
     @ObservationIgnored private let accountSync: AccountSync?
     @ObservationIgnored private var episodes: [Video] = []
     @ObservationIgnored private var isLookingUpNext = false
+    @ObservationIgnored private var isStartingNext = false
     @ObservationIgnored private var lastRecordedPosition: Double = 0
     @ObservationIgnored private var hasRememberedSource = false
     @ObservationIgnored private var nowPlaying: NowPlaying?
@@ -171,7 +172,7 @@ final class PlaybackSession {
     }
 
     func playNext() {
-        guard let next else { return }
+        guard let next, !isStartingNext else { return }
         if let item = current?.item {
             recordProgress()
             // Skipping the credits shouldn't leave the episode looking unfinished.
@@ -179,7 +180,20 @@ final class PlaybackSession {
         }
         // The alternatives were for the episode that just ended.
         fallbacks = []
-        load(next)
+        isStartingNext = true
+        tasks.append(Task {
+            // Another device may have started the next episode; `load` resumes from its progress.
+            await refreshProgress()
+            isStartingNext = false
+            guard self.next == next else { return }
+            load(next)
+        })
+    }
+
+    /// Brings progress from the user's other devices, for at most a second, before a start
+    /// position is chosen.
+    func refreshProgress() async {
+        await accountSync?.refreshProgress(within: .seconds(1))
     }
 
     // MARK: Screen

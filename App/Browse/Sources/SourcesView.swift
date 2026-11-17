@@ -39,6 +39,8 @@ struct SourcesView: View {
     @State private var expandedGroups: Set<SourceSelection.Group.ID> = []
     @AppStorage(ConnectionSpeed.key) private var connectionSpeed = 0.0
     @Environment(PlaybackSession.self) private var playback
+    /// Started as the list opens, so a resume position from another device is usually in by Play.
+    @State private var progressRefresh: Task<Void, Never>?
 
     var body: some View {
         let providers = store.addons.streamProviders(type: route.type, id: route.id)
@@ -124,6 +126,9 @@ struct SourcesView: View {
                 }
             }
             #endif
+        }
+        .onAppear {
+            if progressRefresh == nil { progressRefresh = Task { await playback.refreshProgress() } }
         }
         .onDisappear {
             if let entry = pendingPlay { play(entry.stream, from: entry.provider) }
@@ -614,9 +619,14 @@ struct SourcesView: View {
         play(stream, from: provider)
     }
 
+    /// After the progress refresh, which waits at most a second, picks the resume position.
     private func play(_ stream: StreamSource, from provider: StreamProvider) {
-        guard let request = request(for: stream, from: provider) else { return }
-        playback.start(request, fallbacks: fallbacks(for: request))
+        let refresh = progressRefresh
+        Task {
+            await refresh?.value
+            guard let request = request(for: stream, from: provider) else { return }
+            playback.start(request, fallbacks: fallbacks(for: request))
+        }
     }
 
     private func request(for stream: StreamSource, from provider: StreamProvider) -> PlaybackRequest? {

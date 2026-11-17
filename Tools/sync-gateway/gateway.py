@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.concurrency import run_in_threadpool
 
 MAX_BODY = 1_048_576
@@ -25,6 +25,14 @@ ADMIN_LOGIN_SECONDS = 600
 ID = re.compile(r"^[a-f0-9]{32}$")
 # Invitation and device records are named by the SHA-256 digest of their secret.
 RECORD_ID = re.compile(r"^[a-f0-9]{64}$")
+# Each account's encrypted documents; anything else is not found, as older gateways answer watchLater.
+DOCUMENTS = ("configuration", "progress", "watchLater")
+# How long /v2/changes waits for one of them to change: under the app's 90 s request timeout
+# and the idle timeouts of common reverse proxies.
+CHANGES_SECONDS = 55
+# A /v2/changes position: the account's revisions in DOCUMENTS order, which the device already
+# sees on each document, so it reveals nothing of the database's other accounts.
+SINCE = re.compile(r"^[0-9a-z,-]{0,600}$")
 
 
 def checked(identifier, pattern=ID):
@@ -53,12 +61,12 @@ class CouchStore:
         self.authorization = "Basic " + base64.b64encode(
             (credential["username"] + ":" + credential["password"]).encode()).decode()
 
-    def request(self, method, path, document=None):
+    def request(self, method, path, document=None, timeout=10):
         body = json.dumps(document).encode() if document is not None else None
         request = urllib.request.Request(self.endpoint + path, data=body, method=method,
             headers={"Authorization": self.authorization, "Content-Type": "application/json"})
         try:
-            with urllib.request.urlopen(request, timeout=10) as response:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
                 return json.load(response)
         except urllib.error.HTTPError as error:
             if error.code == 404:
@@ -81,6 +89,18 @@ class CouchStore:
                                        "endkey": json.dumps(prefix + "\uffff")})
         result = self.request("GET", "/_all_docs?" + query)
         return [row["doc"] for row in result["rows"] if "doc" in row]
+
+    def revisions(self, identifiers):
+        """The current revision of each existing document, and a sequence to wait from."""
+        result = self.request("POST", "/_changes?filter=_doc_ids", {"doc_ids": identifiers})
+        return {row["id"]: row["changes"][0]["rev"] for row in result["results"] if not row.get("deleted")}, result["last_seq"]
+
+    def wait(self, identifiers, since, seconds):
+        """Returns the revisions of those documents that changed after `since`, within `seconds`."""
+        query = urllib.parse.urlencode({"feed": "longpoll", "filter": "_doc_ids", "since": since,
+                                        "timeout": int(seconds * 1000)})
+        result = self.request("POST", "/_changes?" + query, {"doc_ids": identifiers}, timeout=seconds + 10)
+        return {row["id"]: row["changes"][0]["rev"] for row in result["results"] if not row.get("deleted")}
 
 
 class Service:
@@ -139,7 +159,7 @@ class Service:
             if not owner or not owner.get("enabled"):
                 fail(410, "Invitation is no longer available.")
             requires_key = any(self.store.get("document:" + owner["id"] + ":" + item) is not None
-                                                    for item in ("configuration", "progress"))
+                                                    for item in DOCUMENTS)
             if requires_key and not has_recovery_key:
                 fail(428, "This account already has encrypted data. Enter its recovery key or use Add My Device on a connected device.")
             document["consumed"] = True
@@ -298,7 +318,7 @@ def validate_envelope(value):
         fail(400, "Encrypted payload is invalid.")
 
 
-def create_app(store=None, mode=None, admin_secret=None, admin_login=None):
+def create_app(store=None, mode=None, admin_secret=None, admin_login=None, changes_seconds=CHANGES_SECONDS):
     store = store or CouchStore(os.environ["SYNC_DATABASE_URL"], os.environ["SYNC_DATABASE_CREDENTIAL_FILE"])
     service = Service(store)
     mode = mode or os.environ.get("SYNC_MODE", "public")
@@ -468,15 +488,19 @@ def create_app(store=None, mode=None, admin_secret=None, admin_login=None):
 
     def resource(request, resource):
         account, _ = service.authenticate(request)
-        if resource not in ("configuration", "progress"):
+        if resource not in DOCUMENTS:
             fail(404, "Document not found.")
         return "document:" + account["id"] + ":" + resource
 
-    def read(identifier):
+    def read(identifier, request):
         document = store.get(identifier)
         if document is None:
             fail(404, "Document not found.")
-        return envelope(document)
+        # The revision is the ETag, so a device that has it is told so instead of sent it again.
+        etag = '"' + document["_rev"] + '"'
+        if etag in (value.strip() for value in request.headers.get("If-None-Match", "").split(",")):
+            return Response(status_code=304, headers={"ETag": etag})
+        return JSONResponse(envelope(document), headers={"ETag": etag})
 
     async def write(request, identifier):
         value = await body(request)
@@ -486,7 +510,29 @@ def create_app(store=None, mode=None, admin_secret=None, admin_login=None):
 
     @app.get("/v2/documents/{document}")
     def get_document(document: str, request: Request):
-        return read(resource(request, document))
+        return read(resource(request, document), request)
+
+    @app.get("/v2/changes")
+    def changes(request: Request, since: str | None = None):
+        """Waits for one of the account's documents to change, as a long poll. Without `since`,
+        answers at once with every document there is and the position to wait from."""
+        account, _ = service.authenticate(request)
+        if since is not None and not SINCE.fullmatch(since):
+            fail(400, "Invalid position.")
+        identifiers = ["document:" + account["id"] + ":" + name for name in DOCUMENTS]
+        current, sequence = store.revisions(identifiers)
+        if since is None:
+            names = [name for identifier, name in zip(identifiers, DOCUMENTS) if identifier in current]
+        else:
+            known = dict(zip(identifiers, since.split(",")))
+            def changed():
+                return [name for identifier, name in zip(identifiers, DOCUMENTS)
+                        if current.get(identifier, "") != known.get(identifier, "")]
+            names = changed()
+            if not names:
+                current |= store.wait(identifiers, sequence, changes_seconds)
+                names = changed()
+        return {"changes": names, "since": ",".join(current.get(identifier, "") for identifier in identifiers)}
 
     @app.put("/v2/documents/{document}")
     async def put_document(document: str, request: Request):

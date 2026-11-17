@@ -9,7 +9,6 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
     public var subtitleScale: Double
     /// The highest bitrate, in Mbps, the app picks a source at by itself; 0 for no limit.
     public var maximumBitrate: Int
-    public var accent: Accent
     public var homeLayout: HomeLayout
 
     /// The `UserDefaults` keys the app's settings screens bind to.
@@ -20,7 +19,6 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
         public static let maximumBitrate = "maximumBitrate"
         /// The per-episode size limit the bitrate replaced.
         static let maximumSourceGigabytes = "maximumAutomaticSourceGigabytes"
-        public static let accent = Accent.storageKey
         public static let homeLayout = HomeLayout.storageKey
     }
 
@@ -29,14 +27,12 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
     public static let maximumBitrateOptions = [0, 10, 25, 50, 100]
 
     public init(addonURLs: [String] = [], audioLanguage: String = "en", subtitleLanguage: String = "",
-                subtitleScale: Double = 1, maximumBitrate: Int = 100, accent: Accent = .white,
-                homeLayout: HomeLayout = .default) {
+                subtitleScale: Double = 1, maximumBitrate: Int = 100, homeLayout: HomeLayout = .default) {
         self.addonURLs = addonURLs
         self.audioLanguage = audioLanguage
         self.subtitleLanguage = subtitleLanguage
         self.subtitleScale = subtitleScale
         self.maximumBitrate = maximumBitrate
-        self.accent = accent
         self.homeLayout = homeLayout
     }
 
@@ -48,7 +44,6 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
                   subtitleLanguage: defaults.string(forKey: Key.subtitleLanguage) ?? fallback.subtitleLanguage,
                   subtitleScale: defaults.object(forKey: Key.subtitleScale) as? Double ?? fallback.subtitleScale,
                   maximumBitrate: defaults.object(forKey: Key.maximumBitrate) as? Int ?? fallback.maximumBitrate,
-                  accent: defaults.string(forKey: Key.accent).flatMap(Accent.init) ?? fallback.accent,
                   homeLayout: HomeLayout(storedData: defaults.data(forKey: Key.homeLayout)))
     }
 
@@ -68,7 +63,6 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
         defaults.set(subtitleLanguage, forKey: Key.subtitleLanguage)
         defaults.set(subtitleScale, forKey: Key.subtitleScale)
         defaults.set(maximumBitrate, forKey: Key.maximumBitrate)
-        defaults.set(accent.rawValue, forKey: Key.accent)
         defaults.set(homeLayout.storedData, forKey: Key.homeLayout)
     }
 
@@ -105,14 +99,14 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
                   subtitleScale: try container.decode(Double.self, forKey: .subtitleScale),
                   maximumBitrate: try container.decodeIfPresent(Int.self, forKey: .maximumBitrate)
                       ?? (gigabytes == 0 ? 0 : Self().maximumBitrate),
-                  accent: try container.decode(Accent.self, forKey: .accent),
                   // Missing before Home could be arranged. A layout this version can't read at
                   // all is Home's default rather than a setup that can't be opened.
                   homeLayout: (try? container.decodeIfPresent(HomeLayout.self, forKey: .homeLayout)) ?? .default)
     }
 
-    /// Still writes a size limit, which older versions on other devices require to read
-    /// the setup at all: none for no limit, else what was their default.
+    /// Older versions on other devices require a size limit (none for no limit, else what was
+    /// their default) and an accent colour to read the setup at all; both go once those
+    /// versions are gone.
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(addonURLs, forKey: .addonURLs)
@@ -121,12 +115,12 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
         try container.encode(subtitleScale, forKey: .subtitleScale)
         try container.encode(maximumBitrate, forKey: .maximumBitrate)
         try container.encode(maximumBitrate == 0 ? 0 : 50, forKey: .maximumSourceGigabytes)
-        try container.encode(accent, forKey: .accent)
+        try container.encode("white", forKey: .accent)
         try container.encode(homeLayout, forKey: .homeLayout)
     }
 
     public enum Field: String, Codable, CaseIterable, Sendable {
-        case addonURLs, audioLanguage, subtitleLanguage, subtitleScale, maximumBitrate, accent, homeLayout
+        case addonURLs, audioLanguage, subtitleLanguage, subtitleScale, maximumBitrate, homeLayout
     }
 
     public struct Merge: Sendable {
@@ -151,7 +145,6 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
         choose(\.subtitleLanguage, .subtitleLanguage)
         choose(\.subtitleScale, .subtitleScale)
         choose(\.maximumBitrate, .maximumBitrate)
-        choose(\.accent, .accent)
         choose(\.homeLayout, .homeLayout)
         return Merge(settings: result, conflicts: conflicts)
     }
@@ -166,10 +159,7 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
             result.subtitleScale = source.subtitleScale
             result.maximumBitrate = source.maximumBitrate
         }
-        if categories.contains(.appearance) {
-            result.accent = source.accent
-            result.homeLayout = source.homeLayout
-        }
+        if categories.contains(.appearance) { result.homeLayout = source.homeLayout }
         return result
     }
 
@@ -182,7 +172,6 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
             case .subtitleLanguage: result.subtitleLanguage = source.subtitleLanguage
             case .subtitleScale: result.subtitleScale = source.subtitleScale
             case .maximumBitrate: result.maximumBitrate = source.maximumBitrate
-            case .accent: result.accent = source.accent
             case .homeLayout: result.homeLayout = source.homeLayout
             }
         }

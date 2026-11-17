@@ -39,7 +39,7 @@ struct AccountSyncTests {
         let code = try await first.makeDeviceCode()
         let (second, addons, library, defaults, storage) = fixture()
         library.record(movie("local-only"), position: 120, duration: 1000)
-        defaults.set("coral", forKey: "accentColor")
+        defaults.set("de", forKey: "subtitleLanguage")
         await second.connect(code: code)
         #expect(second.needsChoice)
         let before = AccountGatewayProtocol.state.withLock { $0.revision }
@@ -50,7 +50,7 @@ struct AccountSyncTests {
         #expect(AccountGatewayProtocol.state.withLock { $0.revision } == before)
         await reopened.resolve(useLocal: true)
         #expect(!reopened.needsChoice && reopened.errorMessage == nil)
-        #expect(defaults.string(forKey: "accentColor") == "coral")
+        #expect(defaults.string(forKey: "subtitleLanguage") == "de")
         try reopened.disconnect(); try first.disconnect()
     }
 
@@ -58,10 +58,10 @@ struct AccountSyncTests {
         reset()
         let (account, addons, library, defaults, storage) = fixture()
         try addons.replaceManifestURLs(["https://local.example/manifest.json"])
-        defaults.set("mint", forKey: "accentColor")
+        defaults.set("fr", forKey: "subtitleLanguage")
         await account.connect(code: try enrollment("alice")); await account.resolve(useLocal: false)
         try addons.replaceManifestURLs(["https://private.example/manifest.json"])
-        defaults.set("coral", forKey: "accentColor")
+        defaults.set("de", forKey: "subtitleLanguage")
         storage.failRemove = true
         #expect(throws: (any Error).self) { try account.disconnect() }
         #expect(account.isConnected && addons.addons.first?.host == "private.example")
@@ -71,10 +71,10 @@ struct AccountSyncTests {
                                  session: .shared)
         #expect(!broken.isConnected && library.activeProfileID == nil)
         #expect(addons.addons.first?.host == "local.example")
-        #expect(defaults.string(forKey: "accentColor") == "mint")
+        #expect(defaults.string(forKey: "subtitleLanguage") == "fr")
         let reopened = restored(storage: storage, addons: addons, library: library, defaults: defaults)
         #expect(reopened.isConnected && addons.addons.first?.host == "private.example")
-        #expect(defaults.string(forKey: "accentColor") == "coral")
+        #expect(defaults.string(forKey: "subtitleLanguage") == "de")
         try reopened.disconnect()
         #expect(addons.addons.first?.host == "local.example")
     }
@@ -106,7 +106,7 @@ struct AccountSyncTests {
         libraryB.record(movie(), position: 300, duration: 1000)
         await second.sync(); await alice.sync()
         #expect(alice.conflictingProgressIDs == ["movie"])
-        defaultsA.set("coral", forKey: "accentColor")
+        defaultsA.set("de", forKey: "subtitleLanguage")
         libraryA.record(movie("independent"), position: 400, duration: 1000)
         await alice.sync(); await second.sync()
         #expect(alice.needsChoice)
@@ -116,7 +116,7 @@ struct AccountSyncTests {
         #expect(reopened.conflictingProgressIDs == ["movie"])
         await reopened.resolve(useLocal: false)
         #expect(!reopened.needsChoice)
-        #expect(defaultsA.string(forKey: "accentColor") == "coral")
+        #expect(defaultsA.string(forKey: "subtitleLanguage") == "de")
         try reopened.disconnect(); try second.disconnect()
     }
 
@@ -296,6 +296,201 @@ struct AccountSyncTests {
         try alice.disconnect(); try second.disconnect()
     }
 
+    func title(_ id: String) -> MetaPreview { MetaPreview(id: id, type: "movie", name: id) }
+
+    @Test func watchLaterConvergesAfterConcurrentAdditionsAndRemovals() async throws {
+        reset()
+        let now = Date.now
+        let (alice, _, libraryA, _, _) = fixture()
+        libraryA.toggleSaved(title("before"), at: now - 100)
+        await alice.connect(code: try enrollment("alice")); await alice.resolve(useLocal: true)
+        libraryA.toggleSaved(title("shared"), at: now - 50)
+        libraryA.toggleSaved(title("readded"), at: now - 50)
+        await alice.sync()
+        let (second, _, libraryB, _, _) = fixture()
+        libraryB.toggleSaved(title("own"), at: now - 90)
+        await second.connect(code: try await alice.makeDeviceCode()); await second.resolve(useLocal: false)
+        await second.sync()
+        // Each device's list from before connecting joins the account's, whichever setup was kept.
+        #expect(Set(libraryB.saved.map(\.id)) == ["before", "shared", "readded", "own"])
+
+        libraryA.toggleSaved(title("shared"), at: now - 10)
+        libraryA.toggleSaved(title("fromA"), at: now - 8)
+        libraryA.toggleSaved(title("readded"), at: now - 6)
+        libraryB.toggleSaved(title("fromB"), at: now - 9)
+        libraryB.toggleSaved(title("readded"), at: now - 7)
+        libraryB.toggleSaved(title("readded"), at: now - 5)
+        await second.sync(); await alice.sync(); await second.sync()
+        #expect(alice.errorMessage == nil && !alice.needsChoice && !second.needsChoice)
+        #expect(libraryA.saved.map(\.id) == ["readded", "fromA", "fromB", "own", "before"])
+        #expect(libraryB.saved.map(\.id) == libraryA.saved.map(\.id))
+        #expect(libraryA.watchLaterSyncSnapshot == libraryB.watchLaterSyncSnapshot)
+        try alice.disconnect(); try second.disconnect()
+        #expect(libraryB.saved.map(\.id) == ["own"])
+    }
+
+    @Test func reconnectingDoesNotBringBackRemovedWatchLaterTitles() async throws {
+        reset()
+        let now = Date.now
+        let (alice, _, libraryA, _, _) = fixture()
+        await alice.connect(code: try enrollment("alice")); await alice.resolve(useLocal: true)
+        let (second, _, libraryB, _, _) = fixture()
+        libraryB.toggleSaved(title("gone"), at: now - 100)
+        await second.connect(code: try await alice.makeDeviceCode()); await second.resolve(useLocal: false)
+        await second.sync(); await alice.sync()
+        #expect(libraryA.isSaved("gone"))
+        try second.disconnect()
+        #expect(libraryB.isSaved("gone"))
+
+        libraryA.toggleSaved(title("gone"), at: now - 10)
+        await alice.sync()
+        await second.connect(code: try await alice.makeDeviceCode()); await second.resolve(useLocal: false)
+        await second.sync(); await alice.sync()
+        #expect(!libraryB.isSaved("gone") && !libraryA.isSaved("gone"))
+        try alice.disconnect(); try second.disconnect()
+    }
+
+    @Test func olderGatewayKeepsWatchLaterOnTheDeviceAndSyncsTheRest() async throws {
+        reset()
+        AccountGatewayProtocol.state.withLock { $0.unknownDocuments = ["documents/watchLater"] }
+        let (alice, _, libraryA, _, _) = fixture()
+        await alice.connect(code: try enrollment("alice")); await alice.resolve(useLocal: true)
+        libraryA.toggleSaved(title("kept"))
+        libraryA.record(movie(), position: 100, duration: 1000)
+        await alice.sync()
+        #expect(alice.watchLaterNeedsNewerServer && alice.errorMessage == nil && alice.status == .upToDate)
+        #expect(libraryA.isSaved("kept"))
+        let (second, _, libraryB, _, _) = fixture()
+        await second.connect(code: try await alice.makeDeviceCode()); await second.resolve(useLocal: false)
+        #expect(libraryB.progress["movie"]?.position == 100 && !libraryB.isSaved("kept"))
+
+        // Once the gateway is updated, the next sync carries it.
+        AccountGatewayProtocol.state.withLock { $0.unknownDocuments = [] }
+        await alice.sync(); await second.sync()
+        #expect(!alice.watchLaterNeedsNewerServer && libraryB.isSaved("kept"))
+        try alice.disconnect(); try second.disconnect()
+    }
+
+    func requests(_ request: String) -> Int {
+        AccountGatewayProtocol.state.withLock { $0.log.filter { $0 == request }.count }
+    }
+
+    func eventually(within seconds: Double = 3, _ condition: () -> Bool) async throws -> Bool {
+        let deadline = ContinuousClock.now + .seconds(seconds)
+        while !condition() {
+            guard ContinuousClock.now < deadline else { return false }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        return true
+    }
+
+    @Test func unchangedDocumentsAreNotDownloadedAgain() async throws {
+        reset()
+        let (alice, _, libraryA, _, _) = fixture()
+        await alice.connect(code: try enrollment("alice")); await alice.resolve(useLocal: true)
+        libraryA.record(movie(), position: 100, duration: 1000)
+        await alice.sync()
+        let (second, _, libraryB, _, _) = fixture()
+        await second.connect(code: try await alice.makeDeviceCode()); await second.resolve(useLocal: false)
+        await alice.sync()
+        AccountGatewayProtocol.state.withLock { $0.log = []; $0.notModified = 0 }
+        await alice.sync()
+        // The account was confirmed by the first sync; each document is still current.
+        let log = AccountGatewayProtocol.state.withLock { $0.log }
+        #expect(Set(log) == ["GET documents/configuration", "GET documents/progress", "GET documents/watchLater"])
+        #expect(log.count == 3 && AccountGatewayProtocol.state.withLock { $0.notModified } == 3)
+        #expect(alice.status == .upToDate)
+
+        libraryB.record(movie(), position: 300, duration: 1000)
+        await second.sync()
+        AccountGatewayProtocol.state.withLock { $0.notModified = 0 }
+        await alice.sync()
+        #expect(AccountGatewayProtocol.state.withLock { $0.notModified } == 2)
+        #expect(libraryA.progress["movie"]?.position == 300)
+        try alice.disconnect(); try second.disconnect()
+    }
+
+    @Test func anotherDevicesProgressArrivesThroughTheOpenChangesRequest() async throws {
+        reset()
+        let (alice, _, libraryA, _, _) = fixture()
+        await alice.connect(code: try enrollment("alice")); await alice.resolve(useLocal: true)
+        libraryA.record(movie(), position: 100, duration: 1000)
+        await alice.sync()
+        let (second, _, libraryB, _, _) = fixture()
+        await second.connect(code: try await alice.makeDeviceCode()); await second.resolve(useLocal: false)
+        second.startLiveUpdates()
+        // The first answer names what there is; the second request is the one held open.
+        #expect(try await eventually { requests("GET changes") >= 2 })
+        libraryA.record(movie(), position: 300, duration: 1000)
+        await alice.sync()
+        #expect(try await eventually { libraryB.progress["movie"]?.position == 300 })
+        #expect(second.errorMessage == nil && !second.needsChoice)
+        second.stopLiveUpdates()
+        try alice.disconnect(); try second.disconnect()
+    }
+
+    @Test func olderGatewayWithoutChangesKeepsSyncingAsBefore() async throws {
+        reset()
+        AccountGatewayProtocol.state.withLock { $0.supportsChanges = false }
+        let (alice, _, libraryA, _, _) = fixture()
+        await alice.connect(code: try enrollment("alice")); await alice.resolve(useLocal: true)
+        await alice.sync()
+        alice.startLiveUpdates()
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(requests("GET changes") == 1)
+        #expect(alice.status == .upToDate && alice.errorMessage == nil)
+        libraryA.record(movie(), position: 100, duration: 1000)
+        await alice.sync()
+        #expect(alice.status == .upToDate && requests("GET changes") == 1)
+        alice.stopLiveUpdates()
+        try alice.disconnect()
+    }
+
+    @Test func unreachableServerIsAskedAgainWithGrowingPausesAndTheStatusStays() async throws {
+        reset()
+        #expect([1, 2, 3, 7, 30].map { AccountSync.retryDelay(afterFailures: $0) } == [1, 2, 4, 60, 60])
+        let (alice, _, _, _, _) = fixture()
+        await alice.connect(code: try enrollment("alice")); await alice.resolve(useLocal: true)
+        // The sync resolving schedules for Watch Later, which it doesn't carry, runs first.
+        try await Task.sleep(for: .milliseconds(1200))
+        #expect(alice.status == .upToDate)
+        AccountGatewayProtocol.state.withLock { $0.isOffline = true; $0.log = [] }
+        alice.startLiveUpdates()
+        // Asked at once, after one second, then after two more.
+        try await Task.sleep(for: .milliseconds(2500))
+        #expect(requests("GET changes") == 2)
+        #expect(alice.status == .upToDate && alice.errorMessage == nil)
+        alice.stopLiveUpdates()
+        AccountGatewayProtocol.state.withLock { $0.isOffline = false }
+        try alice.disconnect()
+    }
+
+    @Test func resumingPullsTheLatestProgressButWaitsNoLongerThanTheLimit() async throws {
+        reset()
+        let (alice, _, libraryA, _, _) = fixture()
+        await alice.connect(code: try enrollment("alice")); await alice.resolve(useLocal: true)
+        libraryA.record(movie(), position: 100, duration: 1000)
+        await alice.sync()
+        let (second, _, libraryB, _, _) = fixture()
+        await second.connect(code: try await alice.makeDeviceCode()); await second.resolve(useLocal: false)
+        libraryB.record(movie(), position: 300, duration: 1000)
+        await second.sync()
+        await alice.refreshProgress(within: .seconds(1))
+        #expect(libraryA.resumePosition(for: "movie") == 295)
+
+        libraryB.record(movie(), position: 500, duration: 1000)
+        await second.sync()
+        AccountGatewayProtocol.state.withLock { $0.delays["GET documents/progress"] = 3 }
+        let start = ContinuousClock.now
+        await alice.refreshProgress(within: .seconds(1))
+        let elapsed = ContinuousClock.now - start
+        #expect(elapsed >= .milliseconds(950) && elapsed < .milliseconds(1500))
+        // The server was too slow, so this device's own position decides.
+        #expect(libraryA.resumePosition(for: "movie") == 295)
+        AccountGatewayProtocol.state.withLock { $0.delays = [:] }
+        try alice.disconnect(); try second.disconnect()
+    }
+
     @Test func writeAfterAnotherDeviceSavedIsRetriedAgainstTheNewRevision() async throws {
         reset()
         let (alice, _, library, _, _) = fixture()
@@ -323,7 +518,7 @@ struct AccountSyncTests {
         await second.connect(code: try await alice.makeDeviceCode()); await second.resolve(useLocal: false)
         defaultsB.set("de", forKey: "audioLanguage")
         await second.sync()
-        defaultsA.set("coral", forKey: "accentColor")
+        defaultsA.set("de", forKey: "subtitleLanguage")
         AccountGatewayProtocol.state.withLock { $0.hooks["PUT documents/configuration"] = {
             defaultsA.set("fr", forKey: "audioLanguage")
         } }
@@ -331,7 +526,7 @@ struct AccountSyncTests {
         #expect(alice.status == .choosingSettings)
         await alice.resolve(useLocal: true)
         #expect(!alice.needsChoice && alice.errorMessage == nil)
-        #expect(defaultsA.string(forKey: "audioLanguage") == "fr" && defaultsA.string(forKey: "accentColor") == "coral")
+        #expect(defaultsA.string(forKey: "audioLanguage") == "fr" && defaultsA.string(forKey: "subtitleLanguage") == "de")
         try alice.disconnect(); try second.disconnect()
     }
 
@@ -396,7 +591,8 @@ struct AccountSyncTests {
         // one of the account's devices wrote it while hers came from the group.
         try addonsB.replaceManifestURLs(["https://personal.example/manifest.json"])
         defaultsB.set("fr", forKey: "audioLanguage")
-        defaultsB.set("mint", forKey: "accentColor")
+        var layout = HomeLayout.default; layout.setHidden(true, for: .genres)
+        defaultsB.set(layout.storedData, forKey: HomeLayout.storageKey)
         await second.sync()
         // Shared addons and playback preferences, as the group set them on alice's device.
         try addonsA.replaceManifestURLs(["https://shared.example/manifest.json"])
@@ -417,7 +613,7 @@ struct AccountSyncTests {
         #expect(addonsA.addons.map(\.manifestURL) == ["https://shared.example/manifest.json"])
         #expect(defaultsA.string(forKey: "audioLanguage") == "de")
         // Categories that were never shared merge as before.
-        #expect(defaultsA.string(forKey: "accentColor") == "mint")
+        #expect(HomeLayout(storedData: defaultsA.data(forKey: HomeLayout.storageKey)) == layout)
         await second.sync()
         #expect(addonsB.addons.map(\.manifestURL) == ["https://shared.example/manifest.json"])
         #expect(defaultsB.string(forKey: "audioLanguage") == "de")
@@ -444,7 +640,7 @@ struct AccountSyncTests {
         #expect(throws: SyncError.invalidEndpoint) { try AccountSyncClient(endpoint: "http://sync.example/v2") }
         #expect(throws: SyncError.invalidEndpoint) { try AccountSyncClient(endpoint: "https://u:p@sync.example/v2") }
         let key = AccountSyncCipher.generateKey()
-        let document = try AccountSyncCipher(key: key, resource: "configuration").seal(SyncedSettings(accent: .coral))
+        let document = try AccountSyncCipher(key: key, resource: "configuration").seal(SyncedSettings(subtitleLanguage: "de"))
         #expect(throws: SyncError.decryptionFailed) { try AccountSyncCipher(key: key, resource: "progress").open(document, as: SyncedSettings.self) }
         #expect(throws: SyncError.decryptionFailed) {
             try AccountSyncCipher(key: AccountSyncCipher.generateKey(), resource: "configuration").open(document, as: SyncedSettings.self)
@@ -493,8 +689,8 @@ struct AccountSyncTests {
         await alice.resolve(useLocal: false); await bob.resolve(useLocal: false)
         try #require(alice.errorMessage == nil && bob.errorMessage == nil)
         try addonsA.replaceManifestURLs(["https://first.example/manifest.json", "https://second.example/manifest.json"])
-        defaultsA.set("coral", forKey: "accentColor")
-        defaultsB.set("mint", forKey: "accentColor")
+        defaultsA.set("de", forKey: "subtitleLanguage")
+        defaultsB.set("fr", forKey: "subtitleLanguage")
         libraryA.record(movie("private-a"), position: 140, duration: 1000)
         await alice.sync(); await bob.sync()
         let deviceCode = try await alice.makeDeviceCode()
@@ -510,8 +706,8 @@ struct AccountSyncTests {
         await bob.sync(); await alice.sync(); await second.sync()
         #expect(addonsA.addons.map(\.manifestURL) == ["https://first.example/manifest.json", "https://second.example/manifest.json"])
         #expect(libraryA.progress["private-b"] == nil)
-        #expect(defaultsB.string(forKey: "accentColor") == "mint")
-        #expect(defaultsSecond.string(forKey: "accentColor") == "coral")
+        #expect(defaultsB.string(forKey: "subtitleLanguage") == "fr")
+        #expect(defaultsSecond.string(forKey: "subtitleLanguage") == "de")
         librarySecond.record(movie("private-a"), position: 220, duration: 1000)
         await second.sync(); await alice.sync()
         #expect(libraryA.progress["private-a"]?.position == 220)
@@ -524,5 +720,35 @@ struct AccountSyncTests {
         #expect(second.errorMessage != nil)
         await bob.sync()
         #expect(bob.errorMessage == nil)
+    }
+}
+
+/// Round trips and wall time of one sync, over the stub with a simulated network delay.
+/// Run with LOGE_SYNC_MEASURE=1; it prints rather than asserts.
+@MainActor @Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["LOGE_SYNC_MEASURE"] != nil))
+struct AccountSyncMeasurements {
+    @Test func oneSyncWithAndWithoutAProgressChange() async throws {
+        let tests = AccountSyncTests()
+        tests.reset()
+        let (alice, _, library, _, _) = tests.fixture()
+        await alice.connect(code: try tests.enrollment("alice")); await alice.resolve(useLocal: true)
+        // A library of some size, so what a fetch downloads shows.
+        for index in 0..<200 { library.record(tests.movie("title-\(index)"), position: 100, duration: 1000) }
+        library.record(tests.movie(), position: 100, duration: 1000)
+        await alice.sync()
+        AccountGatewayProtocol.state.withLock { $0.latency = 0.05 }
+        func measure(_ name: String) async {
+            AccountGatewayProtocol.state.withLock { $0.log = []; $0.sent = 0 }
+            let start = ContinuousClock.now
+            await alice.sync()
+            let elapsed = ContinuousClock.now - start
+            let (log, sent) = AccountGatewayProtocol.state.withLock { ($0.log, $0.sent) }
+            print("MEASURE \(name): \(log.count) requests, \(sent) bytes received, \(elapsed.formatted(.units(allowed: [.milliseconds]))) — \(log.joined(separator: ", "))")
+        }
+        await measure("no change")
+        library.record(tests.movie(), position: 200, duration: 1000)
+        await measure("progress change")
+        AccountGatewayProtocol.state.withLock { $0.latency = 0 }
+        try alice.disconnect()
     }
 }

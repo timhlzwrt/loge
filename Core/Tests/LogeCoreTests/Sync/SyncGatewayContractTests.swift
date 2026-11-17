@@ -54,6 +54,9 @@ struct SyncGatewayContractTests {
         #expect(try await client.put(document, resource: "documents/progress", revision: nil) == "1")
         #expect(try sent("documents/progress") == keys("putDocument", "request"))
 
+        try respond("changes", with: "changes")
+        #expect(try await client.changes(since: nil).changes == ["progress"])
+
         try respond("devices", with: "devices")
         #expect(try await client.devices().first?.name == "iPhone")
     }

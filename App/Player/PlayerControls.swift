@@ -679,19 +679,16 @@ struct CapsuleIcon: ViewModifier {
 
 /// The system's route picker, for AirPlay to a TV or speakers.
 private struct AirPlayButton: UIViewRepresentable {
-    @AppStorage(Accent.storageKey) private var accent = Accent.white
-
     func makeUIView(context: Context) -> AVRoutePickerView {
         let picker = AVRoutePickerView()
         // The screen icon, and TVs listed first: this sends the picture, not just sound.
         picker.prioritizesVideoDevices = true
         picker.tintColor = .white
+        picker.activeTintColor = .white
         return picker
     }
 
-    func updateUIView(_ uiView: AVRoutePickerView, context: Context) {
-        uiView.activeTintColor = UIColor(accent.color)
-    }
+    func updateUIView(_ uiView: AVRoutePickerView, context: Context) {}
 }
 #endif
 

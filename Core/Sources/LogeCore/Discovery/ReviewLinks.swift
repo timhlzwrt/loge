@@ -7,11 +7,6 @@ public enum ReviewLinks {
         return URL(string: "https://www.imdb.com/title/\(imdbID)/")
     }
 
-    public static func letterboxd(imdbID: String, type: String) -> URL? {
-        guard type == MediaType.movie, isIMDbTitle(imdbID) else { return nil }
-        return URL(string: "https://letterboxd.com/imdb/\(imdbID)/")
-    }
-
     private static func isIMDbTitle(_ id: String) -> Bool {
         id.wholeMatch(of: /tt\d+/) != nil
     }

@@ -19,15 +19,14 @@ features, proposals, scope). History of individual changes is in git and the PRs
 - `Core/` — `LogeCore` Swift package, no UI, grouped by domain: Addons (protocol client,
   routing in user order, `AddonStore`, `StreamDetails`, `SourceSelection`, `SetupCode`), Library
   (`LibraryStore`: progress, My List, history, Recently Watched, remembered sources; `EpisodeSchedule`: new
-  episodes of the series being watched), Playback, Discovery (`HomeLayout`: Home's shelves), TMDB, MDBList (the
-  Letterboxd and Rotten Tomatoes scores), Sync (`SyncedSettings`), plus `Keychain` and `Accent`.
+  episodes of the series being watched), Playback, Discovery (`HomeLayout`: Home's shelves), TMDB, Sync (`SyncedSettings`), plus `Keychain`.
   All persistence is `UserDefaults` because tvOS can purge app files.
 - `App/Browse/` — by screen: Components, Home, Details, Sources, People, Discovery.
 - `App/Player/` — `PlaybackSession` (owns the playback in progress, outliving the player
   screen for Picture in Picture), `MPVPlayer` (libmpv, AVFoundation video layer),
   `ScrubPreview` (a second, silent mpv for timeline thumbnails), `PlayerView`, controls and
   menus, `PictureInPicture`, `NowPlaying`, next-episode countdown, tvOS remote swipe reader.
-- `App/Settings/` — an index of pages: Sync, addons, TMDB, MDBList, Home's shelves, accent; playback
+- `App/Settings/` — an index of pages: Sync, addons, TMDB, Home's shelves; playback
   preferences inline; About (version, build commit, credits) and Data Sources, which holds
   all attribution rather than putting it under artwork.
 - `web/` — the project page for loge.tjh.li: static HTML/CSS in tjh.li's design, no scripts
@@ -92,7 +91,7 @@ logs; Instruments over the network to it drops after about a second.
 `recommended`, `my-lists`, `details`, `details-collection`, `series`, `details-unmatched`,
 `details-busy`, `sources-folded|autoplay`
 (need `Tools/test-addon.py --port 8769 --many --delay 5`), `sources-empty(-sheet)`,
-`settings-review|failed`, `carousel-resume`. The playback fixture also takes
+`settings-review|failed|old-server`, `carousel-resume`. The playback fixture also takes
 `PLAYBACK_FIXTURE_NEXT=late`, `PLAYBACK_FIXTURE_SHORT_URL` and `?hang=`.
 
 ## Conventions
@@ -111,7 +110,7 @@ logs; Instruments over the network to it drops after about a second.
   (`App/Browse/Components/BrowseComponents.swift`), iPad/landscape via size classes. Phone-only
   behaviour checks the device (`Metrics.isPhone`), not the size class, so a narrow iPad window
   keeps its tabs.
-- Expanding sync scope (e.g. Watch Later) or changing visible UI/interaction design
+- Expanding sync scope (e.g. remembered sources) or changing visible UI/interaction design
   needs the user's agreement on a concrete proposal first.
 - No co-author or "generated with" lines in commits or PRs; commit only when asked.
 
@@ -127,14 +126,18 @@ stay out of this repo.
 Distributed as a SideStore source (each user signs with a free Apple ID; Apple TV via
 Sideloadly/atvloadly); no paid developer account. MPVKit player, vendored with an AVFoundation
 video output. Addons are added as manifest URLs. Cross-device sync is the optional self-hosted
-account sync, never iCloud or a default hosted server; it carries progress, addons, playback
-preferences and appearance (accent and Home's layout, one field, conflicts asked about); Trakt support was removed in November
-2026 (`RetiredTraktData` deletes its saved keys at launch). Sync is one person's devices only:
+account sync, never iCloud or a default hosted server; it carries progress, Watch Later (its own
+`watchLater` document: per title the latest addition or removal wins, removals kept 90 days,
+no prompts; an older gateway's 404 keeps it on the device), addons, playback preferences and
+Home's layout (one field, conflicts asked about); Trakt support was removed in November 2026,
+and the accent colour setting the same month: the app is always white. Sync is one person's devices only:
 the live shared setups between accounts were removed the same month for a one-time setup copy
 (`SetupCode`, `loge://setup#loge-setup-1:…`, base64url of deflated JSON; Share Setup on
 iPhone/iPad/Mac, Import Setup everywhere). A device that was in a group drops its grants and
 keys at launch and keeps what it shows; `Baselines.formerlyShared` makes the next sync take its
 values for those categories over the account's older copy.
+MDBList, which added Letterboxd and Rotten Tomatoes scores, was removed the same month
+(`RetiredMDBListKey` deletes its saved key at launch).
 Watch Later is the only list: custom lists were folded into it the same month (`LibraryStore`
 appends any stored lists' titles once when a profile loads, then deletes them). My Lists ends
 with Recently Watched, the last 12 titles finished and not in Continue Watching; removing one
@@ -143,7 +146,7 @@ Picture in Picture is required; downloads are out of scope; UI is English only f
 iPhone browsing is portrait-only (`AppDelegate`); the player turns. iPad has one window
 (`UIApplicationSupportsMultipleScenes` NO): every window would share the one `PlaybackSession`
 and present its player; the Mac has no New Window either. Destructive settings and library
-actions (addon removal, TMDB token, MDBList key, Sync disconnect, device revoke,
+actions (addon removal, TMDB token, Sync disconnect, device revoke,
 marking a season unwatched) ask first; importing a setup's Replace My Addons is its own
 destructive-role confirmation. Dates and
 numbers use `Locale.interface` (en_US) to match the English UI; clock times follow the device.
@@ -154,9 +157,8 @@ to connect it (trailers are the exception and work without). A title's page lead
 title and Play, with Watch Later and a More menu (trailer except on Apple TV, sources, watched mark)
 beside it. A phone centres the three, Play in the middle at a fixed 172 pt and a size down
 (`.controlSize(.small)`); wider screens start with Play. The description follows, and under it, one size down, genre, year, runtime and
-the scores. The scores stand behind white marks of IMDb, Letterboxd and Rotten Tomatoes, the
-one place the app shows other brands' logos; the last two need the user's own MDBList key, and
-the review link rows they replaced are gone. Rows on that page have a heading and no caption
+the IMDb rating. It stands behind IMDb's white mark, the one place the app shows another
+brand's logo. Rows on that page have a heading and no caption
 under it. Section headings share a smaller semibold style across the app (20 pt on iOS).
 More Like This and film collections show only the year below poster titles; filmography
 keeps Movie/Series labels because it can mix both.
@@ -216,11 +218,13 @@ keeps Movie/Series labels because it can mix both.
   it still resumes by fraction, so keep that path.
 - Trailers open on YouTube (addon `trailers`, or TMDB's list when connected); nothing in the
   app can play them, and Apple TV has no browser, so it offers none.
-- `App/ScoreLogos.xcassets` holds the score marks as template SVGs: Letterboxd and Rotten
-  Tomatoes from Simple Icons, IMDb's plate from Wikimedia Commons with the lettering merged
-  into one even-odd path, because a template image keeps only alpha.
-- MDBList's key goes in the request's query, so its URLs never go into logs or errors. Its
-  routes end in a slash, which `URL.path` drops (the fixture matches without it).
+- `App/ScoreLogos.xcassets` holds IMDb's mark as a template SVG: its plate from Wikimedia
+  Commons with the lettering merged into one even-odd path, because a template image keeps only alpha.
+- Live sync: `AccountSync.startLiveUpdates()` on launch and on return, `stopLiveUpdates()` on
+  background (the Mac rarely backgrounds, so it keeps listening). The listener ends quietly on a
+  gateway's 404 and is tried again on the next return; its retries never touch `status`.
+  Documents are fetched with `If-None-Match` against an in-memory copy, so a relaunch fetches
+  them in full once; `me()` runs once per launch or connect, and again after a 401.
 - Search's keyboard reappearing after going back is the system restoring a focused field;
   clearing focus on leaving doesn't stop it.
 
@@ -238,10 +242,12 @@ keeps Movie/Series labels because it can mix both.
 
 ## Open
 
+- Removable once every device has launched a build from `claude/trim-features`: `RetiredMDBListKey`,
+  `LibraryStore.foldRetiredLists`, AccountSync's `RetiredGroups`/`formerlyShared`,
+  `SyncedSettings.migrateSourceSizeLimit` and the decoding of `maximumSourceGigabytes`, and the
+  gateway's retired `/v2/join` and `/v2/groups` routes and `groups: []`.
 - ROADMAP.md lists the remaining verification item (OS runtime smoke tests) and the proposed
   features; agree on scope before building any of them.
-- Cross-device sync: reviewed and fixed; proposed expansion (Watch Later)
-  awaits a decision.
 - Top Shelf is on hold: atvloadly installs the extension and its App Group
   (`group.li.tjh.MediaApp.<team ID>`, read from the embedded profile), but tvOS never launches
   it; the reason is only in the Apple TV's live log (branch `claude/top-shelf-test`).
@@ -252,6 +258,5 @@ keeps Movie/Series labels because it can mix both.
 - Unverified: playback and Picture in Picture on tvOS and macOS, HDR output, tvOS display
   matching, swipe-to-scrub with the Siri Remote (the preview itself is checked in the
   simulators by setting a scrub position), physical phone-to-Apple-TV
-  handoff, MDBList against the live service (built from
-  its published schema; no key was available), Mac sources rows with AIOStreams' long names, the Search genre
+  handoff, Mac sources rows with AIOStreams' long names, the Search genre
   pill and Watch Later row on Apple TV.

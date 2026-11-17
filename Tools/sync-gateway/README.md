@@ -83,7 +83,15 @@ The endpoint entered into the app ends in `/v2`. Public paths:
 
 - `POST /redeem`: `{code, deviceName, hasRecoveryKey}` -> device token/account metadata.
 - `GET /me`: account and current device (`groups` is always empty; older apps require it).
-- `GET/PUT /documents/configuration` and `/documents/progress`: private account envelopes.
+- `GET/PUT /documents/configuration`, `/documents/progress` and `/documents/watchLater`:
+  private account envelopes. A GET answers with the revision as `ETag`, and with 304 Not
+  Modified to an `If-None-Match` naming the current one.
+- `GET /changes?since=<position>`: a long poll that answers once one of the account's three
+  documents changes after `since`, or after about 55 seconds, with `{changes, since}`: the
+  changed document names and the position to wait from next. Without `since` it answers at
+  once, naming the documents that exist. The position is the account's own revisions, never
+  CouchDB's database-wide sequence. Each waiting device holds one gateway worker thread
+  (40 in all) and one CouchDB `_changes` request.
 - `POST /invitations`: `{kind: "device"}` -> a device invitation.
 - `GET /devices`, `DELETE /devices/{id}`: list/revoke your own devices.
 - `GET /invitations`, `DELETE /invitations/{id}`: list/revoke your invitations.
@@ -110,7 +118,8 @@ python3 -m venv /tmp/loge-gateway-tests
 /tmp/loge-gateway-tests/bin/python -m unittest discover -s Tools/sync-gateway -p 'test_*.py'
 ```
 
-The suite covers user isolation, document conflicts, simultaneous enrollment,
+The suite covers user isolation, document conflicts, unchanged fetches, changes that wake
+only their own account, simultaneous enrollment,
 revocation, expiry, local-admin CSRF/Host checks and the retired shared-setup routes. Live tests
 must use disposable accounts and revoke their device tokens afterward.
 

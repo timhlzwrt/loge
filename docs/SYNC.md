@@ -1,7 +1,7 @@
 # Self-hosted sync
 
 Sync is optional. loge has no default sync server. Your own server can carry
-private playback progress, addon setup and preferences across your devices, with
+private playback progress, Watch Later, addon setup and preferences across your devices, with
 a separate account for each person.
 
 ## Connect an account
@@ -24,17 +24,37 @@ two devices play the same title independently, the position left most recently w
 without asking. When one removes a title or marks it unwatched and another plays it,
 loge asks which to keep. Offline edits remain saved for the next successful sync.
 
+While the app is open, each device keeps one request waiting at the server
+(`GET /v2/changes`), which answers as soon as another of your devices saves, so
+progress, Watch Later and setup changes show up within moments rather than at the
+next launch. It stops when the app goes to the background and resumes on return;
+while the server can't be reached it asks again after a growing pause, up to a
+minute, without changing the Sync page's status. Documents that haven't changed
+since the device last saw them aren't downloaded again.
+
 Local progress is saved about every ten seconds and on pause, close, end and
-backgrounding. Network checkpoints are throttled; pause/close/background attempt
-an immediate push. On leaving, the app asks the system for time to finish that push;
+backgrounding. Network checkpoints are throttled, to about two seconds while the
+server is listening and fifteen otherwise; pause/close/background attempt
+an immediate push. Before Play, Resume or the next episode picks where to start,
+the device asks the server for the latest progress, waiting at most a second. On leaving, the app asks the system for time to finish that push;
 how much it gets depends on the operating system, so a suspended device may deliver
 its pending changes the next time it opens.
 
-The setup syncs too: addons, playback preferences and appearance (accent color and
-Home's shelves). Home's arrangement is one setting: edits on two devices before they
-sync are a conflict loge asks about, like other settings. Addon shelves name the addon
-by its manifest ID, never its URL, and a device without that addon keeps the shelf
-without showing it.
+Watch Later syncs as its own document. For each title the latest action wins,
+adding or removing, without asking; the list stays newest-added first. Removals are
+remembered for 90 days, so a device that was offline longer can bring back a title
+removed meanwhile. Connecting a device adds its Watch Later to the account's, whichever
+setup you choose. Gateways from before Watch Later synced refuse the document: the
+Sync page then says **Update the sync server to sync Watch Later**, Watch Later stays
+on each device and everything else keeps syncing. Gateways from before live updates
+have no `/v2/changes`: devices then sync at launch, on returning to the app and
+after local changes, as before. One redeploy of the gateway (see
+[Host the service](#host-the-service)) brings both Watch Later and live updates.
+
+The setup syncs too: addons, playback preferences and Home's shelves. Home's
+arrangement is one setting: edits on two devices before they sync are a conflict loge
+asks about, like other settings. Addon shelves name the addon by its manifest ID,
+never its URL, and a device without that addon keeps the shelf without showing it.
 
 ## Give someone your addons
 
@@ -89,7 +109,7 @@ END
 
 ## Privacy, devices and recovery
 
-Configurations and progress are AES-GCM encrypted on-device. The database stores
+Configurations, progress and Watch Later are AES-GCM encrypted on-device. The database stores
 ciphertext, account metadata and hashes of random device/invitation tokens.
 Device tokens and keys stay in Keychain. Treat connection codes as secrets: share them only
 with the intended recipient.
@@ -101,9 +121,8 @@ code, but cannot recover encrypted data without your recovery key or a connected
 device. To recover, enter the original key under **Advanced → Recover an existing
 account**, then return and connect using the administrator's new code.
 
-Disconnecting returns to the previous local library/setup. Each account's local
-Watch Later and remembered sources remain separate on that device;
-these are not currently synchronized. Stream URLs, account tokens and connection
+Disconnecting returns to the previous local library/setup. Each account's
+remembered sources remain separate on that device and are not synchronized. Stream URLs, account tokens and connection
 measurements are never included in synced setup.
 
 ## Host the service
@@ -146,7 +165,7 @@ and run a single public gateway worker as documented in its guide.
 
 Builds before account sync offered a single encrypted `/configuration` document
 per server under **Advanced → Previous sync connection**. That connection has been
-removed; the app deletes its saved server login from Keychain. Connect an account
+removed. Connect an account
 instead and choose this device's setup when asked. To upgrade such a server, see
 the [gateway guide](../Tools/sync-gateway/README.md#upgrading-an-endpoint-sync-server).
 

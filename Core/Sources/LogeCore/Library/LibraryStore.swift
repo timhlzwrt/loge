@@ -19,6 +19,8 @@ public final class LibraryStore {
 
     private static let progressKey = "watchProgress"
     private static let savedKey = "savedTitles"
+    private static let savedDatesKey = "savedTitleDates"
+    private static let savedRemovalsKey = "savedTitleRemovals"
     private static let sourcesKey = "lastSources"
     /// Custom lists, which older builds saved beside Watch Later; read once to fold them into it.
     private static let retiredListsKey = "titleLists"
@@ -39,6 +41,10 @@ public final class LibraryStore {
     @ObservationIgnored private var remoteResumeFractions: [String: Double] = [:]
     /// Watch Later, newest first, then what custom lists held when they were folded into it.
     public private(set) var saved: [MetaPreview] = []
+    /// When each Watch Later title was added, and when titles were taken off, by ID: sync
+    /// keeps the later of the two.
+    @ObservationIgnored private var savedDates: [String: Date] = [:]
+    @ObservationIgnored private var savedRemovals: [String: Date] = [:]
     /// Titles taken out of Recently Watched, by movie or series ID, with when. Kept on this
     /// device only: it hides a row entry, and says nothing about what was watched.
     private var recentlyWatchedHidden: [String: Date] = [:]
@@ -72,6 +78,9 @@ public final class LibraryStore {
         progress = Self.decode(data(forKey: Self.progressKey)) ?? [:]
         saved = Self.decode(data(forKey: Self.savedKey)) ?? []
         foldRetiredLists()
+        savedDates = Self.decode(data(forKey: Self.savedDatesKey)) ?? [:]
+        savedRemovals = Self.decode(data(forKey: Self.savedRemovalsKey)) ?? [:]
+        dateUndatedTitles()
         sources = Self.decode(data(forKey: Self.sourcesKey)) ?? [:]
         playbackArchive = Self.decode(data(forKey: Self.archiveKey)) ?? [:]
         playbackRemovals = Self.decode(data(forKey: Self.removalsKey)) ?? [:]
@@ -307,13 +316,58 @@ public final class LibraryStore {
         saved.contains { $0.id == id }
     }
 
-    public func toggleSaved(_ meta: MetaPreview) {
+    public func toggleSaved(_ meta: MetaPreview, at date: Date = .now) {
         if let index = saved.firstIndex(where: { $0.id == meta.id }) {
             saved.remove(at: index)
+            savedDates[meta.id] = nil
+            savedRemovals[meta.id] = date
         } else {
             saved.insert(meta, at: 0)
+            savedDates[meta.id] = date
+            savedRemovals[meta.id] = nil
         }
+        let cutoff = date.addingTimeInterval(-WatchLaterSyncSnapshot.removalLifetime)
+        savedRemovals = savedRemovals.filter { $0.value >= cutoff }
+        saveWatchLater()
+    }
+
+    public var watchLaterSyncSnapshot: WatchLaterSyncSnapshot {
+        WatchLaterSyncSnapshot(entries: saved.compactMap { title in
+            savedDates[title.id].map { WatchLaterSyncSnapshot.Entry(title: title, addedAt: $0) }
+        }, removals: savedRemovals)
+    }
+
+    /// Validates before replacing Watch Later. Titles already here keep the preview they were
+    /// saved with, and gain a poster another device found.
+    public func applyWatchLaterSyncSnapshot(_ snapshot: WatchLaterSyncSnapshot) throws {
+        guard snapshot != watchLaterSyncSnapshot else { return }
+        let snapshot = try snapshot.validated()
+        let current = Dictionary(saved.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        saved = snapshot.entries.map { entry in
+            guard var title = current[entry.title.id] else { return entry.title }
+            if title.poster == nil { title.poster = entry.title.poster; title.posterShape = entry.title.posterShape }
+            return title
+        }
+        savedDates = Dictionary(snapshot.entries.map { ($0.title.id, $0.addedAt) }, uniquingKeysWith: max)
+        savedRemovals = snapshot.removals
+        saveWatchLater()
+    }
+
+    /// Titles saved before Watch Later synced have no date. They get times at the very start
+    /// of 1970, one second apart in their order, so they stay below every title added since and
+    /// any real removal on another device still wins over them.
+    private func dateUndatedTitles() {
+        guard saved.contains(where: { savedDates[$0.id] == nil }) else { return }
+        for (index, title) in saved.enumerated() where savedDates[title.id] == nil {
+            savedDates[title.id] = Date(timeIntervalSince1970: Double(saved.count - index))
+        }
+        save(savedDates, forKey: Self.savedDatesKey)
+    }
+
+    private func saveWatchLater() {
         save(saved, forKey: Self.savedKey)
+        save(savedDates, forKey: Self.savedDatesKey)
+        save(savedRemovals, forKey: Self.savedRemovalsKey)
     }
 
     /// Watch Later became the only list: what custom lists held follows its own titles, in

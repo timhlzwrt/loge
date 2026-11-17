@@ -25,12 +25,12 @@ release dates. This roadmap reflects the source as of **12 November 2026**.
 - [x] New episodes of followed series in Continue Watching, trailers opened on YouTube (not on Apple TV), and the other films of a film series
   on a movie's page (TMDB).
 - [x] Arranged Home shelves (Settings → Home): hide, reorder, add installed addons'
-  catalogs and reset, synced with the account's appearance settings.
-- [x] Letterboxd and Rotten Tomatoes scores beside the IMDb rating on a title's
-  page, with the user's own MDBList key.
+  catalogs and reset, synced with the account's setup.
 - [x] Optional encrypted self-hosted accounts with progress, watched state,
   addons and preferences; offline merging, the newest position winning, and a
   choice when a title was removed on one device and played on another.
+- [x] Watch Later synced with the account (November 2026): the latest addition or
+  removal wins per title, removals kept 90 days, never part of a setup copy.
 - [x] Expiring device invitations, device revocation and a local service
   administration page.
 - [x] A one-time setup copy (addons, optionally playback preferences) as a link
@@ -87,18 +87,7 @@ suites instead of creating another test harness. See the
 These are proposals, not promised releases. Agree on scope and interaction design
 before implementation.
 
-### 1. Sync Watch Later
-
-Playback progress and setup already sync through the optional self-hosted account;
-Watch Later should be considered separately. Carry its titles and deliberate removals
-between a person's devices, with defined offline-merge rules. Keep it private to the
-account, not part of a setup copy.
-This would expand sync scope and needs agreement before implementation.
-
-**Test target:** independent stores converge after concurrent additions and
-removals; reconnect doesn't resurrect deleted entries; another account can't read them.
-
-### 2. Search installed addons
+### 1. Search installed addons
 
 Search currently uses the built-in movie and series feeds. Offer opt-in search of
 installed catalogs that advertise search support, preserving addon order and showing
@@ -123,14 +112,15 @@ scrolls first. Keep measured regressions separate from speculative rewrites.
 - Offline downloads, a torrent engine or built-in content hosting.
 - A default hosted sync backend or iCloud sync. Trakt was supported until
   November 2026 and removed in favour of the self-hosted account.
+- Scores beyond IMDb's. Letterboxd and Rotten Tomatoes scores came from the user's own
+  MDBList key until November 2026; they were removed, and the saved key is deleted at launch.
 - Promised App Store distribution, notarization or Intel Mac support.
 - A server-side recommendation engine (recommendations are ranked on the device
   from TMDB's suggestions) or Letterboxd account integration.
 - Interface localization is not scheduled; the UI is currently English.
 
-Watch Later/custom-list sync is **not implemented**. Any expansion of the
-current sync contract needs an explicit scope decision, not an unchecked
-feature claim.
+Any expansion of the current sync contract needs an explicit scope decision, not an
+unchecked feature claim.
 
 ## Help move this forward
 

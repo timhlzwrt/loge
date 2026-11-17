@@ -116,15 +116,6 @@ from your [TMDB API settings](https://www.themoviedb.org/settings/api). Use the
 read access token, not the API key. loge checks it before storing it in Keychain.
 On Apple TV, your phone's Apple TV Remote keyboard can enter the token.
 
-### MDBList scores
-
-Open **Settings → MDBList → Connect MDBList** and paste the **API key** from
-[MDBList's preferences](https://mdblist.com/preferences/), under API Access. A free
-account's key allows 1,000 requests a day, one for each title opened; a title's scores
-are then kept for six hours. loge checks the key before storing it in Keychain. With
-it, a title's page shows the Letterboxd score and Rotten Tomatoes' Tomatometer beside
-the IMDb rating.
-
 ## Troubleshooting
 
 - **Catalogs load but no sources appear:** install a playback addon, confirm it
