@@ -95,7 +95,7 @@ struct SkipTimingClientTests {
             _ = try await task.value
             Issue.record("Cancelled lookup returned timings")
         } catch {
-            #expect(error is CancellationError || (error as? URLError)?.code == .cancelled)
+            #expect(error is CancellationError)
         }
     }
 }

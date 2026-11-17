@@ -4,6 +4,7 @@ import copy
 import hashlib
 import hmac
 import json
+import logging
 import os
 import re
 import secrets
@@ -160,6 +161,8 @@ class Service:
                 fail(410, "Invitation is no longer available.")
             requires_key = any(self.store.get("document:" + owner["id"] + ":" + item) is not None
                                                     for item in DOCUMENTS)
+            # Guards against data loss, not access: a device without the key would sync over
+            # data it can't decrypt. The invitation code is what grants access.
             if requires_key and not has_recovery_key:
                 fail(428, "This account already has encrypted data. Enter its recovery key or use Add My Device on a connected device.")
             document["consumed"] = True
@@ -318,6 +321,11 @@ def validate_envelope(value):
         fail(400, "Encrypted payload is invalid.")
 
 
+# Uvicorn runs without its access log, so admin changes are recorded here: what was done
+# and to which record, never a token or code.
+audit_log = logging.getLogger("uvicorn.error")
+
+
 def create_app(store=None, mode=None, admin_secret=None, admin_login=None, changes_seconds=CHANGES_SECONDS):
     store = store or CouchStore(os.environ["SYNC_DATABASE_URL"], os.environ["SYNC_DATABASE_CREDENTIAL_FILE"])
     service = Service(store)
@@ -429,6 +437,7 @@ def create_app(store=None, mode=None, admin_secret=None, admin_login=None, chang
             administrator(request)
             value = await body(request)
             result = await run_in_threadpool(service.create_account, text(value.get("displayName"), "name"))
+            audit_log.info("admin: created account %s", result["accountID"])
             enrollment_code(result["invitation"])
             return result
 
@@ -439,6 +448,7 @@ def create_app(store=None, mode=None, admin_secret=None, admin_login=None, chang
             if not isinstance(value.get("enabled"), bool):
                 fail(400, "Choose an account state.")
             await run_in_threadpool(service.update, "account:" + checked(account_id), lambda document: document.update(enabled=value["enabled"]))
+            audit_log.info("admin: %s account %s", "enabled" if value["enabled"] else "disabled", account_id)
             return {"ok": True}
 
         @app.post("/admin/accounts/{account_id}/invitation")
@@ -467,6 +477,7 @@ def create_app(store=None, mode=None, admin_secret=None, admin_login=None, chang
         def revoke(identifier: str, request: Request):
             administrator(request)
             service.update("invitation:" + checked(identifier, RECORD_ID), lambda document: document.update(revoked=True))
+            audit_log.info("admin: revoked access %s", identifier)
             return {"ok": True}
         return app
 

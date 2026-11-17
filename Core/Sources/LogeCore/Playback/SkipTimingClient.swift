@@ -34,7 +34,13 @@ public struct SkipTimingClient: Sendable {
         guard let url = Self.requestURL(for: item, duration: duration) else { return [] }
         var request = URLRequest(url: url)
         request.timeoutInterval = 5
-        let (data, response) = try await session.data(for: request)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch let error as URLError where error.code == .cancelled {
+            throw CancellationError()
+        }
         try Task.checkCancellation()
         guard let response = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
         if response.statusCode == 404 { return [] }

@@ -72,7 +72,7 @@ struct TMDBTitleView: View {
             do {
                 let imdbID = try await tmdb.imdbID(tmdbID: title.tmdbID, type: title.type)
                 try Task.checkCancellation()
-                if let imdbID, imdbID.wholeMatch(of: /tt\d+/) != nil {
+                if let imdbID, MediaType.isIMDbTitle(imdbID) {
                     state = .loaded(MetaPreview(
                         id: imdbID, type: title.type, name: title.name, poster: title.posterURL,
                         releaseInfo: title.releaseDate.map { String($0.prefix(4)) },

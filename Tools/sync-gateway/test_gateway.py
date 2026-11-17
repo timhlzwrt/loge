@@ -191,7 +191,9 @@ class GatewayTests(unittest.TestCase):
     def test_revoke_device_and_disable_account_take_effect_immediately(self):
         account, authorization = self.account('A')
         self.assertEqual(self.public.get('/v2/me', headers=authorization).status_code, 200)
-        self.assertEqual(self.admin.patch('/admin/accounts/' + account['accountID'], headers=self.admin_headers, json={'enabled': False}).status_code, 200)
+        with self.assertLogs('uvicorn.error', 'INFO') as logged:
+            self.assertEqual(self.admin.patch('/admin/accounts/' + account['accountID'], headers=self.admin_headers, json={'enabled': False}).status_code, 200)
+        self.assertEqual(logged.output, ['INFO:uvicorn.error:admin: disabled account ' + account['accountID']])
         self.assertEqual(self.public.get('/v2/me', headers=authorization).status_code, 401)
         self.admin.patch('/admin/accounts/' + account['accountID'], headers=self.admin_headers, json={'enabled': True})
         self.assertEqual(self.public.delete('/v2/devices/' + account['deviceID'], headers=authorization).status_code, 200)

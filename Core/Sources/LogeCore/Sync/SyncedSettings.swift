@@ -36,6 +36,11 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
         self.homeLayout = homeLayout
     }
 
+    /// The preferences stored in `defaults`, without the addons, which belong to `AddonStore`.
+    public init(preferencesIn defaults: UserDefaults) {
+        self.init(addonURLs: [], defaults: defaults)
+    }
+
     /// Unset preferences read as their defaults, so a fresh device and the server agree.
     init(addonURLs: [String], defaults: UserDefaults) {
         let fallback = Self()

@@ -54,8 +54,8 @@ public struct AddonManifest: Codable, Sendable, Equatable {
 
     /// Whether this addon answers `resource` requests for an item, honouring
     /// per-resource type and ID-prefix restrictions over the manifest-wide ones.
-    public func provides(_ resource: String, type: String, id: String) -> Bool {
-        guard let declared = resources.first(where: { $0.name == resource }) else { return false }
+    public func provides(_ resource: AddonResource, type: String, id: String) -> Bool {
+        guard let declared = resources.first(where: { $0.name == resource.rawValue }) else { return false }
         guard (declared.types ?? types).contains(type) else { return false }
         guard let prefixes = declared.idPrefixes ?? idPrefixes else { return true }
         return prefixes.contains { id.hasPrefix($0) }
@@ -87,4 +87,9 @@ public struct AddonManifest: Codable, Sendable, Equatable {
             )
         }
     }
+}
+
+/// The resources the app asks addons for. A manifest may declare others, which keep their names.
+public enum AddonResource: String, Sendable {
+    case catalog, meta, stream, subtitles
 }

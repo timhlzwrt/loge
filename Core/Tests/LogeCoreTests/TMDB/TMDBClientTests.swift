@@ -270,7 +270,7 @@ struct TMDBClientTests {
             try await client("cancelled").validate()
             Issue.record("Cancelled request returned success")
         } catch {
-            #expect(error is CancellationError || (error as? URLError)?.code == .cancelled)
+            #expect(error is CancellationError)
         }
         let task = Task { try await client().details(imdbID: "tt0000042", type: "movie") }
         task.cancel()
@@ -278,7 +278,7 @@ struct TMDBClientTests {
             _ = try await task.value
             Issue.record("Cancelled lookup returned details")
         } catch {
-            #expect(error is CancellationError || (error as? URLError)?.code == .cancelled)
+            #expect(error is CancellationError)
         }
     }
 }

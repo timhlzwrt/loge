@@ -36,7 +36,7 @@ struct SubtitlesMenu: View {
     @Binding var isOpen: Bool
     @Binding var adjustingTiming: MPVPlayer.Track.Kind?
 
-    @AppStorage(PlaybackPreferences.subtitleScaleKey) private var subtitleScale = 1.0
+    @AppStorage(SyncedSettings.Key.subtitleScale) private var subtitleScale = SyncedSettings().subtitleScale
 
     var body: some View {
         let subtitles = player.distinctTracks(.sub)

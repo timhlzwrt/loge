@@ -37,7 +37,7 @@ public struct CatalogSource: Sendable, Hashable, Identifiable {
             extra.append((name: "genre", value: genre))
         }
         if skip > 0 { extra.append((name: "skip", value: String(skip))) }
-        let url = client.resourceURL("catalog", type: catalog.type, id: catalog.id, extra: extra)
+        let url = client.resourceURL(.catalog, type: catalog.type, id: catalog.id, extra: extra)
         let fetched = try await CatalogCache.shared.metas(
             for: url, persist: search == nil && skip == 0,
             load: { try await client.data(from: url) },
@@ -79,9 +79,21 @@ public struct StreamProvider: Sendable, Identifiable {
 
     public var id: String { manifestURL }
 
+    private struct CacheKey: Hashable, Sendable {
+        let manifestURL: String
+        let type: String
+        let id: String
+    }
+    /// Aggregating addons such as AIOStreams take seconds to answer, so the details screen
+    /// asks ahead and the sources screen joins that request, finished or not. Debrid links
+    /// stay valid much longer, but a list this old may miss newly cached releases. Empty lists
+    /// aren't kept: aggregators answer with none when their upstream times out.
+    private static let cache = ResponseCache<CacheKey, [StreamSource]>(capacity: 64, lifetime: .seconds(600)) { !$0.isEmpty }
+
     public func streams(type: String, id: String) async throws -> [StreamSource] {
         let manifestURL = manifestURL
-        return try await StreamCache.shared.streams(manifestURL: manifestURL, type: type, id: id) {
+        let key = CacheKey(manifestURL: manifestURL, type: type, id: id)
+        return try await Self.cache.value(for: key) {
             try await AddonClient(manifestURL: manifestURL).streams(type: type, id: id)
         }
     }
@@ -118,18 +130,18 @@ extension [InstalledAddon] {
 
     /// User-installed metadata providers take priority over built-in IMDb metadata.
     public func metaClient(type: String, id: String) -> AddonClient? {
-        if let installed = first(where: { $0.manifest?.provides("meta", type: type, id: id) == true }),
+        if let installed = first(where: { $0.manifest?.provides(.meta, type: type, id: id) == true }),
            let client = try? AddonClient(manifestURL: installed.manifestURL) {
             return client
         }
-        guard type == MediaType.movie || type == MediaType.series, id.hasPrefix("tt") else { return nil }
+        guard type == MediaType.movie || type == MediaType.series, MediaType.isIMDbTitle(id) else { return nil }
         return try? AddonClient(manifestURL: AddonStore.cinemetaURL)
     }
 
     /// Addons that serve streams for this item, in the user's order.
     public func streamProviders(type: String, id: String) -> [StreamProvider] {
         compactMap { addon in
-            guard addon.manifest?.provides("stream", type: type, id: id) == true else { return nil }
+            guard addon.manifest?.provides(.stream, type: type, id: id) == true else { return nil }
             return StreamProvider(manifestURL: addon.manifestURL, name: addon.displayName)
         }
     }
@@ -137,7 +149,7 @@ extension [InstalledAddon] {
     /// Addons that serve subtitles for this item, in the user's order.
     public func subtitleProviders(type: String, id: String) -> [SubtitleProvider] {
         compactMap { addon in
-            guard addon.manifest?.provides("subtitles", type: type, id: id) == true else { return nil }
+            guard addon.manifest?.provides(.subtitles, type: type, id: id) == true else { return nil }
             return SubtitleProvider(manifestURL: addon.manifestURL, name: addon.displayName)
         }
     }

@@ -406,8 +406,8 @@ private struct AddonRow: View {
     /// What the addon answers, then its host: "Streams · Subtitles · example.com".
     private var caption: String {
         let resources = Set(addon.manifest?.resources.map(\.name) ?? [])
-        let provides = [("stream", "Streams"), ("subtitles", "Subtitles"), ("catalog", "Catalogs"), ("meta", "Details")]
-            .filter { resources.contains($0.0) }
+        let provides = [(AddonResource.stream, "Streams"), (.subtitles, "Subtitles"), (.catalog, "Catalogs"), (.meta, "Details")]
+            .filter { resources.contains($0.0.rawValue) }
             .map(\.1)
         return (provides + [addon.host]).joined(separator: " · ")
     }

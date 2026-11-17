@@ -180,7 +180,7 @@ extension MetaPreview {
     /// Cinemeta's plain poster, and its title logo where the addon gives none, which the
     /// tvOS Home header shows for the focused title.
     var withCinemetaArtwork: MetaPreview {
-        guard id.hasPrefix("tt") else { return self }
+        guard MediaType.isIMDbTitle(id) else { return self }
         var meta = self
         meta.poster = "https://images.metahub.space/poster/small/\(id)/img"
         meta.logo = logo ?? "https://images.metahub.space/logo/medium/\(id)/img"

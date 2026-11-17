@@ -1,5 +1,6 @@
 #if os(tvOS)
 import SwiftUI
+import LogeCore
 
 /// The settings behind the Subtitles, Audio and More buttons on Apple TV, in a glass panel
 /// that rises above them, as the menus do from the same buttons on iPhone and Mac.
@@ -166,7 +167,7 @@ private struct TrackList: View {
 private struct SubtitleSizeStepper: View {
     let player: MPVPlayer
     let onInteract: () -> Void
-    @AppStorage(PlaybackPreferences.subtitleScaleKey) private var subtitleScale = 1.0
+    @AppStorage(SyncedSettings.Key.subtitleScale) private var subtitleScale = SyncedSettings().subtitleScale
 
     var body: some View {
         let sizes = PlaybackPreferences.subtitleScales

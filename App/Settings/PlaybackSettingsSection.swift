@@ -2,9 +2,9 @@ import LogeCore
 import SwiftUI
 
 struct PlaybackSettingsSection: View {
-    @AppStorage(PlaybackPreferences.audioKey) private var audioLanguage = PlaybackPreferences.defaultAudioLanguage
-    @AppStorage(PlaybackPreferences.subtitleKey) private var subtitleLanguage = ""
-    @AppStorage(PlaybackPreferences.maximumBitrateKey) private var maximumBitrate = PlaybackPreferences.defaultMaximumBitrate
+    @AppStorage(SyncedSettings.Key.audioLanguage) private var audioLanguage = SyncedSettings().audioLanguage
+    @AppStorage(SyncedSettings.Key.subtitleLanguage) private var subtitleLanguage = SyncedSettings().subtitleLanguage
+    @AppStorage(SyncedSettings.Key.maximumBitrate) private var maximumBitrate = SyncedSettings().maximumBitrate
 
     var body: some View {
         Section {

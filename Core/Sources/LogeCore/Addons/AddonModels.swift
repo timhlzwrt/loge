@@ -8,6 +8,11 @@ import Foundation
 public enum MediaType {
     public static let movie = "movie"
     public static let series = "series"
+
+    /// IMDb's title IDs, which Cinemeta and TMDB's lookup know titles by.
+    public static func isIMDbTitle(_ id: String) -> Bool {
+        id.wholeMatch(of: /tt\d+/) != nil
+    }
 }
 
 public struct MetaPreview: Codable, Sendable, Hashable, Identifiable {
@@ -227,7 +232,7 @@ public struct StreamSource: Codable, Sendable, Hashable {
 
     /// The source to continue a series with: the playable stream in the same binge group
     /// as the one last watched, which addons use to mean "same release, same quality".
-    public static func continuing(bingeGroup: String?, in streams: [StreamSource]) -> StreamSource? {
+    static func continuing(bingeGroup: String?, in streams: [StreamSource]) -> StreamSource? {
         guard let bingeGroup else { return nil }
         return streams.first { $0.behaviorHints?.bingeGroup == bingeGroup && $0.playbackURL != nil }
     }

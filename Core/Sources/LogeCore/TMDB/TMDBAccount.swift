@@ -31,54 +31,49 @@ public final class TMDBAccount {
     @ObservationIgnored private let session: URLSession
     @ObservationIgnored private let storage: TokenStorage
     @ObservationIgnored private var connectionID = UUID()
-    @ObservationIgnored private var detailsCache = TMDBResponseCache<TMDBTitleKey, TMDBDetails>(capacity: 128, lifetime: .seconds(1_800))
-    @ObservationIgnored private var peopleCache = TMDBResponseCache<Int, TMDBPersonDetails>(capacity: 32, lifetime: .seconds(3_600))
-    @ObservationIgnored private var identityCache = TMDBResponseCache<TMDBIdentityKey, String?>(capacity: 256, lifetime: .seconds(3_600))
-    @ObservationIgnored private var collectionCache = TMDBResponseCache<Int, TMDBCollection>(capacity: 32, lifetime: .seconds(3_600))
+    @ObservationIgnored private var caches = MetadataCaches()
 
-    public var client: TMDBClient? {
+    private struct MetadataCaches {
+        let details = ResponseCache<TMDBTitleKey, TMDBDetails>(capacity: 128, lifetime: .seconds(1_800))
+        let people = ResponseCache<Int, TMDBPersonDetails>(capacity: 32, lifetime: .seconds(3_600))
+        let identities = ResponseCache<TMDBIdentityKey, String?>(capacity: 256, lifetime: .seconds(3_600))
+        let collections = ResponseCache<Int, TMDBCollection>(capacity: 32, lifetime: .seconds(3_600))
+    }
+
+    var client: TMDBClient? {
         _ = revision
         return readAccessToken.map { TMDBClient(readAccessToken: $0, session: session) }
     }
 
     public func details(imdbID: String, type: String) async throws -> TMDBDetails {
-        guard let client else { throw TMDBError.unauthorized }
-        let revision = revision
-        let details = try await detailsCache.value(for: TMDBTitleKey(imdbID: imdbID, type: type)) {
-            try await client.details(imdbID: imdbID, type: type)
+        try await cached(in: caches.details, TMDBTitleKey(imdbID: imdbID, type: type)) {
+            try await $0.details(imdbID: imdbID, type: type)
         }
-        try Task.checkCancellation()
-        guard self.revision == revision else { throw CancellationError() }
-        return details
     }
 
     public func personDetails(id: Int) async throws -> TMDBPersonDetails {
-        guard let client else { throw TMDBError.unauthorized }
-        let revision = revision
-        let person = try await peopleCache.value(for: id) { try await client.person(id: id) }
-        try Task.checkCancellation()
-        guard self.revision == revision else { throw CancellationError() }
-        return person
+        try await cached(in: caches.people, id) { try await $0.person(id: id) }
     }
 
     public func collection(id: Int) async throws -> TMDBCollection {
-        guard let client else { throw TMDBError.unauthorized }
-        let revision = revision
-        let collection = try await collectionCache.value(for: id) { try await client.collection(id: id) }
-        try Task.checkCancellation()
-        guard self.revision == revision else { throw CancellationError() }
-        return collection
+        try await cached(in: caches.collections, id) { try await $0.collection(id: id) }
     }
 
     public func imdbID(tmdbID: Int, type: String) async throws -> String? {
+        try await cached(in: caches.identities, TMDBIdentityKey(tmdbID: tmdbID, type: type)) {
+            try await $0.imdbID(tmdbID: tmdbID, type: type)
+        }
+    }
+
+    /// A response that arrives after the token changed belongs to the old one, so it's dropped.
+    private func cached<Key, Value>(in cache: ResponseCache<Key, Value>, _ key: Key,
+                                    fetch: @escaping @Sendable (TMDBClient) async throws -> Value) async throws -> Value {
         guard let client else { throw TMDBError.unauthorized }
         let revision = revision
-        let imdbID = try await identityCache.value(for: TMDBIdentityKey(tmdbID: tmdbID, type: type)) {
-            try await client.imdbID(tmdbID: tmdbID, type: type)
-        }
+        let value = try await cache.value(for: key) { try await fetch(client) }
         try Task.checkCancellation()
         guard self.revision == revision else { throw CancellationError() }
-        return imdbID
+        return value
     }
 
     public convenience init(session: URLSession = .shared) {
@@ -167,10 +162,7 @@ public final class TMDBAccount {
 
     private func resetMetadataCaches() {
         // Swapping instances isolates in-flight responses from the next credential revision.
-        detailsCache = TMDBResponseCache(capacity: 128, lifetime: .seconds(1_800))
-        peopleCache = TMDBResponseCache(capacity: 32, lifetime: .seconds(3_600))
-        identityCache = TMDBResponseCache(capacity: 256, lifetime: .seconds(3_600))
-        collectionCache = TMDBResponseCache(capacity: 32, lifetime: .seconds(3_600))
+        caches = MetadataCaches()
     }
 
     private static let service = "li.tjh.MediaApp.tmdb"
@@ -204,57 +196,4 @@ private struct TMDBTitleKey: Hashable, Sendable {
 private struct TMDBIdentityKey: Hashable, Sendable {
     var tmdbID: Int
     var type: String
-}
-
-/// Bounded process memory only. A cancelled screen cannot cancel the shared
-/// request or discard its result while another screen or prefetch still needs it.
-actor TMDBResponseCache<Key: Hashable & Sendable, Value: Sendable> {
-    private struct Entry {
-        var value: Value
-        var expiresAt: ContinuousClock.Instant
-    }
-    private struct Flight {
-        var id: UUID
-        var task: Task<Value, Error>
-    }
-    private var entries: [Key: Entry] = [:]
-    private var inFlight: [Key: Flight] = [:]
-    private let capacity: Int
-    private let lifetime: Duration
-
-    init(capacity: Int, lifetime: Duration) {
-        self.capacity = max(1, capacity)
-        self.lifetime = lifetime
-    }
-
-    func value(for key: Key, fetch: @escaping @Sendable () async throws -> Value) async throws -> Value {
-        try Task.checkCancellation()
-        if let entry = entries[key], entry.expiresAt > ContinuousClock.now { return entry.value }
-        entries[key] = nil
-        let flight: Flight
-        if let pending = inFlight[key] {
-            flight = pending
-        } else {
-            flight = Flight(id: UUID(), task: Task { try await fetch() })
-            inFlight[key] = flight
-        }
-        do {
-            let value = try await flight.task.value
-            if inFlight[key]?.id == flight.id {
-                inFlight[key] = nil
-                let now = ContinuousClock.now
-                entries = entries.filter { $0.value.expiresAt > now }
-                entries[key] = Entry(value: value, expiresAt: now + lifetime)
-                if entries.count > capacity, let oldest = entries.min(by: { $0.value.expiresAt < $1.value.expiresAt })?.key {
-                    entries[oldest] = nil
-                }
-            }
-            // Store a successful shared response even if this particular waiter left.
-            try Task.checkCancellation()
-            return value
-        } catch {
-            if inFlight[key]?.id == flight.id { inFlight[key] = nil }
-            throw error
-        }
-    }
 }

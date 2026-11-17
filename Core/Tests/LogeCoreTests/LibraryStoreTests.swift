@@ -399,6 +399,9 @@ struct LibraryMarkingTests {
         #expect(StreamSource.continuing(bingeGroup: "x|1080p", in: streams)?.url == "https://a/2")
         #expect(StreamSource.continuing(bingeGroup: "x|4k", in: streams) == nil)
         #expect(StreamSource.continuing(bingeGroup: nil, in: streams) == nil)
+        // Up Next falls back to the first playable source, never the torrent-only one.
+        #expect(SourceSelection.next(afterBingeGroup: "x|1080p", in: streams)?.url == "https://a/2")
+        #expect(SourceSelection.next(afterBingeGroup: "x|4k", in: streams)?.url == "https://a/1")
     }
 
     @Test func readsCatalogGenresAndPaging() throws {

@@ -184,9 +184,9 @@ public struct StreamDetails: Sendable, Equatable {
 
     /// "HEVC · Dolby Vision · TrueHD Atmos 7.1": how the file will look and sound. Only the
     /// best dynamic range is named, since the others are its fallbacks.
-    public var summary: String? {
+    public func summary(includingDynamicRange: Bool = true) -> String? {
         let audio = audio.isEmpty ? nil : audio.joined(separator: " ")
-        let kept = [codec, dynamicRange.first, audio].compactMap { $0 }
+        let kept = [codec, includingDynamicRange ? dynamicRange.first : nil, audio].compactMap { $0 }
         return kept.isEmpty ? nil : kept.joined(separator: " · ")
     }
 

@@ -16,9 +16,8 @@ enum NextEpisode {
             try await AddonClient(manifestURL: providerURL).streams(type: item.type, id: video.id),
             maximumBitrate: PlaybackPreferences.maximumBitrate
         ) { StreamDetails($0, runtime: runtime) }
-        guard let stream = StreamSource.continuing(bingeGroup: current.bingeGroup, in: streams)
-            ?? streams.first(where: { $0.playbackURL != nil }),
-            let url = stream.playbackURL
+        guard let stream = SourceSelection.next(afterBingeGroup: current.bingeGroup, in: streams),
+              let url = stream.playbackURL
         else { return nil }
         // Found a minute before it's offered, so the addon has resolved the link by Play Now.
         StreamWarmup.shared.warm(stream)

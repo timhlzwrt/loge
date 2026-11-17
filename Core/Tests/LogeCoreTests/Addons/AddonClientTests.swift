@@ -25,14 +25,14 @@ struct AddonClientTests {
     }
 
     @Test func buildsResourceURLs() {
-        #expect(client.resourceURL("meta", type: "movie", id: "tt0111161").absoluteString
+        #expect(client.resourceURL(.meta, type: "movie", id: "tt0111161").absoluteString
             == "https://addon.example/config123/meta/movie/tt0111161.json")
-        #expect(client.resourceURL("stream", type: "series", id: "tt0903747:1:1").absoluteString
+        #expect(client.resourceURL(.stream, type: "series", id: "tt0903747:1:1").absoluteString
             == "https://addon.example/config123/stream/series/tt0903747%3A1%3A1.json")
     }
 
     @Test func encodesCatalogExtras() {
-        let url = client.resourceURL("catalog", type: "movie", id: "top", extra: [
+        let url = client.resourceURL(.catalog, type: "movie", id: "top", extra: [
             (name: "search", value: "the office & co"),
             (name: "skip", value: "100"),
         ])
@@ -45,7 +45,7 @@ struct AddonClientTests {
         let client = try AddonClient(manifestURL: manifestURL)
 
         #expect(client.manifestURL == manifestURL)
-        #expect(client.resourceURL("meta", type: "movie", id: "tt0111161").absoluteString
+        #expect(client.resourceURL(.meta, type: "movie", id: "tt0111161").absoluteString
             == "https://addon.example/config%2Fpart%3Fvalue%25/meta/movie/tt0111161.json")
     }
 
@@ -54,12 +54,12 @@ struct AddonClientTests {
         let client = try AddonClient(manifestURL: manifestURL)
 
         #expect(client.manifestURL == manifestURL)
-        #expect(client.resourceURL("stream", type: "series", id: "tt0903747:1:1").absoluteString
+        #expect(client.resourceURL(.stream, type: "series", id: "tt0903747:1:1").absoluteString
             == "https://addon.example/config/stream/series/tt0903747%3A1%3A1.json?token=example%2Fvalue#install")
     }
 
     @Test func passesTheFilenameToSubtitleAddons() {
-        let url = client.resourceURL("subtitles", type: "movie", id: "tt0111161", extra: [
+        let url = client.resourceURL(.subtitles, type: "movie", id: "tt0111161", extra: [
             (name: "filename", value: "Example.Movie.2024.1080p.mkv"),
         ])
         #expect(url.absoluteString
@@ -175,14 +175,18 @@ struct AddonClientTests {
         await #expect(throws: AddonError.unavailable(.notConnectedToInternet)) { try await offline.manifest() }
         let garbage = try AddonClient(manifestURL: "https://garbage.example/manifest.json", session: session)
         await #expect(throws: AddonError.invalidResponse) { try await garbage.streams(type: "movie", id: "tt1") }
+        // Screens tell a request they abandoned from a failure by this type alone.
+        let cancelled = try AddonClient(manifestURL: "https://cancelled.example/manifest.json", session: session)
+        await #expect(throws: CancellationError.self) { try await cancelled.manifest() }
     }
 }
 
 private final class AddonFailureProtocol: StubURLProtocol, @unchecked Sendable {
     override func startLoading() {
         guard let url = request.url else { return }
-        if url.host() == "offline.example" {
-            client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
+        if url.host() == "offline.example" || url.host() == "cancelled.example" {
+            let code: URLError.Code = url.host() == "offline.example" ? .notConnectedToInternet : .cancelled
+            client?.urlProtocol(self, didFailWithError: URLError(code))
             return
         }
         respond(200, body: Data("<html>".utf8))
