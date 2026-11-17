@@ -12,7 +12,6 @@ struct LogeApp: App {
     @State private var addonStore: AddonStore
     @State private var library: LibraryStore
     @State private var tmdb: TMDBAccount
-    @State private var mdblist: MDBListAccount
     @State private var playback: PlaybackSession
     @State private var accountSync: AccountSync
     @State private var schedule = EpisodeSchedule()
@@ -35,19 +34,15 @@ struct LogeApp: App {
         // UI checks use a temporary file and memory-only account; no credential enters launch logs or Keychain.
         if ProcessInfo.processInfo.arguments.contains("--discovery-ui-test") {
             _tmdb = State(initialValue: TMDBAccount(temporaryReadAccessToken: "offline-ui-fixture", session: DiscoveryFixture.session))
-            _mdblist = State(initialValue: MDBListAccount(temporaryAPIKey: "offline-ui-fixture", session: DiscoveryFixture.session))
         } else if ProcessInfo.processInfo.arguments.contains("--tmdb-ui-test"),
            let path = ProcessInfo.processInfo.environment["TMDB_TEST_TOKEN_FILE"],
            let token = try? String(contentsOfFile: path, encoding: .utf8) {
             _tmdb = State(initialValue: TMDBAccount(temporaryReadAccessToken: token))
-            _mdblist = State(initialValue: MDBListAccount())
         } else {
             _tmdb = State(initialValue: TMDBAccount())
-            _mdblist = State(initialValue: MDBListAccount())
         }
         #else
         _tmdb = State(initialValue: TMDBAccount())
-        _mdblist = State(initialValue: MDBListAccount())
         #endif
         let defaults: UserDefaults
         #if DEBUG
@@ -57,6 +52,7 @@ struct LogeApp: App {
         defaults = .standard
         #endif
         RetiredTraktData.remove()
+        RetiredMDBListKey.remove()
         SyncedSettings.migrateSourceSizeLimit()
         let addonStore = AddonStore(defaults: defaults)
         let library = LibraryStore(defaults: defaults)
@@ -109,7 +105,6 @@ struct LogeApp: App {
                 .environment(library)
                 .environment(playback)
                 .environment(tmdb)
-                .environment(mdblist)
                 .environment(accountSync)
                 .environment(schedule)
                 .preferredColorScheme(.dark)

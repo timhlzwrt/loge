@@ -6,9 +6,9 @@ identifier so existing installations keep their data.
 
 ## Application and data flow
 
-`App/LogeApp.swift` creates seven observable, main-actor owners and injects them
+`App/LogeApp.swift` creates six observable, main-actor owners and injects them
 through the SwiftUI environment: `AddonStore`, `LibraryStore`, `EpisodeSchedule`,
-`PlaybackSession`, `TMDBAccount`, `MDBListAccount` and `AccountSync`. Each browsing tab has its own
+`PlaybackSession`, `TMDBAccount` and `AccountSync`. Each browsing tab has its own
 navigation stack. Movies, series, catalog grids and source lists use typed
 navigation destinations.
 
@@ -75,7 +75,7 @@ navigation destinations.
   recent searches.
 - `App/Settings`: addon installation/order/removal, Home's shelves, playback preferences,
   setup copies (Share Setup on iPhone, iPad and Mac; Import Setup everywhere), self-hosted
-  sync, the TMDB and MDBList connections and the Mac updater.
+  sync, the TMDB connection and the Mac updater.
 
 The shared visual language lives in `App/Browse/Components`: charcoal canvas,
 white controls, artwork-led hierarchy, platform-specific `Metrics` and font
@@ -104,11 +104,8 @@ size, and take sources of unknown bitrate only when none fits. Manual choices ar
 unrestricted. See
 [playback performance](PLAYBACK_PERFORMANCE.md) for behavior and diagnostics.
 
-A title's page shows its scores behind each site's mark (`ScoresLine`): IMDb's from
-Cinemeta, and with an MDBList key the Letterboxd average (out of 5) and Rotten Tomatoes'
-Tomatometer, which neither site offers through an open API of its own. On iOS and Mac
-each score opens the title there: IMDb and Letterboxd by IMDb ID, Rotten Tomatoes by the
-address MDBList supplies. Elsewhere, such as Home, the IMDb score stays text with its
+A title's page shows Cinemeta's IMDb rating behind IMDb's mark (`ScoresLine`); on iOS
+and Mac it opens the title on IMDb. Elsewhere, such as Home, the IMDb score stays text with its
 ten-point scale. Home's shelves are managed
 discovery feeds, not recommendations inferred from viewing history.
 
@@ -117,7 +114,7 @@ discovery feeds, not recommendations inferred from viewing history.
 Library data, installed addon configuration and playback preferences use
 UserDefaults because tvOS may purge app files. Progress history is bounded to
 500 entries. Titles removed from Recently Watched are kept on the device only, and
-only while they still hide something. The TMDB token, MDBList key and sync credentials use Keychain. This means installed addon configuration is sensitive local
+only while they still hide something. The TMDB token and sync credentials use Keychain. This means installed addon configuration is sensitive local
 preference data, not Keychain-protected data.
 
 Never copy a configured stream-addon manifest URL into docs, logs, screenshots

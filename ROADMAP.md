@@ -26,8 +26,6 @@ release dates. This roadmap reflects the source as of **12 November 2026**.
   on a movie's page (TMDB).
 - [x] Arranged Home shelves (Settings → Home): hide, reorder, add installed addons'
   catalogs and reset, synced with the account's appearance settings.
-- [x] Letterboxd and Rotten Tomatoes scores beside the IMDb rating on a title's
-  page, with the user's own MDBList key.
 - [x] Optional encrypted self-hosted accounts with progress, watched state,
   addons and preferences; offline merging, the newest position winning, and a
   choice when a title was removed on one device and played on another.
@@ -123,6 +121,8 @@ scrolls first. Keep measured regressions separate from speculative rewrites.
 - Offline downloads, a torrent engine or built-in content hosting.
 - A default hosted sync backend or iCloud sync. Trakt was supported until
   November 2026 and removed in favour of the self-hosted account.
+- Scores beyond IMDb's. Letterboxd and Rotten Tomatoes scores came from the user's own
+  MDBList key until November 2026; they were removed, and the saved key is deleted at launch.
 - Promised App Store distribution, notarization or Intel Mac support.
 - A server-side recommendation engine (recommendations are ranked on the device
   from TMDB's suggestions) or Letterboxd account integration.

@@ -6,7 +6,6 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(AddonStore.self) private var store
     @Environment(TMDBAccount.self) private var tmdb
-    @Environment(MDBListAccount.self) private var mdblist
     @Environment(AccountSync.self) private var sync
     @AppStorage(Accent.storageKey) private var accent = Accent.white
     @AppStorage(HomeLayout.storageKey) private var homeLayout: Data?
@@ -33,11 +32,6 @@ struct SettingsView: View {
                 SettingsPage("TMDB") { TMDBSection() }
             } label: {
                 LabeledContent("TMDB", value: tmdb.isConfigured ? "Connected" : "Off")
-            }
-            NavigationLink {
-                SettingsPage("MDBList") { MDBListSection() }
-            } label: {
-                LabeledContent("MDBList", value: mdblist.isConfigured ? "Connected" : "Off")
             }
         }
 

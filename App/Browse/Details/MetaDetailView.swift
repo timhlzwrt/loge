@@ -7,7 +7,6 @@ struct MetaDetailView: View {
     @Environment(AddonStore.self) private var store
     @Environment(LibraryStore.self) private var library
     @Environment(TMDBAccount.self) private var tmdb
-    @Environment(MDBListAccount.self) private var mdblist
     @State private var state = LoadState.loading
     @State private var tmdbState = TMDBLoadState.disconnected
     @State private var loadAttempt = 0
@@ -15,9 +14,6 @@ struct MetaDetailView: View {
     /// What the TMDB details on screen were loaded for, so returning to the page keeps them.
     @State private var tmdbLoadedKey: TMDBLoadKey?
     @State private var collection: TMDBCollection?
-    @State private var scores: TitleScores?
-    /// Why the Letterboxd and Rotten Tomatoes scores are missing, when it's something to act on.
-    @State private var scoresFailure: String?
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
@@ -211,26 +207,6 @@ struct MetaDetailView: View {
             // it is rather than adding a third thing to retry.
             if let loaded = try? await tmdb.collection(id: id) { collection = loaded }
         }
-        .task(id: mdblist.revision) {
-            guard mdblist.isConfigured, isOnTMDB else {
-                scores = nil
-                scoresFailure = nil
-                return
-            }
-            do {
-                scores = try await mdblist.scores(imdbID: preview.id, type: preview.type)
-                scoresFailure = nil
-            } catch {
-                guard !Task.isCancelled else { return }
-                // A title MDBList doesn't have, or a moment without a connection, just leaves the
-                // IMDb rating on its own. A key that stopped working needs the user.
-                switch error as? MDBListError {
-                case .unauthorized: scoresFailure = "MDBList didn't accept the saved key. Check MDBList in Settings."
-                case .rateLimited: scoresFailure = "MDBList's requests for today are used up, so Letterboxd and Rotten Tomatoes scores are missing."
-                default: scoresFailure = nil
-                }
-            }
-        }
         // Stream addons such as AIOStreams take seconds to answer, so ask while the page is
         // being read; the sources screen picks up the same request.
         .task(id: play?.route.id) {
@@ -360,9 +336,6 @@ struct MetaDetailView: View {
             case .loaded:
                 EmptyView()
             }
-            if let scoresFailure {
-                Text(scoresFailure)
-            }
         }
         .font(.caption)
         .foregroundStyle(.secondary)
@@ -447,7 +420,7 @@ struct MetaDetailView: View {
     private func facts(meta: Meta?) -> some View {
         let info = meta?.infoLine ?? preview.infoLine
         let line = info.quiet
-        let scores = ScoresLine(id: preview.id, type: preview.type, imdbRating: info.rating, scores: scores)
+        let scores = ScoresLine(id: preview.id, imdbRating: info.rating)
         return ViewThatFits(in: .horizontal) {
             HStack(spacing: 14) {
                 line

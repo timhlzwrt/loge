@@ -137,13 +137,6 @@ final class FlowTests: XCTestCase {
         movie.tap()
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'IMDb '")).firstMatch
             .waitForExistence(timeout: 15))
-        let reviewLabel = NSPredicate(format: "label CONTAINS 'Letterboxd'")
-        let reviews = app.links.matching(reviewLabel).firstMatch
-        for _ in 0..<5 {
-            if reviews.exists && reviews.isHittable { break }
-            app.swipeUp()
-        }
-        XCTAssertTrue(reviews.exists || app.buttons.matching(reviewLabel).firstMatch.exists)
         screenshot("builtin-movie-ratings")
     }
 

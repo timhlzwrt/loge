@@ -354,11 +354,6 @@ private final class DiscoveryFixtureProtocol: URLProtocol, @unchecked Sendable {
                   }
                 }
                 """#
-        // MDBList. `URL.path` drops the trailing slash its routes end in.
-        case "/imdb/movie/tt0816692":
-            body = #"{"ratings":[{"source":"tomatoes","value":73,"url":"/m/interstellar_2014"},{"source":"letterboxd","value":4.4}]}"#
-        case "/imdb/movie/tt0468569":
-            body = #"{"ratings":[{"source":"tomatoes","value":94,"url":"/m/the_dark_knight"},{"source":"letterboxd","value":4.5}]}"#
         case "/3/find/tt0816692": body = #"{"movie_results":[{"id":157336}],"tv_results":[]}"#
         case "/3/find/tt0903747": body = #"{"movie_results":[],"tv_results":[{"id":1396}]}"#
         case "/3/find/tt0062622": body = #"{"movie_results":[],"tv_results":[]}"#
