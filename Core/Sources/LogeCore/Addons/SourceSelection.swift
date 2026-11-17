@@ -98,6 +98,12 @@ public enum SourceSelection {
             ?? StreamSource.continuing(bingeGroup: remembered.bingeGroup, in: streams)
     }
 
+    /// What Up Next plays among the addon's `streams`, already limited and ordered by
+    /// `automatic`: the same release as the episode before, else the first playable one.
+    public static func next(afterBingeGroup bingeGroup: String?, in streams: [StreamSource]) -> StreamSource? {
+        StreamSource.continuing(bingeGroup: bingeGroup, in: streams) ?? streams.first { $0.playbackURL != nil }
+    }
+
     /// What to try if `url` doesn't open: the same release first, then the others in the
     /// order given. Only a few, so a dead account doesn't spend minutes on every link.
     public static func fallbacks(for url: URL, bingeGroup: String?, among sources: [ListedSource]) -> [ListedSource] {

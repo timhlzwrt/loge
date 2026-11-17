@@ -75,7 +75,8 @@ struct StreamRow: View {
                             .layoutPriority(1)
                     }
                 }
-                if let summary = summary(details) {
+                // The dynamic range is already beside the title.
+                if let summary = details.summary(includingDynamicRange: false) {
                     Text(summary)
                         .font(summaryFont)
                         .foregroundStyle(.secondary)
@@ -131,17 +132,11 @@ struct StreamRow: View {
         return isCold ? marked + " · not cached" : marked
     }
 
-    /// Codec and audio; the dynamic range is already beside the title.
-    private func summary(_ details: StreamDetails) -> String? {
-        let audio = details.audio.isEmpty ? nil : details.audio.joined(separator: " ")
-        return [details.codec, audio].compactMap { $0 }.joined(separator: " · ").nilIfEmpty
-    }
-
     /// The release type, the resolution when that's all an addon says, or the addon's own
     /// name line for streams none of the tags fit.
     private var title: String {
         let details = entry.details
-        return details.releaseType ?? (details.summary != nil ? details.resolution?.label : nil)
+        return details.releaseType ?? (details.summary() != nil ? details.resolution?.label : nil)
             ?? entry.stream.cleanName?.components(separatedBy: .newlines).joined(separator: " ")
             ?? "Source"
     }
@@ -183,8 +178,4 @@ struct ListContainer<Content: View>: View {
         VStack(alignment: .leading, spacing: 24) { content }
         #endif
     }
-}
-
-extension String {
-    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

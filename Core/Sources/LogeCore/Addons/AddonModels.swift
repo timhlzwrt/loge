@@ -232,7 +232,7 @@ public struct StreamSource: Codable, Sendable, Hashable {
 
     /// The source to continue a series with: the playable stream in the same binge group
     /// as the one last watched, which addons use to mean "same release, same quality".
-    public static func continuing(bingeGroup: String?, in streams: [StreamSource]) -> StreamSource? {
+    static func continuing(bingeGroup: String?, in streams: [StreamSource]) -> StreamSource? {
         guard let bingeGroup else { return nil }
         return streams.first { $0.behaviorHints?.bingeGroup == bingeGroup && $0.playbackURL != nil }
     }

@@ -95,14 +95,14 @@ struct DataSourcesView: View {
 
             Section {
                 source("Cinemeta", "Catalogs, search, title details, artwork and IMDb ratings.",
-                       url: "https://www.stremio.com")
+                       url: URL(string: "https://www.stremio.com")!)
                 source("Letterboxd via Stremboxd", "Popular and all-time lists on Home and in genres.",
-                       url: "https://letterboxd.com")
+                       url: URL(string: "https://letterboxd.com")!)
             } header: { SettingsHeader("Titles") }
 
             Section {
                 source("TheIntroDB", "Intro, recap and credits timings for the skip buttons.",
-                       url: "https://theintrodb.org")
+                       url: URL(string: "https://theintrodb.org")!)
                 Text("Streams and subtitles come from the addons you install.")
                     .foregroundStyle(.secondary)
             } header: { SettingsHeader("Playback") }
@@ -111,7 +111,7 @@ struct DataSourcesView: View {
     }
 
     @ViewBuilder
-    private func source(_ name: String, _ detail: String, url: String) -> some View {
+    private func source(_ name: String, _ detail: String, url: URL) -> some View {
         let label = VStack(alignment: .leading, spacing: 4) {
             Text(name).foregroundStyle(.primary)
             Text(detail).font(.footnote).foregroundStyle(.secondary)
@@ -121,7 +121,7 @@ struct DataSourcesView: View {
         // tvOS can't open web links, and plain rows can't take focus to scroll; a button can.
         Button {} label: { label }
         #else
-        Link(destination: URL(string: url)!) { label }
+        Link(destination: url) { label }
         #endif
     }
 }

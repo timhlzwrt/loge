@@ -254,9 +254,9 @@ final class PlaybackSession {
         isLookingUpNext = false
         hasRememberedSource = false
         lastRecordedPosition = 0
-        let defaults = UserDefaults.standard
-        let audio = defaults.string(forKey: SyncedSettings.Key.audioLanguage) ?? SyncedSettings().audioLanguage
-        let subtitles = defaults.string(forKey: SyncedSettings.Key.subtitleLanguage) ?? SyncedSettings().subtitleLanguage
+        let preferences = SyncedSettings(preferencesIn: .standard)
+        let audio = preferences.audioLanguage
+        let subtitles = preferences.subtitleLanguage
         isOpeningFile = true
         needsEstimatedSeek = false
         estimatedResumeFraction = resumeEstimatedProgress
@@ -272,8 +272,7 @@ final class PlaybackSession {
         }
         externalSubtitles?.cancel()
         externalSubtitles = Task { await findSubtitles(for: request, preferring: subtitles) }
-        let scale = defaults.object(forKey: SyncedSettings.Key.subtitleScale) as? Double ?? SyncedSettings().subtitleScale
-        player.setSubtitleScale(scale)
+        player.setSubtitleScale(preferences.subtitleScale)
         player.load(
             request.url,
             headers: request.headers,

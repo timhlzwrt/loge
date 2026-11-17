@@ -140,6 +140,7 @@ public final class AccountSync {
     @ObservationIgnored private var generation = UUID()
     @ObservationIgnored private var observer: AccountSyncDefaultsObserver?
     @ObservationIgnored private var pending: Task<Void, Never>?
+    @ObservationIgnored private var pendingDeadline: ContinuousClock.Instant?
     @ObservationIgnored private var isCheckQueued = false
     @ObservationIgnored private var lastObservedSettings: SyncedSettings?
     @ObservationIgnored private var lastObservedProgress: PlaybackSyncSnapshot?
@@ -917,10 +918,15 @@ public final class AccountSync {
         schedule(after: deliberate ? 1 : isLive ? 2 : 15)
     }
 
+    /// Keeps the sooner of two deadlines, so a settings change isn't held back by
+    /// progress already waiting its 15 seconds.
     private func schedule(after seconds: Double) {
-        guard pending == nil else { return }
+        let deadline = ContinuousClock.now + .seconds(seconds)
+        if pending != nil, let pendingDeadline, pendingDeadline <= deadline { return }
+        pending?.cancel()
+        pendingDeadline = deadline
         pending = Task { [weak self] in
-            do { try await Task.sleep(for: .seconds(seconds)) } catch { return }
+            do { try await Task.sleep(until: deadline, clock: .continuous) } catch { return }
             guard let self else { return }
             self.pending = nil
             await self.sync()

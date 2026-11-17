@@ -36,10 +36,10 @@ struct AddonRoutingTests {
 
     @Test func providesRespectsTypesAndPrefixes() throws {
         let manifest = try #require(streams.manifest)
-        #expect(manifest.provides("stream", type: "series", id: "kitsu:123"))
-        #expect(!manifest.provides("stream", type: "series", id: "tmdb:123"))
-        #expect(!manifest.provides("stream", type: "channel", id: "tt123"))
-        #expect(!manifest.provides("meta", type: "movie", id: "tt123"))
+        #expect(manifest.provides(.stream, type: "series", id: "kitsu:123"))
+        #expect(!manifest.provides(.stream, type: "series", id: "tmdb:123"))
+        #expect(!manifest.provides(.stream, type: "channel", id: "tt123"))
+        #expect(!manifest.provides(.meta, type: "movie", id: "tt123"))
     }
 
     @Test func metaComesFromFirstCapableAddonInUserOrder() {

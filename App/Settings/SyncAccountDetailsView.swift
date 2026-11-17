@@ -92,7 +92,7 @@ struct SyncAccountDetailsView: View {
             Button("Disconnect", role: .destructive) {
                 actionError = nil
                 do { try sync.disconnect() }
-                catch { actionError = "Couldn't remove this connection from Keychain. Try again." }
+                catch { actionError = error.localizedDescription }
             }
         } message: {
             Text("This device returns to the library it used before connecting. Connecting again needs a new code.")

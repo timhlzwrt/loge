@@ -47,7 +47,7 @@ public struct AddonClient: Sendable {
     }
 
     public func catalog(type: String, id: String, extra: [(name: String, value: String)] = []) async throws -> [MetaPreview] {
-        try Self.decodeCatalog(try await data(from: resourceURL("catalog", type: type, id: id, extra: extra)))
+        try Self.decodeCatalog(try await data(from: resourceURL(.catalog, type: type, id: id, extra: extra)))
     }
 
     static func decodeCatalog(_ data: Data) throws -> [MetaPreview] {
@@ -60,7 +60,7 @@ public struct AddonClient: Sendable {
     }
 
     public func meta(type: String, id: String) async throws -> Meta {
-        let response: MetaResponse = try await fetch(resourceURL("meta", type: type, id: id))
+        let response: MetaResponse = try await fetch(resourceURL(.meta, type: type, id: id))
         // Cinemeta passes on some text HTML-escaped: "personal &amp; professional lives".
         var meta = response.meta
         meta.name = meta.name.decodingHTMLEntities
@@ -76,19 +76,19 @@ public struct AddonClient: Sendable {
     }
 
     public func streams(type: String, id: String) async throws -> [StreamSource] {
-        let response: StreamsResponse = try await fetch(resourceURL("stream", type: type, id: id))
+        let response: StreamsResponse = try await fetch(resourceURL(.stream, type: type, id: id))
         return response.streams.filter { $0.playbackURL != nil }
     }
 
     /// - Parameter filename: The video's file name, which addons use to rank matches.
     public func subtitles(type: String, id: String, filename: String? = nil) async throws -> [Subtitle] {
         let extra = filename.map { [(name: "filename", value: $0)] } ?? []
-        let response: SubtitlesResponse = try await fetch(resourceURL("subtitles", type: type, id: id, extra: extra))
+        let response: SubtitlesResponse = try await fetch(resourceURL(.subtitles, type: type, id: id, extra: extra))
         return response.subtitles
     }
 
-    func resourceURL(_ resource: String, type: String, id: String, extra: [(name: String, value: String)] = []) -> URL {
-        var path = [resource, Self.encode(type), Self.encode(id)].joined(separator: "/")
+    func resourceURL(_ resource: AddonResource, type: String, id: String, extra: [(name: String, value: String)] = []) -> URL {
+        var path = [resource.rawValue, Self.encode(type), Self.encode(id)].joined(separator: "/")
         if !extra.isEmpty {
             path += "/" + extra.map { "\(Self.encode($0.name))=\(Self.encode($0.value))" }.joined(separator: "&")
         }

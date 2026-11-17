@@ -657,3 +657,7 @@ struct SourcesView: View {
         SourceSelection.automatic(sources, maximumBitrate: maximumBitrate) { $0.details }
     }
 }
+
+extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
+}

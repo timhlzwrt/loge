@@ -18,7 +18,7 @@ struct StreamDetailsTests {
         #expect(details.releaseType == "Remux")
         #expect(details.size == Measurement(value: 58.2, unit: .gigabytes))
         #expect(details.isCached == true)
-        #expect(details.summary == "HEVC · Dolby Vision · TrueHD Atmos 7.1")
+        #expect(details.summary() == "HEVC · Dolby Vision · TrueHD Atmos 7.1")
     }
 
     @Test func readsATorrentioStyleWebRelease() {
@@ -67,7 +67,7 @@ struct StreamDetailsTests {
     @Test func leavesUnknownsEmpty() {
         let details = StreamDetails(text: "Debrid\nSome file")
         #expect(details.resolution == nil)
-        #expect(details.summary == nil)
+        #expect(details.summary() == nil)
         #expect(details.sizeLabel == nil)
         #expect(details.isCached == nil)
     }
@@ -85,7 +85,7 @@ struct StreamDetailsTests {
         #expect(details.resolution == .hd)
         #expect(details.releaseType == "WEB")
         #expect(details.audio == ["AAC", "2.0"])
-        #expect(details.summary == "AVC · AAC 2.0")
+        #expect(details.summary() == "AVC · AAC 2.0")
         #expect(StreamDetails(text: "1080p BluRay DTS5.1").audio == ["DTS", "5.1"])
         #expect(StreamDetails(text: "1080p DD5.1").audio == ["DD", "5.1"])
     }

@@ -37,7 +37,7 @@ public struct CatalogSource: Sendable, Hashable, Identifiable {
             extra.append((name: "genre", value: genre))
         }
         if skip > 0 { extra.append((name: "skip", value: String(skip))) }
-        let url = client.resourceURL("catalog", type: catalog.type, id: catalog.id, extra: extra)
+        let url = client.resourceURL(.catalog, type: catalog.type, id: catalog.id, extra: extra)
         let fetched = try await CatalogCache.shared.metas(
             for: url, persist: search == nil && skip == 0,
             load: { try await client.data(from: url) },
@@ -130,7 +130,7 @@ extension [InstalledAddon] {
 
     /// User-installed metadata providers take priority over built-in IMDb metadata.
     public func metaClient(type: String, id: String) -> AddonClient? {
-        if let installed = first(where: { $0.manifest?.provides("meta", type: type, id: id) == true }),
+        if let installed = first(where: { $0.manifest?.provides(.meta, type: type, id: id) == true }),
            let client = try? AddonClient(manifestURL: installed.manifestURL) {
             return client
         }
@@ -141,7 +141,7 @@ extension [InstalledAddon] {
     /// Addons that serve streams for this item, in the user's order.
     public func streamProviders(type: String, id: String) -> [StreamProvider] {
         compactMap { addon in
-            guard addon.manifest?.provides("stream", type: type, id: id) == true else { return nil }
+            guard addon.manifest?.provides(.stream, type: type, id: id) == true else { return nil }
             return StreamProvider(manifestURL: addon.manifestURL, name: addon.displayName)
         }
     }
@@ -149,7 +149,7 @@ extension [InstalledAddon] {
     /// Addons that serve subtitles for this item, in the user's order.
     public func subtitleProviders(type: String, id: String) -> [SubtitleProvider] {
         compactMap { addon in
-            guard addon.manifest?.provides("subtitles", type: type, id: id) == true else { return nil }
+            guard addon.manifest?.provides(.subtitles, type: type, id: id) == true else { return nil }
             return SubtitleProvider(manifestURL: addon.manifestURL, name: addon.displayName)
         }
     }
