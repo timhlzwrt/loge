@@ -128,7 +128,7 @@ Sideloadly/atvloadly); no paid developer account. MPVKit player, vendored with a
 video output. Addons are added as manifest URLs. Cross-device sync is the optional self-hosted
 account sync, never iCloud or a default hosted server; it carries progress, addons, playback
 preferences and Home's layout (one field, conflicts asked about); Trakt support was removed in November
-2026 (`RetiredTraktData` deletes its saved keys at launch), and the accent colour setting the
+2026, and the accent colour setting the
 same month: the app is always white. Sync is one person's devices only:
 the live shared setups between accounts were removed the same month for a one-time setup copy
 (`SetupCode`, `loge://setup#loge-setup-1:…`, base64url of deflated JSON; Share Setup on
@@ -236,6 +236,10 @@ keeps Movie/Series labels because it can mix both.
 
 ## Open
 
+- Removable once every device has launched a build from `claude/trim-features`: `RetiredMDBListKey`,
+  `LibraryStore.foldRetiredLists`, AccountSync's `RetiredGroups`/`formerlyShared`,
+  `SyncedSettings.migrateSourceSizeLimit` and the decoding of `maximumSourceGigabytes`, and the
+  gateway's retired `/v2/join` and `/v2/groups` routes and `groups: []`.
 - ROADMAP.md lists the remaining verification item (OS runtime smoke tests) and the proposed
   features; agree on scope before building any of them.
 - Cross-device sync: reviewed and fixed; proposed expansion (Watch Later)

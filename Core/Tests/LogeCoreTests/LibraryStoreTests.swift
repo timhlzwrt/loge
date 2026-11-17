@@ -61,17 +61,6 @@ struct LibraryStoreTests {
         #expect(store.estimatedFraction(for: movie.id) == nil)
     }
 
-    @Test func retiredDataIsNotLookedForAgainOnceRemoved() {
-        defaults.set(true, forKey: RetiredTraktData.removedKey)
-        defaults.set(true, forKey: AccountSync.retiredEndpointSyncRemovedKey)
-        defaults.set("user", forKey: "traktUsername")
-        defaults.set(Data(), forKey: "configurationSyncBaseline")
-        RetiredTraktData.remove(from: defaults)
-        AccountSync.removeRetiredEndpointSync(defaults: defaults)
-        #expect(defaults.string(forKey: "traktUsername") == "user")
-        #expect(defaults.data(forKey: "configurationSyncBaseline") != nil)
-    }
-
     @Test func continueWatchingShowsLatestEntryPerTitle() {
         let store = LibraryStore(defaults: defaults)
         store.record(episode(1, 1), position: 1000, duration: 2000, at: t0)

@@ -50,7 +50,6 @@ struct LogeApp: App {
         #else
         defaults = .standard
         #endif
-        RetiredTraktData.remove()
         RetiredMDBListKey.remove()
         SyncedSettings.migrateSourceSizeLimit()
         let addonStore = AddonStore(defaults: defaults)

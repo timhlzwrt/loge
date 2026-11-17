@@ -145,7 +145,7 @@ and run a single public gateway worker as documented in its guide.
 
 Builds before account sync offered a single encrypted `/configuration` document
 per server under **Advanced → Previous sync connection**. That connection has been
-removed; the app deletes its saved server login from Keychain. Connect an account
+removed. Connect an account
 instead and choose this device's setup when asked. To upgrade such a server, see
 the [gateway guide](../Tools/sync-gateway/README.md#upgrading-an-endpoint-sync-server).
 

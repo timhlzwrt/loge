@@ -136,7 +136,6 @@ public final class AccountSync {
     @ObservationIgnored private var lastObservedProgress: PlaybackSyncSnapshot?
 
     public convenience init(addons: AddonStore, library: LibraryStore, defaults: UserDefaults = .standard) {
-        Self.removeRetiredEndpointSync(defaults: defaults)
         self.init(addons: addons, library: library, defaults: defaults, storage: Self.keychainStorage, session: .shared)
     }
     public convenience init(addons: AddonStore, library: LibraryStore, defaults: UserDefaults = .standard,
@@ -770,20 +769,6 @@ public final class AccountSync {
             do throws(KeychainError) { try Keychain.remove(service: service, account: account) }
             catch { throw SyncError.keychain(error.status) }
         })
-    }
-
-    static let retiredEndpointSyncRemovedKey = "retiredEndpointSyncRemoved"
-
-    /// The single-user endpoint sync this replaced kept a server password and recovery key
-    /// in Keychain; remove them rather than leave secrets nothing reads. Marked done once that
-    /// worked, so later launches skip the Keychain call before the first frame.
-    static func removeRetiredEndpointSync(defaults: UserDefaults) {
-        guard !defaults.bool(forKey: retiredEndpointSyncRemovedKey) else { return }
-        defaults.removeObject(forKey: "configurationSyncBaseline")
-        defaults.removeObject(forKey: "configurationSyncDate")
-        guard (try? Keychain.remove(service: "li.tjh.MediaApp.configuration-sync", account: "connection")) != nil
-        else { return }
-        defaults.set(true, forKey: retiredEndpointSyncRemovedKey)
     }
 }
 
