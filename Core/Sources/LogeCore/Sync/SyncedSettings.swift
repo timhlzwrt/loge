@@ -13,6 +13,8 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
     public var subtitleScale: Double
     /// The highest bitrate, in Mbps, the app picks a source at by itself; 0 for no limit.
     public var maximumBitrate: Int
+    /// Sources marked as not cached are hidden and never picked by themselves.
+    public var cachedOnly: Bool
     public var homeLayout: HomeLayout
 
     /// The `UserDefaults` keys the app's settings screens bind to.
@@ -22,6 +24,7 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
         public static let subtitleScale = "subtitleScale"
         public static let maximumBitrate = "maximumBitrate"
         public static let combinesAddonSources = "combinesAddonSources"
+        public static let cachedOnly = "sourcesCachedOnly"
         /// The per-episode size limit the bitrate replaced.
         static let maximumSourceGigabytes = "maximumAutomaticSourceGigabytes"
         public static let homeLayout = HomeLayout.storageKey
@@ -34,7 +37,8 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
 
     public init(addonURLs: [String] = [], addonNames: [String: String] = [:], combinesAddonSources: Bool = false,
                 audioLanguage: String = "en", subtitleLanguage: String = "",
-                subtitleScale: Double = 1, maximumBitrate: Int = 100, homeLayout: HomeLayout = .default) {
+                subtitleScale: Double = 1, maximumBitrate: Int = 100, cachedOnly: Bool = false,
+                homeLayout: HomeLayout = .default) {
         self.addonURLs = addonURLs
         self.addonNames = addonNames
         self.combinesAddonSources = combinesAddonSources
@@ -42,6 +46,7 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
         self.subtitleLanguage = subtitleLanguage
         self.subtitleScale = subtitleScale
         self.maximumBitrate = maximumBitrate
+        self.cachedOnly = cachedOnly
         self.homeLayout = homeLayout
     }
 
@@ -60,6 +65,7 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
                   subtitleLanguage: defaults.string(forKey: Key.subtitleLanguage) ?? fallback.subtitleLanguage,
                   subtitleScale: defaults.object(forKey: Key.subtitleScale) as? Double ?? fallback.subtitleScale,
                   maximumBitrate: defaults.object(forKey: Key.maximumBitrate) as? Int ?? fallback.maximumBitrate,
+                  cachedOnly: defaults.bool(forKey: Key.cachedOnly),
                   homeLayout: HomeLayout(storedData: defaults.data(forKey: Key.homeLayout)))
     }
 
@@ -80,6 +86,7 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
         defaults.set(subtitleLanguage, forKey: Key.subtitleLanguage)
         defaults.set(subtitleScale, forKey: Key.subtitleScale)
         defaults.set(maximumBitrate, forKey: Key.maximumBitrate)
+        defaults.set(cachedOnly, forKey: Key.cachedOnly)
         defaults.set(homeLayout.storedData, forKey: Key.homeLayout)
     }
 
@@ -105,7 +112,7 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case addonURLs, addonNames, combinesAddonSources, audioLanguage, subtitleLanguage, subtitleScale, maximumBitrate,
-             maximumSourceGigabytes, accent, homeLayout
+             cachedOnly, maximumSourceGigabytes, accent, homeLayout
     }
 
     /// Setups saved or synced by versions before the bitrate limit carry the size limit
@@ -122,6 +129,8 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
                   subtitleScale: try container.decode(Double.self, forKey: .subtitleScale),
                   maximumBitrate: try container.decodeIfPresent(Int.self, forKey: .maximumBitrate)
                       ?? (gigabytes == 0 ? 0 : Self().maximumBitrate),
+                  // Missing before the sources could be limited to cached ones.
+                  cachedOnly: try container.decodeIfPresent(Bool.self, forKey: .cachedOnly) ?? false,
                   // Missing before Home could be arranged. A layout this version can't read at
                   // all is Home's default rather than a setup that can't be opened.
                   homeLayout: (try? container.decodeIfPresent(HomeLayout.self, forKey: .homeLayout)) ?? .default)
@@ -139,13 +148,15 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
         try container.encode(subtitleLanguage, forKey: .subtitleLanguage)
         try container.encode(subtitleScale, forKey: .subtitleScale)
         try container.encode(maximumBitrate, forKey: .maximumBitrate)
+        try container.encode(cachedOnly, forKey: .cachedOnly)
         try container.encode(maximumBitrate == 0 ? 0 : 50, forKey: .maximumSourceGigabytes)
         try container.encode("white", forKey: .accent)
         try container.encode(homeLayout, forKey: .homeLayout)
     }
 
     public enum Field: String, Codable, CaseIterable, Sendable {
-        case addonURLs, addonNames, combinesAddonSources, audioLanguage, subtitleLanguage, subtitleScale, maximumBitrate, homeLayout
+        case addonURLs, addonNames, combinesAddonSources, audioLanguage, subtitleLanguage, subtitleScale, maximumBitrate,
+             cachedOnly, homeLayout
     }
 
     public struct Merge: Sendable {
@@ -172,6 +183,7 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
         choose(\.subtitleLanguage, .subtitleLanguage)
         choose(\.subtitleScale, .subtitleScale)
         choose(\.maximumBitrate, .maximumBitrate)
+        choose(\.cachedOnly, .cachedOnly)
         choose(\.homeLayout, .homeLayout)
         return Merge(settings: result, conflicts: conflicts)
     }
@@ -189,6 +201,7 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
             result.subtitleLanguage = source.subtitleLanguage
             result.subtitleScale = source.subtitleScale
             result.maximumBitrate = source.maximumBitrate
+            result.cachedOnly = source.cachedOnly
         }
         if categories.contains(.appearance) { result.homeLayout = source.homeLayout }
         return result
@@ -205,6 +218,7 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
             case .subtitleLanguage: result.subtitleLanguage = source.subtitleLanguage
             case .subtitleScale: result.subtitleScale = source.subtitleScale
             case .maximumBitrate: result.maximumBitrate = source.maximumBitrate
+            case .cachedOnly: result.cachedOnly = source.cachedOnly
             case .homeLayout: result.homeLayout = source.homeLayout
             }
         }

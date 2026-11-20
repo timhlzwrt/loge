@@ -9,6 +9,11 @@ enum PlaybackPreferences {
         UserDefaults.standard.object(forKey: SyncedSettings.Key.maximumBitrate) as? Int ?? SyncedSettings().maximumBitrate
     }
 
+    /// Sources marked as not cached are hidden and never started by themselves.
+    static var cachedOnly: Bool {
+        UserDefaults.standard.bool(forKey: SyncedSettings.Key.cachedOnly)
+    }
+
     static let subtitleScales: [(name: String, scale: Double)] = Array(
         zip(["Small", "Normal", "Large", "Extra Large"], SyncedSettings.subtitleScales))
 

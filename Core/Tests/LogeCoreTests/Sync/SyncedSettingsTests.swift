@@ -54,6 +54,17 @@ struct SyncedSettingsTests {
         #expect(setup.current == merged.settings)
     }
 
+    @MainActor @Test func cachedOnlySyncsWithThePlaybackPreferences() throws {
+        let defaults = UserDefaults(suiteName: "SyncedSettingsTests-\(UUID().uuidString)")!
+        let settings = SyncedSettings(cachedOnly: true)
+        settings.writePreferences(to: defaults)
+        #expect(SyncedSettings(addonURLs: [], defaults: defaults).cachedOnly)
+        #expect(try JSONDecoder().decode(SyncedSettings.self, from: JSONEncoder().encode(settings)) == settings)
+        #expect(SyncedSettings().replacing(categories: [.playback], from: settings).cachedOnly)
+        var remote = SyncedSettings(); remote.cachedOnly = true
+        #expect(SyncedSettings.merged(base: SyncedSettings(), local: SyncedSettings(), remote: remote).settings.cachedOnly)
+    }
+
     @Test func encryptionUsesFreshNonceAndRejectsTamperingAndOtherVersions() throws {
         let cipher = try AccountSyncCipher(key: AccountSyncCipher.generateKey(), resource: "configuration")
         let settings = SyncedSettings(addonURLs: ["https://addon.example/synthetic-credential/manifest.json"])

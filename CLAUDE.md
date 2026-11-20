@@ -204,7 +204,9 @@ keeps Movie/Series labels because it can mix both.
   without following the redirect: Comet resolves its link on the first request (most of the
   time to the first frame) and keeps it an hour. Never a source marked uncached (that starts a
   debrid download), never the whole list; the player still opens the addon's URL, not a saved one.
-- The sources Filter's bitrate is the synced Maximum bitrate setting; audio and picture
+- The sources Filter's bitrate is the synced Maximum bitrate setting, and its Cached only the
+  synced `cachedOnly` (hides what an addon marks uncached: "[xx download]", ⏳, "uncached";
+  unmarked sources stay); both also limit what Play starts by itself. Audio and picture
   reset per list. `SyncedSettings` still writes the retired `maximumSourceGigabytes`
   (0 or 50) because older versions can't decode a setup without it; drop it once they're gone.
 - Resuming past a shorter source's end seeks to 30 s before it instead of finishing; opening
