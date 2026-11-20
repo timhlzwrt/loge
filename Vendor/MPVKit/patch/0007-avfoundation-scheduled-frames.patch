@@ -1,0 +1,85 @@
+diff --git a/video/out/vo_avfoundation.m b/video/out/vo_avfoundation.m
+index 81f4c95..03be465 100644
+--- a/video/out/vo_avfoundation.m
++++ b/video/out/vo_avfoundation.m
+@@ -740,8 +740,8 @@ static void flip_page(struct vo *vo)
+ {
+     struct priv *p = vo->priv;
+     
+-    // mpv calls draw_frame before waiting for the presentation deadline. Only
+-    // enqueue here, after that wait; paused redraws also pass through flip_page.
++    // mpv calls draw_frame before waiting for the presentation deadline. Frames
++    // without a scheduled time are enqueued here, after that wait.
+     if (p->pending_buffer) {
+         [p->displayLayer enqueueSampleBuffer:p->pending_buffer];
+         CFRelease(p->pending_buffer);
+@@ -830,6 +830,16 @@ static bool draw_frame(struct vo *vo, struct vo_frame *frame)
+         // Create and enqueue sample buffer
+         CMTimebaseRef timebase = [p->displayLayer controlTimebase];
+         CMTime presentationTime = timebase ? CMTimebaseGetTime(timebase) : kCMTimeInvalid;
++        // A moving frame gets the time mpv chose for it on the layer's clock and is
++        // handed over now, so the display shows it at the refresh it falls in however
++        // unevenly frames arrive. Shown on arrival instead, two frames reaching one
++        // refresh replaced each other: a skipped frame and a doubled one.
++        double rate = timebase ? CMTimebaseGetRate(timebase) : 0;
++        bool scheduled = rate > 0 && frame->pts > 0 && !frame->redraw && !frame->still;
++        if (scheduled) {
++            double ahead = MPMAX(frame->pts - mp_time_ns(), 0) / 1e9 * rate;
++            presentationTime = CMTimeAdd(presentationTime, CMTimeMakeWithSeconds(ahead, 1000000000));
++        }
+         
+         CMSampleTimingInfo info = {
+             .presentationTimeStamp = presentationTime,
+@@ -863,10 +873,9 @@ static bool draw_frame(struct vo *vo, struct vo_frame *frame)
+             return false;
+         }
+ 
+-        // mpv has already decided the frame is due. Showing it immediately also keeps
+-        // redraws visible while paused, when a stopped clock would give them the same
+-        // timestamp as the frame already on screen.
+-        {
++        // Redraws and still frames show immediately: while paused, a stopped clock
++        // would give them the same timestamp as the frame already on screen.
++        if (!scheduled) {
+             CFArrayRef attachments = CMSampleBufferGetSampleAttachmentsArray(buf, YES);
+             CFDictionarySetValue(
+                 (CFMutableDictionaryRef)CFArrayGetValueAtIndex(attachments, 0),
+@@ -875,7 +884,12 @@ static bool draw_frame(struct vo *vo, struct vo_frame *frame)
+             );
+         }
+ 
+-        p->pending_buffer = buf;
++        if (scheduled) {
++            [p->displayLayer enqueueSampleBuffer:buf];
++            CFRelease(buf);
++        } else {
++            p->pending_buffer = buf;
++        }
+         
+         // Release composited output buffer (always owned by us)
+         if (needsRelease)
+@@ -936,6 +950,11 @@ static int reconfig(struct vo *vo, struct mp_image_params *params)
+     // Clear subtitles when video configuration changes
+     clear_subtitle_state(vo);
+     sync_osd_layer_frame(p);
++
++    // The layer takes about 80 ms from enqueue to the screen on Apple TV. Frames handed
++    // over at their own time all arrived late, and late frames competing for a refresh
++    // were dropped.
++    vo_set_queue_params(vo, MP_TIME_MS_TO_NS(100), 1);
+     
+     return 0;
+ }
+@@ -1003,6 +1022,12 @@ static int control(struct vo *vo, uint32_t request, void *data)
+     case VOCTRL_REDRAW:
+         p->osd_change_id = 0;
+         return VO_TRUE;
++    case VOCTRL_PAUSE:
++        // Frames queued ahead would wait on the stopped clock and play again after
++        // resuming. Show the current frame instead, where mpv will resume from.
++        [p->displayLayer flush];
++        vo_redraw(vo);
++        return VO_TRUE;
+     case VOCTRL_UPDATE_WINDOW_TITLE:
+         return VO_TRUE;
+     }
