@@ -14,7 +14,8 @@ enum NextEpisode {
 
         let streams = SourceSelection.automatic(
             try await AddonClient(manifestURL: providerURL).streams(type: item.type, id: video.id),
-            maximumBitrate: PlaybackPreferences.maximumBitrate
+            maximumBitrate: PlaybackPreferences.maximumBitrate,
+            cachedOnly: PlaybackPreferences.cachedOnly
         ) { StreamDetails($0, runtime: runtime) }
         guard let stream = SourceSelection.next(afterBingeGroup: current.bingeGroup, in: streams),
               let url = stream.playbackURL

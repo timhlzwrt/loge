@@ -45,6 +45,18 @@ struct SourceSelectionTests {
         #expect(kept(.init(audioLanguage: "en", picture: .sdr)) == [unsaid])
     }
 
+    /// Cached only hides what the addon marks as not cached, in the list and for Play alike;
+    /// a source that doesn't say stays.
+    @Test func cachedOnlyHidesOnlySourcesMarkedUncached() {
+        let sources = [source("tb", title: "[TB download] 1080p"), source("hourglass", title: "⏳ 1080p"),
+                       source("unsaid", title: "1080p"), source("cached", title: "[TB+] 1080p")]
+        let filter = SourceSelection.Filter(cachedOnly: true)
+        #expect(sources.filter { filter.matches($0.details) }.map(\.id) == ["unsaid", "cached"])
+        #expect(SourceSelection.automatic(sources, maximumBitrate: 0, cachedOnly: true) { $0.details }.map(\.id)
+            == ["unsaid", "cached"])
+        #expect(SourceSelection.automatic(sources, maximumBitrate: 0) { $0.details }.count == 4)
+    }
+
     @Test func automaticPlaybackPrefersKnownBitratesWithinTheLimitAndNeverExceedsIt() {
         let sources = [source("unknown", title: "1080p"), source("high", title: "2160p 80 Mbps"),
                        source("low", title: "1080p 20 Mbps"), source("unknown2", title: "720p")]

@@ -26,6 +26,9 @@ struct SourcesView: View {
     @AppStorage(SyncedSettings.Key.combinesAddonSources) private var combinesAddonSources = false
     /// Show all lifts the bitrate limit for this list without changing the setting.
     @State private var ignoresBitrateLimit = false
+    /// Synced like the bitrate limit, and lifted by Show all the same way.
+    @AppStorage(SyncedSettings.Key.cachedOnly) private var cachedOnly = false
+    @State private var ignoresCachedOnly = false
     #if os(tvOS)
     @FocusState private var focusedSourceID: ListedSource.ID?
     @State private var initialFocusID: ListedSource.ID?
@@ -450,13 +453,15 @@ struct SourcesView: View {
 
     private var filter: SourceSelection.Filter {
         SourceSelection.Filter(audioLanguage: audioLanguage, picture: picture,
-                               maximumBitrate: ignoresBitrateLimit ? 0 : maximumBitrate)
+                               maximumBitrate: ignoresBitrateLimit ? 0 : maximumBitrate,
+                               cachedOnly: cachedOnly && !ignoresCachedOnly)
     }
 
     private func showAll() {
         audioLanguage = nil
         picture = .any
         ignoresBitrateLimit = true
+        ignoresCachedOnly = true
     }
 
     /// Which addon's sources are listed, when they aren't combined.
@@ -490,10 +495,12 @@ struct SourcesView: View {
         // "German · HDR · ≤ 50 Mbps": only what narrows the list. The limit is on by default,
         // so it's named only where it hides something.
         let limitHides = sources.contains { $0.details.isWithin(maximumBitrate: filter.maximumBitrate) == false }
+        let cachedOnlyHides = filter.cachedOnly && sources.contains { $0.details.isCached == false }
         let parts = [
             filter.audioLanguage.map { code in languages.first { $0.code == code }?.name ?? code },
             filter.picture == .hdr ? "HDR" : filter.picture == .sdr ? "SDR" : nil,
             limitHides ? "≤ \(filter.maximumBitrate) Mbps" : nil,
+            cachedOnlyHides ? "Cached" : nil,
         ].compactMap { $0 }
         return Menu {
             // Submenus, so each list is named and shows its choice.
@@ -519,6 +526,9 @@ struct SourcesView: View {
                 }
             }
             .pickerStyle(.menu)
+            // Like the bitrate: a setting, which also keeps Play from starting an uncached source.
+            Toggle("Cached only", isOn: Binding(get: { filter.cachedOnly },
+                                                set: { cachedOnly = $0; ignoresCachedOnly = false }))
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "line.3.horizontal.decrease")
@@ -703,7 +713,7 @@ struct SourcesView: View {
 
     /// Always by the setting: the list's filters and Show all only change what's listed.
     private func automatic(_ sources: [ListedSource]) -> [ListedSource] {
-        SourceSelection.automatic(sources, maximumBitrate: maximumBitrate) { $0.details }
+        SourceSelection.automatic(sources, maximumBitrate: maximumBitrate, cachedOnly: cachedOnly) { $0.details }
     }
 }
 

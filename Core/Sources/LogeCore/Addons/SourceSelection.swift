@@ -53,11 +53,14 @@ public enum SourceSelection {
         public var picture = Picture.any
         /// In Mbps; 0 for no limit.
         public var maximumBitrate = 0
+        /// Hides sources the addon marks as not cached; unmarked ones stay.
+        public var cachedOnly = false
 
-        public init(audioLanguage: String? = nil, picture: Picture = .any, maximumBitrate: Int = 0) {
+        public init(audioLanguage: String? = nil, picture: Picture = .any, maximumBitrate: Int = 0, cachedOnly: Bool = false) {
             self.audioLanguage = audioLanguage
             self.picture = picture
             self.maximumBitrate = maximumBitrate
+            self.cachedOnly = cachedOnly
         }
 
         public func matches(_ details: StreamDetails) -> Bool {
@@ -68,14 +71,17 @@ public enum SourceSelection {
             case .sdr: details.isHDR != true
             }
             return audioMatches && pictureMatches && details.isWithin(maximumBitrate: maximumBitrate) != false
+                && !(cachedOnly && details.isCached == false)
         }
     }
 
     /// What Play, Resume and Up Next may start by themselves, in the order to try them:
     /// sources whose bitrate is known to be within `maximumBitrate` Mbps (0 for no limit),
-    /// then those that don't say, which could be far above it. Never one known to exceed it.
-    public static func automatic<Source>(_ sources: [Source], maximumBitrate: Int,
+    /// then those that don't say, which could be far above it. Never one known to exceed it,
+    /// nor with `cachedOnly` one marked as not cached.
+    public static func automatic<Source>(_ sources: [Source], maximumBitrate: Int, cachedOnly: Bool = false,
                                          details: (Source) -> StreamDetails) -> [Source] {
+        let sources = cachedOnly ? sources.filter { details($0).isCached != false } : sources
         let fits = sources.map { details($0).isWithin(maximumBitrate: maximumBitrate) }
         return zip(sources, fits).filter { $0.1 == true }.map(\.0) + zip(sources, fits).filter { $0.1 == nil }.map(\.0)
     }

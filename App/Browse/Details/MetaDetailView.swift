@@ -226,7 +226,8 @@ struct MetaDetailView: View {
                   !Task.isCancelled
             else { return }
             let runtime = route.bitrateRuntime(in: library)
-            let allowed = SourceSelection.automatic(streams, maximumBitrate: PlaybackPreferences.maximumBitrate) {
+            let allowed = SourceSelection.automatic(streams, maximumBitrate: PlaybackPreferences.maximumBitrate,
+                                                    cachedOnly: PlaybackPreferences.cachedOnly) {
                 StreamDetails($0, runtime: runtime)
             }
             if let stream = SourceSelection.continuing(remembered, itemID: route.id, in: allowed) {
