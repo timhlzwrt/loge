@@ -25,6 +25,35 @@ struct SyncedSettingsTests {
         #expect(result.settings == local)
     }
 
+    /// Names and the combined-sources setting sync with the addons; setups from before them
+    /// read as no names and one addon at a time.
+    @MainActor @Test func addonNamesAndCombiningTravelWithTheAddons() throws {
+        let a = "https://a.example/manifest.json", b = "https://b.example/manifest.json"
+        let base = SyncedSettings(addonURLs: [a, b])
+        var local = base; local.addonNames = [a: "German"]
+        var remote = base; remote.combinesAddonSources = true
+        let merged = SyncedSettings.merged(base: base, local: local, remote: remote)
+        #expect(merged.conflicts.isEmpty)
+        #expect(merged.settings.addonNames == [a: "German"])
+        #expect(merged.settings.combinesAddonSources)
+
+        let old = #"{"addonURLs":[],"audioLanguage":"en","subtitleLanguage":"","subtitleScale":1,"maximumBitrate":100}"#
+        let decoded = try JSONDecoder().decode(SyncedSettings.self, from: Data(old.utf8))
+        #expect(decoded.addonNames.isEmpty && !decoded.combinesAddonSources)
+        #expect(try JSONDecoder().decode(SyncedSettings.self, from: JSONEncoder().encode(merged.settings)) == merged.settings)
+
+        // A name for an addon that isn't there, or an empty one, isn't a valid setup.
+        #expect(throws: SyncError.invalidData) { try SyncedSettings(addonURLs: [a], addonNames: [b: "English"]).validated() }
+        #expect(throws: SyncError.invalidData) { try SyncedSettings(addonURLs: [a], addonNames: [a: ""]).validated() }
+
+        let defaults = UserDefaults(suiteName: "SyncedSettingsTests-\(UUID().uuidString)")!
+        let store = AddonStore(defaults: defaults) { _ in throw AddonError.invalidResponse }
+        let setup = AccountSyncLocalSetup(addons: store, defaults: defaults)
+        try setup.apply(merged.settings)
+        #expect(store.addons.map(\.displayName) == ["German", "b.example"])
+        #expect(setup.current == merged.settings)
+    }
+
     @Test func encryptionUsesFreshNonceAndRejectsTamperingAndOtherVersions() throws {
         let cipher = try AccountSyncCipher(key: AccountSyncCipher.generateKey(), resource: "configuration")
         let settings = SyncedSettings(addonURLs: ["https://addon.example/synthetic-credential/manifest.json"])

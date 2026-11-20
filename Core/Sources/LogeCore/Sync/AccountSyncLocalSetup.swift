@@ -13,7 +13,7 @@ struct AccountSyncLocalSetup {
     private static func profileKey(_ id: String) -> String { "accountSyncSettings.\(id)" }
 
     var current: SyncedSettings {
-        SyncedSettings(addonURLs: addons.addons.map(\.manifestURL), defaults: defaults)
+        SyncedSettings(addonURLs: addons.addons.map(\.manifestURL), addonNames: addons.customNames, defaults: defaults)
     }
 
     func apply(_ settings: SyncedSettings) throws {
@@ -22,6 +22,7 @@ struct AccountSyncLocalSetup {
             try addons.replaceManifestURLs(settings.addonURLs)
             Task { await addons.refreshManifests() }
         }
+        addons.applyCustomNames(settings.addonNames)
         settings.writePreferences(to: defaults)
     }
 

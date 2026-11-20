@@ -128,7 +128,8 @@ Sideloadly/atvloadly); no paid developer account. MPVKit player, vendored with a
 video output. Addons are added as manifest URLs. Cross-device sync is the optional self-hosted
 account sync, never iCloud or a default hosted server; it carries progress, Watch Later (its own
 `watchLater` document: per title the latest addition or removal wins, removals kept 90 days,
-no prompts; an older gateway's 404 keeps it on the device), addons, playback preferences and
+no prompts; an older gateway's 404 keeps it on the device), addons (with the names given them
+and whether their sources are combined), playback preferences and
 Home's layout (one field, conflicts asked about); Trakt support was removed in November 2026,
 and the accent colour setting the same month: the app is always white. Sync is one person's devices only:
 the live shared setups between accounts were removed the same month for a one-time setup copy
@@ -225,6 +226,10 @@ keeps Movie/Series labels because it can mix both.
   gateway's 404 and is tried again on the next return; its retries never touch `status`.
   Documents are fetched with `If-None-Match` against an in-memory copy, so a relaunch fetches
   them in full once; `me()` runs once per launch or connect, and again after a 401.
+- Sources come from one stream addon at a time (the one last picked in the list's Addon menu,
+  `[StreamProvider].chosenAddonKey`, this device only; else the first) unless Settings → Addons
+  combines them. Play, autoplay, fallbacks and the title page's prefetch all go through
+  `chosen(_:combined:)`; a remembered source from another addon doesn't autoplay.
 - Search's keyboard reappearing after going back is the system restoring a focused field;
   clearing focus on leaving doesn't stop it.
 

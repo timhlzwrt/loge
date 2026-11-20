@@ -21,6 +21,9 @@ struct SourcesView: View {
     @State private var audioLanguage: String?
     @State private var picture = SourceSelection.Filter.Picture.any
     @AppStorage(SyncedSettings.Key.maximumBitrate) private var maximumBitrate = SyncedSettings().maximumBitrate
+    /// One addon's sources at a time unless combined; the one picked last, on this device.
+    @AppStorage([StreamProvider].chosenAddonKey) private var chosenAddon: String?
+    @AppStorage(SyncedSettings.Key.combinesAddonSources) private var combinesAddonSources = false
     /// Show all lifts the bitrate limit for this list without changing the setting.
     @State private var ignoresBitrateLimit = false
     #if os(tvOS)
@@ -43,7 +46,7 @@ struct SourcesView: View {
     @State private var progressRefresh: Task<Void, Never>?
 
     var body: some View {
-        let providers = store.addons.streamProviders(type: route.type, id: route.id)
+        let providers = chosenProviders
         Group {
             if providers.isEmpty {
                 // Installing one here, rather than a pointer to Settings, so the title is still
@@ -322,7 +325,20 @@ struct SourcesView: View {
         let all = listedSources(providers)
         let hidden = all.count - groups.reduce(0) { $0 + $1.entries.count }
         ListContainer {
-            filterMenu(all)
+            let available = availableProviders
+            if available.count > 1, let chosen = providers.first, providers.count == 1 {
+                #if os(tvOS)
+                addonMenu(available, chosen: chosen)
+                filterMenu(all)
+                #else
+                HStack(spacing: 28) {
+                    addonMenu(available, chosen: chosen)
+                    filterMenu(all)
+                }
+                #endif
+            } else {
+                filterMenu(all)
+            }
             if hidden > 0 && !groups.isEmpty {
                 messageRow("\(hidden) \(hidden == 1 ? "source" : "sources") hidden.", button: "Show all", action: showAll)
             }
@@ -441,6 +457,29 @@ struct SourcesView: View {
         audioLanguage = nil
         picture = .any
         ignoresBitrateLimit = true
+    }
+
+    /// Which addon's sources are listed, when they aren't combined.
+    private func addonMenu(_ available: [StreamProvider], chosen: StreamProvider) -> some View {
+        Menu {
+            Picker("Addon", selection: Binding(get: { chosen.id }, set: { chosenAddon = $0 })) {
+                ForEach(available) { Text($0.name).tag($0.id) }
+            }
+            .pickerStyle(.inline)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "puzzlepiece.extension")
+                Text(chosen.name)
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .font(.subheadline.weight(.medium))
+            .frame(minHeight: 44)
+        }
+        .accessibilityLabel("Addon")
+        .accessibilityValue(chosen.name)
     }
 
     /// Offers only the languages the listed sources mark.
@@ -644,9 +683,19 @@ struct SourcesView: View {
         )
     }
 
+    /// Every addon with streams for the title, in the user's order.
+    private var availableProviders: [StreamProvider] {
+        store.addons.streamProviders(type: route.type, id: route.id)
+    }
+
+    /// The ones listed and played from.
+    private var chosenProviders: [StreamProvider] {
+        availableProviders.chosen(chosenAddon, combined: combinesAddonSources)
+    }
+
     /// What to try if `request` doesn't open, among the sources allowed to play automatically.
     private func fallbacks(for request: PlaybackRequest) -> [PlaybackRequest] {
-        let providers = store.addons.streamProviders(type: route.type, id: route.id)
+        let providers = chosenProviders
         return SourceSelection.fallbacks(for: request.url, bingeGroup: request.bingeGroup,
                                          among: automatic(listedSources(providers)))
             .compactMap { self.request(for: $0.stream, from: $0.provider) }

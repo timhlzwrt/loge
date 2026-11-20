@@ -125,6 +125,9 @@ struct AddonsSettingsView: View {
     @State private var isInstalling = false
     @State private var installError: AddonStore.InstallError?
     @State private var removing: InstalledAddon?
+    @State private var renaming: InstalledAddon?
+    @State private var newName = ""
+    @AppStorage(SyncedSettings.Key.combinesAddonSources) private var combinesAddonSources = false
     #if !os(tvOS)
     @State private var isSharing = false
     #endif
@@ -187,6 +190,18 @@ struct AddonsSettingsView: View {
             } footer: {
                 if store.addons.count > 1 {
                     Text("Addons higher in the list are asked first.")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            // Only a choice with more than one addon to take sources from.
+            if store.addons.filter({ $0.manifest?.resources.contains { $0.name == AddonResource.stream.rawValue } == true }).count > 1 {
+                Section {
+                    Toggle("Combine sources from all addons", isOn: $combinesAddonSources)
+                } footer: {
+                    Text(combinesAddonSources
+                         ? "The sources list shows every addon's sources together."
+                         : "The sources list shows one addon's sources at a time. Choose the addon at the top of the list.")
                         .foregroundStyle(.secondary)
                 }
             }
@@ -256,6 +271,18 @@ struct AddonsSettingsView: View {
         .fullScreenCover(item: $removing) { addon in
             AddonRemovalConfirmation(host: addon.host) { store.remove(addon.id) }
         }
+        .fullScreenCover(item: $renaming) { addon in
+            AddonRenameSheet(name: addon.displayName) { store.rename(addon.id, to: $0) }
+        }
+        #else
+        .alert("Rename Addon", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } }),
+               presenting: renaming) { addon in
+            TextField("Name", text: $newName)
+            Button("Save") { store.rename(addon.id, to: newName) }
+            Button("Cancel", role: .cancel) {}
+        } message: { addon in
+            Text("Leave it empty to use \(addon.manifest?.name ?? addon.host).")
+        }
         #endif
         #if os(iOS)
         .toolbar {
@@ -284,6 +311,10 @@ struct AddonsSettingsView: View {
             .disabled(index == store.addons.count - 1)
         }
         #endif
+        Button("Rename…", systemImage: "pencil") {
+            newName = addon.displayName
+            renaming = addon
+        }
         Button("Remove", systemImage: "trash", role: .destructive) {
             removing = addon
         }
@@ -316,6 +347,41 @@ struct AddonsSettingsView: View {
 }
 
 #if os(tvOS)
+/// A name for an addon, in the same plain card as removing one.
+private struct AddonRenameSheet: View {
+    @State var name: String
+    let save: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            Text("Rename addon").font(.title2.bold())
+            TextField("Name", text: $name)
+                .onSubmit {
+                    save(name)
+                    dismiss()
+                }
+            Text("Leave it empty to use the addon's own name.")
+                .foregroundStyle(.secondary)
+            HStack(spacing: 24) {
+                Button("Save") {
+                    save(name)
+                    dismiss()
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                Button("Cancel") { dismiss() }
+                    .buttonStyle(.glass)
+            }
+        }
+        .padding(40)
+        .frame(width: 640, alignment: .leading)
+        .background(Color.canvas, in: .rect(cornerRadius: Metrics.cardRadius))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .presentationBackground(.black.opacity(0.7))
+        .onExitCommand { dismiss() }
+    }
+}
+
 /// Native tvOS alerts render their focused Cancel label white on the app's white accent.
 private struct AddonRemovalConfirmation: View {
     let host: String
