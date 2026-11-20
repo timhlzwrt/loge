@@ -45,7 +45,7 @@ struct ShareSetupView: View {
     /// Rebuilt with each change, so it always matches what the sheet shows.
     private var code: String? {
         let preferences = includesPreferences ? SetupCode.Preferences(defaults: .standard) : nil
-        return try? SetupCode(addonURLs: store.addons.map(\.manifestURL), preferences: preferences).encoded()
+        return try? SetupCode(addonURLs: store.addons.map(\.manifestURL), addonNames: store.customNames, preferences: preferences).encoded()
     }
 
     /// The link alone carries the code: the import field takes it as it is, for the Apple TV.

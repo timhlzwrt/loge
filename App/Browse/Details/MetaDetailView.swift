@@ -212,6 +212,8 @@ struct MetaDetailView: View {
         .task(id: play?.route.id) {
             guard let route = play?.route else { return }
             let providers = store.addons.streamProviders(type: route.type, id: route.id)
+                .chosen(UserDefaults.standard.string(forKey: [StreamProvider].chosenAddonKey),
+                        combined: UserDefaults.standard.bool(forKey: SyncedSettings.Key.combinesAddonSources))
             for provider in providers {
                 provider.prefetchStreams(type: route.type, id: route.id)
             }

@@ -48,6 +48,14 @@ struct AddonRoutingTests {
     }
 
     @Test func streamProvidersFollowUserOrderAndCapabilities() {
+        let two = [streams, InstalledAddon(manifestURL: "https://other.example/manifest.json", manifest: streams.manifest)]
+            .streamProviders(type: "movie", id: "tt1")
+        // One addon at a time: the one picked last, or the first while none is or it's gone.
+        #expect(two.chosen("https://other.example/manifest.json", combined: false).map(\.id) == ["https://other.example/manifest.json"])
+        #expect(two.chosen(nil, combined: false).map(\.id) == [streams.manifestURL])
+        #expect(two.chosen("https://removed.example/manifest.json", combined: false).map(\.id) == [streams.manifestURL])
+        #expect(two.chosen(nil, combined: true).count == 2)
+
         let providers = [cinemeta, streams, notLoaded].streamProviders(type: "series", id: "tt0903747:1:1")
         #expect(providers.map(\.name) == ["Example Streams"])
         #expect([cinemeta, streams].streamProviders(type: "channel", id: "tt1").isEmpty)

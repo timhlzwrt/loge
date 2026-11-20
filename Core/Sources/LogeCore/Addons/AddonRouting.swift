@@ -162,3 +162,15 @@ extension [InstalledAddon] {
         }
     }
 }
+
+extension [StreamProvider] {
+    /// Where the sources list remembers, on this device only, the addon last picked in it.
+    public static let chosenAddonKey = "chosenStreamAddon"
+
+    /// The addon last picked in the sources list, or the first in the user's order, unless
+    /// sources from all of them are combined.
+    public func chosen(_ chosenID: String?, combined: Bool) -> [StreamProvider] {
+        guard !combined, let first else { return self }
+        return [self.first { $0.id == chosenID } ?? first]
+    }
+}

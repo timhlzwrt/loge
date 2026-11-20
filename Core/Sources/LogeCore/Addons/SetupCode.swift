@@ -8,6 +8,8 @@ import Foundation
 /// often embed accounts' keys, so the code is never logged, shown or put into an error.
 public struct SetupCode: Equatable, Sendable {
     public var addonURLs: [String]
+    /// The sender's names for the addons, by manifest URL.
+    public var addonNames: [String: String]
     public var preferences: Preferences?
 
     public struct Preferences: Codable, Equatable, Sendable {
@@ -56,8 +58,9 @@ public struct SetupCode: Equatable, Sendable {
     /// What the app shows of the addons: their hosts, never the URLs.
     public var addonHosts: [String] { addonURLs.map { InstalledAddon(manifestURL: $0).host } }
 
-    public init(addonURLs: [String], preferences: Preferences? = nil) {
+    public init(addonURLs: [String], addonNames: [String: String] = [:], preferences: Preferences? = nil) {
         self.addonURLs = addonURLs
+        self.addonNames = addonNames
         self.preferences = preferences
     }
 
@@ -73,14 +76,14 @@ public struct SetupCode: Equatable, Sendable {
         guard let compressed = Data(base64URLEncoded: String(text[text.index(after: separator)...])),
               let json = try? (compressed as NSData).decompressed(using: .zlib) as Data,
               let payload = try? JSONDecoder().decode(Payload.self, from: json),
-              !payload.a.isEmpty, (try? SyncedSettings(addonURLs: payload.a).validated()) != nil,
+              !payload.a.isEmpty, (try? SyncedSettings(addonURLs: payload.a, addonNames: payload.n ?? [:]).validated()) != nil,
               payload.p.map(Self.isValid) ?? true
         else { throw .malformed }
-        self.init(addonURLs: payload.a, preferences: payload.p)
+        self.init(addonURLs: payload.a, addonNames: payload.n ?? [:], preferences: payload.p)
     }
 
     public func encoded() throws -> String {
-        let json = try JSONEncoder().encode(Payload(a: addonURLs, p: preferences))
+        let json = try JSONEncoder().encode(Payload(a: addonURLs, n: addonNames.isEmpty ? nil : addonNames, p: preferences))
         let compressed = try (json as NSData).compressed(using: .zlib) as Data
         return Self.prefix + String(Self.version) + ":" + compressed.base64URLEncodedString()
     }
@@ -88,6 +91,8 @@ public struct SetupCode: Equatable, Sendable {
     /// One-letter keys keep the code short; it's typed into a TV with a phone at worst.
     private struct Payload: Codable {
         let a: [String]
+        /// Missing from codes made before addons could be renamed.
+        let n: [String: String]?
         let p: Preferences?
     }
 
@@ -117,7 +122,9 @@ extension AddonStore {
         var result = SetupImport()
         for url in code.addonURLs where !addons.contains(where: { $0.manifestURL == url }) {
             do throws(InstallError) {
-                result.added.append(try await install(manifestURL: url).host)
+                let addon = try await install(manifestURL: url)
+                if let name = code.addonNames[url] { rename(addon.id, to: name) }
+                result.added.append(addon.host)
             } catch InstallError.alreadyInstalled {
                 continue
             } catch {
@@ -131,6 +138,7 @@ extension AddonStore {
         }
         do {
             try replaceManifestURLs(code.addonURLs)
+            applyCustomNames(code.addonNames)
             result.replaced = true
         } catch {
             // The code's URLs were validated when it was read, so this means a bug, not bad input.

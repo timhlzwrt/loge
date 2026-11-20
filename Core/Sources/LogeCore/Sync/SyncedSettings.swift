@@ -4,6 +4,10 @@ import Foundation
 /// credentials, remembered sources or connection measurements.
 public struct SyncedSettings: Codable, Equatable, Sendable {
     public var addonURLs: [String]
+    /// The viewer's names for addons, by manifest URL.
+    public var addonNames: [String: String]
+    /// The sources list shows every stream addon's sources together, rather than one addon's.
+    public var combinesAddonSources: Bool
     public var audioLanguage: String
     public var subtitleLanguage: String
     public var subtitleScale: Double
@@ -17,6 +21,7 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
         public static let subtitleLanguage = "subtitleLanguage"
         public static let subtitleScale = "subtitleScale"
         public static let maximumBitrate = "maximumBitrate"
+        public static let combinesAddonSources = "combinesAddonSources"
         /// The per-episode size limit the bitrate replaced.
         static let maximumSourceGigabytes = "maximumAutomaticSourceGigabytes"
         public static let homeLayout = HomeLayout.storageKey
@@ -25,10 +30,14 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
     public static let subtitleScales: [Double] = [0.8, 1, 1.25, 1.6]
     /// 0 means no limit.
     public static let maximumBitrateOptions = [0, 10, 25, 50, 100]
+    public static let maximumAddonNameLength = 60
 
-    public init(addonURLs: [String] = [], audioLanguage: String = "en", subtitleLanguage: String = "",
+    public init(addonURLs: [String] = [], addonNames: [String: String] = [:], combinesAddonSources: Bool = false,
+                audioLanguage: String = "en", subtitleLanguage: String = "",
                 subtitleScale: Double = 1, maximumBitrate: Int = 100, homeLayout: HomeLayout = .default) {
         self.addonURLs = addonURLs
+        self.addonNames = addonNames
+        self.combinesAddonSources = combinesAddonSources
         self.audioLanguage = audioLanguage
         self.subtitleLanguage = subtitleLanguage
         self.subtitleScale = subtitleScale
@@ -42,9 +51,11 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
     }
 
     /// Unset preferences read as their defaults, so a fresh device and the server agree.
-    init(addonURLs: [String], defaults: UserDefaults) {
+    init(addonURLs: [String], addonNames: [String: String] = [:], defaults: UserDefaults) {
         let fallback = Self()
         self.init(addonURLs: addonURLs,
+                  addonNames: addonNames,
+                  combinesAddonSources: defaults.bool(forKey: Key.combinesAddonSources),
                   audioLanguage: defaults.string(forKey: Key.audioLanguage) ?? fallback.audioLanguage,
                   subtitleLanguage: defaults.string(forKey: Key.subtitleLanguage) ?? fallback.subtitleLanguage,
                   subtitleScale: defaults.object(forKey: Key.subtitleScale) as? Double ?? fallback.subtitleScale,
@@ -64,6 +75,7 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
 
     /// Writes the preferences; addons belong to `AddonStore`.
     func writePreferences(to defaults: UserDefaults) {
+        defaults.set(combinesAddonSources, forKey: Key.combinesAddonSources)
         defaults.set(audioLanguage, forKey: Key.audioLanguage)
         defaults.set(subtitleLanguage, forKey: Key.subtitleLanguage)
         defaults.set(subtitleScale, forKey: Key.subtitleScale)
@@ -74,6 +86,8 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
     public func validated() throws -> Self {
         guard addonURLs.count <= 100,
               Set(addonURLs).count == addonURLs.count,
+              Set(addonNames.keys).isSubset(of: addonURLs),
+              addonNames.values.allSatisfy({ !$0.isEmpty && $0.count <= Self.maximumAddonNameLength }),
               ([""] + LanguageCodes.common).contains(audioLanguage),
               ([""] + LanguageCodes.common).contains(subtitleLanguage),
               Self.subtitleScales.contains(subtitleScale),
@@ -90,7 +104,8 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case addonURLs, audioLanguage, subtitleLanguage, subtitleScale, maximumBitrate, maximumSourceGigabytes, accent, homeLayout
+        case addonURLs, addonNames, combinesAddonSources, audioLanguage, subtitleLanguage, subtitleScale, maximumBitrate,
+             maximumSourceGigabytes, accent, homeLayout
     }
 
     /// Setups saved or synced by versions before the bitrate limit carry the size limit
@@ -99,6 +114,9 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let gigabytes = try container.decodeIfPresent(Int.self, forKey: .maximumSourceGigabytes)
         self.init(addonURLs: try container.decode([String].self, forKey: .addonURLs),
+                  // Both missing before addons could be renamed and their sources kept apart.
+                  addonNames: try container.decodeIfPresent([String: String].self, forKey: .addonNames) ?? [:],
+                  combinesAddonSources: try container.decodeIfPresent(Bool.self, forKey: .combinesAddonSources) ?? false,
                   audioLanguage: try container.decode(String.self, forKey: .audioLanguage),
                   subtitleLanguage: try container.decode(String.self, forKey: .subtitleLanguage),
                   subtitleScale: try container.decode(Double.self, forKey: .subtitleScale),
@@ -115,6 +133,8 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(addonURLs, forKey: .addonURLs)
+        try container.encode(addonNames, forKey: .addonNames)
+        try container.encode(combinesAddonSources, forKey: .combinesAddonSources)
         try container.encode(audioLanguage, forKey: .audioLanguage)
         try container.encode(subtitleLanguage, forKey: .subtitleLanguage)
         try container.encode(subtitleScale, forKey: .subtitleScale)
@@ -125,7 +145,7 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
     }
 
     public enum Field: String, Codable, CaseIterable, Sendable {
-        case addonURLs, audioLanguage, subtitleLanguage, subtitleScale, maximumBitrate, homeLayout
+        case addonURLs, addonNames, combinesAddonSources, audioLanguage, subtitleLanguage, subtitleScale, maximumBitrate, homeLayout
     }
 
     public struct Merge: Sendable {
@@ -146,6 +166,8 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
             }
         }
         choose(\.addonURLs, .addonURLs)
+        choose(\.addonNames, .addonNames)
+        choose(\.combinesAddonSources, .combinesAddonSources)
         choose(\.audioLanguage, .audioLanguage)
         choose(\.subtitleLanguage, .subtitleLanguage)
         choose(\.subtitleScale, .subtitleScale)
@@ -157,7 +179,11 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
     /// `self` with the fields in `categories` taken from `source`.
     func replacing(categories: Set<SyncCategory>, from source: Self) -> Self {
         var result = self
-        if categories.contains(.addons) { result.addonURLs = source.addonURLs }
+        if categories.contains(.addons) {
+            result.addonURLs = source.addonURLs
+            result.addonNames = source.addonNames
+            result.combinesAddonSources = source.combinesAddonSources
+        }
         if categories.contains(.playback) {
             result.audioLanguage = source.audioLanguage
             result.subtitleLanguage = source.subtitleLanguage
@@ -173,6 +199,8 @@ public struct SyncedSettings: Codable, Equatable, Sendable {
         for field in fields {
             switch field {
             case .addonURLs: result.addonURLs = source.addonURLs
+            case .addonNames: result.addonNames = source.addonNames
+            case .combinesAddonSources: result.combinesAddonSources = source.combinesAddonSources
             case .audioLanguage: result.audioLanguage = source.audioLanguage
             case .subtitleLanguage: result.subtitleLanguage = source.subtitleLanguage
             case .subtitleScale: result.subtitleScale = source.subtitleScale

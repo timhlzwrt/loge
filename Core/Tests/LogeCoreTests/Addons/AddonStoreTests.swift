@@ -23,6 +23,24 @@ struct AddonStoreTests {
         #expect(makeStore().addons.isEmpty)
     }
 
+    /// Two setups of the same addon, told apart by name; clearing a name, or giving the addon's
+    /// own, goes back to the addon's.
+    @Test func renamedAddonsKeepTheirNames() async throws {
+        let store = makeStore()
+        let german = try await store.install(manifestURL: "https://comet.example/de/manifest.json")
+        try await store.install(manifestURL: "https://comet.example/en/manifest.json")
+        store.rename(german.id, to: "  Comet DE+EN \n")
+        #expect(store.addons.map(\.displayName) == ["Comet DE+EN", "Example Streams"])
+        #expect(makeStore().addons.first?.displayName == "Comet DE+EN")
+        #expect(store.customNames == ["https://comet.example/de/manifest.json": "Comet DE+EN"])
+        store.rename(german.id, to: "Example Streams")
+        #expect(store.addons.first?.customName == nil)
+        store.rename(german.id, to: String(repeating: "x", count: 100))
+        #expect(store.addons.first?.displayName.count == SyncedSettings.maximumAddonNameLength)
+        store.rename(german.id, to: "")
+        #expect(store.customNames.isEmpty)
+    }
+
     @Test func installPersistsAcrossStores() async throws {
         try await makeStore().install(manifestURL: "https://a.example/manifest.json")
 

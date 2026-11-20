@@ -33,6 +33,14 @@ struct SetupCodeTests {
         #expect(try SetupCode(decoding: link) == full)
     }
 
+    @Test func carriesAddonNamesToTheAddonsItInstalls() async throws {
+        let code = SetupCode(addonURLs: [configured], addonNames: [configured: "Comet DE+EN"])
+        #expect(try SetupCode(decoding: code.encoded()) == code)
+        let store = makeStore()
+        _ = await store.importSetup(try SetupCode(decoding: code.encoded()), replacing: false)
+        #expect(store.addons.map(\.displayName) == ["Comet DE+EN"])
+    }
+
     @Test func preferencesReadAndWriteThePlaybackSettings() {
         defaults.set("fr", forKey: SyncedSettings.Key.audioLanguage)
         defaults.set(10, forKey: SyncedSettings.Key.maximumBitrate)

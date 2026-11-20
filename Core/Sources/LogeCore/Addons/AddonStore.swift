@@ -8,6 +8,8 @@ public struct InstalledAddon: Codable, Sendable, Equatable, Identifiable {
     public let manifestURL: String
     /// Nil until the manifest has been fetched once, e.g. for the preinstalled default.
     public var manifest: AddonManifest?
+    /// The viewer's own name for it, such as for two setups of the same addon.
+    public var customName: String?
 
     public var id: String { manifestURL }
 
@@ -17,7 +19,13 @@ public struct InstalledAddon: Codable, Sendable, Equatable, Identifiable {
     }
 
     public var displayName: String {
-        manifest?.name ?? host
+        customName ?? manifest?.name ?? host
+    }
+
+    public init(manifestURL: String, manifest: AddonManifest? = nil, customName: String? = nil) {
+        self.manifestURL = manifestURL
+        self.manifest = manifest
+        self.customName = customName
     }
 }
 
@@ -83,6 +91,31 @@ public final class AddonStore {
     public func remove(_ id: InstalledAddon.ID) {
         addons.removeAll { $0.id == id }
         unreachable.remove(id)
+        save()
+    }
+
+    /// An empty name, or the addon's own, goes back to the addon's own.
+    public func rename(_ id: InstalledAddon.ID, to name: String) {
+        guard let index = addons.firstIndex(where: { $0.id == id }) else { return }
+        let name = String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(SyncedSettings.maximumAddonNameLength))
+        addons[index].customName = name.isEmpty || name == addons[index].manifest?.name ? nil : name
+        save()
+    }
+
+    /// The viewer's names, by manifest URL, as sync and setup codes carry them.
+    public var customNames: [String: String] {
+        Dictionary(uniqueKeysWithValues: addons.compactMap { addon in addon.customName.map { (addon.manifestURL, $0) } })
+    }
+
+    /// Takes the names given, and the addons' own for the rest.
+    public func applyCustomNames(_ names: [String: String]) {
+        let renamed = addons.map { addon in
+            var addon = addon
+            addon.customName = names[addon.manifestURL]
+            return addon
+        }
+        guard renamed != addons else { return }
+        addons = renamed
         save()
     }
 
