@@ -31,7 +31,7 @@ struct PlayerControls: View {
     #if os(tvOS)
     /// The menu open above the buttons.
     @Binding var openPanel: PlayerPanel.Tab?
-    /// Which of the buttons has focus; the player screen moves it there with a swipe down.
+    /// Which of the buttons has focus; the player screen moves it there with a swipe up.
     var buttonFocus: FocusState<FocusedButton?>.Binding
 
     enum FocusedButton: Hashable {

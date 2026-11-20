@@ -50,7 +50,7 @@ struct PlayerView: View {
     @FocusState private var skipFocused: Bool
     @FocusState private var nextFocus: NextEpisodeOverlay.Focus?
     @State private var scrubStart: Double?
-    /// Subtitles, Audio and More beside the title, reached by swiping down, and the menu open above them.
+    /// Subtitles, Audio and More beside the title, reached by swiping up, and the menu open above them.
     @FocusState private var buttonFocus: PlayerControls.FocusedButton?
     /// Set and cleared with the moves to and from the buttons: cleared focus alone was taken
     /// straight back by the button that had it.
@@ -282,27 +282,30 @@ struct PlayerView: View {
             // An offer holds focus for as long as it shows, which shouldn't stop these working.
             case .left where surfaceFocused || skipFocused: player?.seek(by: -10)
             case .right where surfaceFocused || skipFocused: player?.seek(by: 10)
+            // Focus moves the way things are stacked on screen: the picture and timeline at the
+            // bottom, the buttons above them, their menu or an offer above the buttons.
             // During the credits Up Next sits below Skip Credits, and Play Now was otherwise out of
             // reach until the episode had ended.
             case .down where skipFocused && !controlsHaveFocus && player.flatMap(offeredNext) != nil:
                 nextFocus = .play
-            case .down where (surfaceFocused || skipFocused) && !controlsHaveFocus:
-                buttonsActive = true
-                // A moment later, once the controls are back if they were hidden.
-                Task { buttonFocus = .menu(.subtitles) }
-            // Up from the buttons with no menu open goes back to the picture, or to an offer above them.
-            case .up where buttonsActive && openPanel == nil:
-                if player?.availableSkip != nil { skipFocused = true }
+            case .up where surfaceFocused && !controlsHaveFocus,
+                 .down where (skipFocused || nextFocus != nil) && !controlsHaveFocus:
+                focusButtons()
+            // Down from the buttons closes their menu and goes back to the picture.
+            case .down where buttonFocus != nil:
+                openPanel = nil
                 buttonsActive = false
             // The offers sit on top of the surface, so the focus engine can't move to them by itself.
-            case .up where surfaceFocused && !controlsHaveFocus:
+            case .up where buttonFocus != nil && openPanel == nil:
                 guard let player else { break }
                 if player.availableSkip != nil {
                     skipFocused = true
                 } else if offeredNext(player) != nil || isFinished(player) {
                     nextFocus = .play
+                } else {
+                    break
                 }
-            case .down where nextFocus != nil: focusSurface()
+                buttonsActive = false
             default: break
             }
             showControls()
@@ -482,6 +485,13 @@ struct PlayerView: View {
 
     /// The buttons beside the title or the menu above them; the surface stands aside meanwhile.
     private var controlsHaveFocus: Bool { buttonsActive || openPanel != nil }
+
+    private func focusButtons() {
+        nextFocus = nil
+        buttonsActive = true
+        // A moment later, once the controls are back if they were hidden.
+        Task { buttonFocus = .menu(.subtitles) }
+    }
 
     private func focusSurface() {
         nextFocus = nil

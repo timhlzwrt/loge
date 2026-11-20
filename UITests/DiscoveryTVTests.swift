@@ -29,12 +29,12 @@ final class DiscoveryTVTests: XCTestCase {
         XCTAssertTrue(recap.waitForExistence(timeout: 5), "Skip didn't seek")
         XCTAssertGreaterThanOrEqual(Int(app.staticTexts["fixture-position"].value as? String ?? "") ?? -1, 19)
 
-        // Focus stays on the next offer. Down from there reaches the panel either at once or by
-        // way of the picture, depending on whether focus moves before the press is delivered.
+        // Focus stays on the next offer, above the buttons: down from there reaches them, or up
+        // if focus went to the picture before the press was delivered.
         waitForFocus(on: recap)
         remote.press(.down)
         let tab = app.buttons["Subtitles"]
-        if !tab.waitForExistence(timeout: 1) { remote.press(.down) }
+        if !tab.waitForExistence(timeout: 1) { remote.press(.up) }
         XCTAssertTrue(tab.waitForExistence(timeout: 5))
         waitForFocus(on: tab)
         remote.press(.down)
@@ -232,8 +232,8 @@ final class DiscoveryTVTests: XCTestCase {
         let position = app.staticTexts["fixture-position"]
         XCTAssertTrue(position.waitForExistence(timeout: 30))
         screenshot("tv-controls")
-        // Off the picture and onto the panel, whichever the skip offer's focus does first.
-        remote.press(.down)
+        // Up from the picture to the buttons, or down if the skip offer above them took focus first.
+        remote.press(.up)
         let tab = app.buttons["Subtitles"]
         if !tab.waitForExistence(timeout: 1) { remote.press(.down) }
         XCTAssertTrue(tab.waitForExistence(timeout: 5))
