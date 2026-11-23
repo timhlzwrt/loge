@@ -26,7 +26,7 @@ struct PlaybackSettingsSection: View {
             Picker("Maximum bitrate", selection: $maximumBitrate) {
                 Text("No limit").tag(0)
                 ForEach(SyncedSettings.maximumBitrateOptions.filter { $0 > 0 }, id: \.self) {
-                    Text("\($0) Mbps").tag($0)
+                    Text(Self.bitrateOption($0)).tag($0)
                 }
             }
             #if os(tvOS)
@@ -34,13 +34,12 @@ struct PlaybackSettingsSection: View {
             #endif
         } header: {
             SettingsHeader("Playback")
-        } footer: {
-            Text("""
-                Languages apply when a file has a matching track. The bitrate limit applies to the sources \
-                Play and Up Next pick for you, films too, and to the source list. 50 Mbps is about 22 GB \
-                per hour; sources of unknown bitrate are only picked when no other fits.
-                """)
-                .foregroundStyle(.secondary)
         }
+    }
+
+    /// "50 Mbps · 22.5 GB/h": what a limit means in data, shown where it's chosen.
+    static func bitrateOption(_ megabits: Int) -> String {
+        let gigabytesPerHour = Double(megabits) * 3600 / 8 / 1000
+        return "\(megabits) Mbps · \(gigabytesPerHour.formatted(.number.precision(.fractionLength(0...1)).locale(.interface))) GB/h"
     }
 }
