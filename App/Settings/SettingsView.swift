@@ -1,66 +1,105 @@
 import LogeCore
 import SwiftUI
 
+/// Settings as sentences, or as the usual list of pages for those who prefer it.
+struct SettingsView: View {
+    static let showsListKey = "settingsShowsList"
+    @AppStorage(showsListKey) private var showsList = false
+
+    var body: some View {
+        if showsList { SettingsListView() } else { SettingsSentencesView() }
+    }
+}
+
 /// A short index of settings pages, each row showing where that setting stands, so the
 /// addon form and account keys don't make one long scroll.
-struct SettingsView: View {
+private struct SettingsListView: View {
     @Environment(AddonStore.self) private var store
     @Environment(TMDBAccount.self) private var tmdb
     @Environment(AccountSync.self) private var sync
     @AppStorage(HomeLayout.storageKey) private var homeLayout: Data?
+    @AppStorage(SettingsView.showsListKey) private var showsList = false
+    @State private var isConnectingTMDB = false
 
     var body: some View {
-        SettingsPage("Settings") { sections }
+        SettingsPage("Settings") {
+            Section {
+                NavigationLink {
+                    AddonsSettingsView()
+                } label: {
+                    row("Addons", value: addonSummary, isWarning: store.addons.isEmpty)
+                }
+                if tmdb.isConfigured || tmdb.storageError != nil {
+                    NavigationLink {
+                        SettingsPage("TMDB") { TMDBSection() }
+                    } label: {
+                        row("Cast & Recommendations", value: tmdb.storageError == nil ? "On" : "Unavailable",
+                            isWarning: tmdb.storageError != nil)
+                    }
+                } else {
+                    // Off, the TMDB page would only say so; this goes straight to entering a token.
+                    Button { isConnectingTMDB = true } label: {
+                        row("Cast & Recommendations", value: "Off")
+                    }
+                    .foregroundStyle(.primary)
+                }
+                NavigationLink {
+                    HomeSettingsView()
+                } label: {
+                    row("Home Shelves", value: HomeLayout(storedData: homeLayout) == .default ? "Default" : "Customized")
+                }
+                NavigationLink {
+                    SyncSettingsView()
+                } label: {
+                    row("Sync", value: sync.problem ?? (sync.isConnected ? sync.displayName ?? "On" : "Off"),
+                        isWarning: sync.problem != nil)
+                }
+            }
+
+            PlaybackSettingsSection()
+
+            Section {
+                NavigationLink {
+                    SettingsPage("About") { AboutSection() }
+                } label: {
+                    row("About loge", value: AboutSection.version)
+                }
+                Button("Show as Sentences") { showsList = false }
+            }
+        }
+        .sheet(isPresented: $isConnectingTMDB) { TMDBSetupView() }
     }
 
-    @ViewBuilder private var sections: some View {
-        Section {
-            NavigationLink {
-                SyncSettingsView()
-            } label: {
-                LabeledContent("Sync", value: syncSummary)
-            }
+    private func row(_ title: String, value: String, isWarning: Bool = false) -> some View {
+        LabeledContent(title) {
+            Text(value).foregroundStyle(isWarning ? .orange : .secondary)
         }
-        Section {
-            NavigationLink {
-                AddonsSettingsView()
-            } label: {
-                LabeledContent("Addons", value: addonSummary)
-            }
-            NavigationLink {
-                SettingsPage("TMDB") { TMDBSection() }
-            } label: {
-                LabeledContent("TMDB", value: tmdb.isConfigured ? "Connected" : "Off")
-            }
-        }
-
-        PlaybackSettingsSection()
-
-        Section {
-            NavigationLink {
-                HomeSettingsView()
-            } label: {
-                LabeledContent("Home", value: HomeLayout(storedData: homeLayout) == .default ? "Default" : "Customized")
-            }
-        }
-
-        AboutSection()
     }
 
+    /// The first addon's name says whether the right one is installed, where a count wouldn't.
     private var addonSummary: String {
         switch store.addons.count {
         case 0: "None"
-        case 1: "1 installed"
-        case let count: "\(count) installed"
+        case 1: store.addons[0].displayName
+        case let count: "\(store.addons[0].displayName) +\(count - 1)"
         }
     }
+}
 
-    /// States that hold up syncing come before the account name, so they show without opening the page.
-    private var syncSummary: String {
-        guard sync.isConnected else { return "Off" }
-        if sync.needsChoice { return "Needs review" }
-        if sync.status == .failed { return "Couldn't sync" }
-        return sync.displayName ?? "Connected"
+extension AddonStore {
+    /// Addons that answer stream requests, and those not loaded yet, which may.
+    var streamAddons: [InstalledAddon] {
+        addons.filter { $0.manifest?.resources.contains { $0.name == AddonResource.stream.rawValue } ?? true }
+    }
+}
+
+extension AccountSync {
+    /// What holds up syncing, shown on Settings itself so it's seen without opening the page.
+    var problem: String? {
+        guard isConnected else { return nil }
+        if needsChoice { return "Needs review" }
+        if status == .failed { return "Couldn't sync" }
+        return nil
     }
 }
 

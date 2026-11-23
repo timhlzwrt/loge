@@ -15,13 +15,11 @@ final class TMDBSetupTests: XCTestCase {
         let settings = app.buttons["Settings"].firstMatch
         XCTAssertTrue(settings.waitForExistence(timeout: 10))
         settings.tap()
-        let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'TMDB'")).firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout: 5), "No TMDB row in Settings")
+        let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Cast and Recommendations'")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "No Cast and Recommendations control in Settings")
         guard row.label.contains("Off") else { throw XCTSkip("A token is already configured on this device.") }
+        // Off, the control opens the token sheet directly.
         row.tap()
-        let connect = app.buttons["Connect TMDB"].firstMatch
-        XCTAssertTrue(connect.waitForExistence(timeout: 5), "TMDB page has no Connect button")
-        connect.tap()
         let token = app.secureTextFields["API Read Access Token"]
         XCTAssertTrue(token.waitForExistence(timeout: 5))
         screenshot("tmdb-setup")
@@ -32,13 +30,13 @@ final class TMDBSetupTests: XCTestCase {
         XCTAssertTrue(error.waitForExistence(timeout: 5))
         screenshot("tmdb-invalid-token")
         app.buttons["Cancel"].firstMatch.tap()
-        XCTAssertTrue(connect.waitForExistence(timeout: 5))
-        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertTrue(row.label.contains("Off"), "Cancelling connected TMDB")
+        let about = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'About loge'")).firstMatch
+        XCTAssertTrue(about.waitForExistence(timeout: 5))
+        about.tap()
         let dataSources = app.buttons["Data Sources"]
-        for _ in 0..<8 {
-            if dataSources.exists && dataSources.isHittable { break }
-            app.swipeUp()
-        }
+        XCTAssertTrue(dataSources.waitForExistence(timeout: 5))
         dataSources.tap()
         let credits = app.staticTexts["This product uses the TMDB API but is not endorsed or certified by TMDB."]
         for _ in 0..<8 {

@@ -94,7 +94,7 @@ final class FlowTests: XCTestCase {
         let tabBar = app.tabBars.firstMatch
         XCTAssertTrue(tabBar.waitForExistence(timeout: 5))
         openTab("Settings")
-        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Show Settings as, Sentences"].waitForExistence(timeout: 5))
         XCTAssertTrue(tabBar.exists, "Settings keeps the tab bar")
         openTab("Home")
 

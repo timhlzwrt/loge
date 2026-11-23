@@ -41,7 +41,7 @@ struct TMDBSection: View {
     }
 }
 
-private struct TMDBSetupView: View {
+struct TMDBSetupView: View {
     @Environment(TMDBAccount.self) private var tmdb
     @Environment(\.dismiss) private var dismiss
     @State private var token = ""

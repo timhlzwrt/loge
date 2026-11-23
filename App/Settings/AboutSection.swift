@@ -9,7 +9,7 @@ struct AboutSection: View {
 
     var body: some View {
         Section {
-            LabeledContent("Version", value: version)
+            LabeledContent("Version", value: Self.version)
             #if os(macOS)
             Button("Check for Updates…", action: appUpdater.checkForUpdates)
                 .disabled(!appUpdater.canCheckForUpdates)
@@ -29,10 +29,10 @@ struct AboutSection: View {
             LabeledContent("Development", value: "Tim Holzwarth")
             LabeledContent("Testing", value: "Lenja")
             NavigationLink("Data Sources") { DataSourcesView() }
-        } header: { SettingsHeader("About") }
+        }
     }
 
-    private var version: String {
+    static var version: String {
         let info = Bundle.main.infoDictionary
         let short = info?["CFBundleShortVersionString"] as? String ?? "–"
         let build = info?["CFBundleVersion"] as? String ?? "–"

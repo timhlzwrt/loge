@@ -26,9 +26,12 @@ features, proposals, scope). History of individual changes is in git and the PRs
   screen for Picture in Picture), `MPVPlayer` (libmpv, AVFoundation video layer),
   `ScrubPreview` (a second, silent mpv for timeline thumbnails), `PlayerView`, controls and
   menus, `PictureInPicture`, `NowPlaying`, next-episode countdown, tvOS remote swipe reader.
-- `App/Settings/` — an index of pages: Sync, addons, TMDB, Home's shelves; playback
-  preferences inline; About (version, build commit, credits) and Data Sources, which holds
-  all attribution rather than putting it under artwork.
+- `App/Settings/` — by default one sentence under a large "loge" (which opens About), a line
+  per setting, whose values are the controls (`SettingsSentencesView`: playback menus in place;
+  addons, Home's shelves, TMDB and Sync open their pages). No title or captions; on a phone the
+  name sits at the top and the sentence above the tab bar. "Settings read as sentences" switches
+  this device to the plain list of the same. About (version, build commit, credits) and Data
+  Sources, which holds all attribution rather than putting it under artwork.
 - `web/` — the project page for loge.tjh.li: static HTML/CSS in tjh.li's design, no scripts
   or build step; `web/images` also serves the README and SideStore source. Cloudflare Pages
   (project `loge`), deployed by `.github/workflows/web.yml` when `web/` changes on main.
