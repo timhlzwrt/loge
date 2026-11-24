@@ -206,11 +206,17 @@ struct MyListView: View {
         let recent = library.recentlyWatched(excluding: Set(schedule.newEpisodes(in: library).map(\.item.metaID)))
         Group {
             if library.saved.isEmpty && recent.isEmpty {
-                ContentUnavailableView(
-                    "Nothing saved yet",
-                    systemImage: "bookmark",
-                    description: Text("Choose Watch Later on a title to save it here.")
-                )
+                // Said like Settings: grey words, low on a phone where the thumb is, the glow above.
+                Sentence {
+                    Words("Nothing saved yet. Choose")
+                    Text("Watch Later")
+                    Words("on a title to keep it here.")
+                }
+                .frame(maxWidth: 600, alignment: .leading)
+                .padding(.horizontal, Metrics.gutter)
+                .padding(.bottom, 40)
+                .frame(maxWidth: .infinity, maxHeight: .infinity,
+                       alignment: Metrics.isPhone ? .bottomLeading : .leading)
                 #if os(tvOS)
                 // With nothing to focus, the remote can't reach the tab menu and Menu leaves the app.
                 .focusable()
@@ -239,7 +245,7 @@ struct MyListView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.canvas)
+        .background { PageGlow() }
         #if !os(tvOS)
         .navigationTitle("My Lists")
         #endif

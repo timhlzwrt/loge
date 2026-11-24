@@ -41,10 +41,7 @@ struct SettingsSentencesView: View {
         }
         .background {
             // A glow in the empty corner above the name, where the app's other pages lead with artwork.
-            RadialGradient(colors: [Self.glowColor.opacity(0.32), .clear], center: UnitPoint(x: 0.85, y: 0.06),
-                           startRadius: 0, endRadius: Self.glowRadius)
-                .background(Color.canvas)
-                .ignoresSafeArea()
+            PageGlow()
         }
         #if !os(tvOS)
         // Names the page for the back button and the Mac's window; the tab bar already says where this is.
@@ -207,11 +204,7 @@ struct SettingsSentencesView: View {
         PlaybackPreferences.languages.first { $0.code == code }?.name ?? code
     }
 
-    /// The amber of the retired accent colours.
-    private static let glowColor = Color(red: 0.96, green: 0.72, blue: 0.25)
-
     #if os(tvOS)
-    private static let glowRadius: CGFloat = 900
     private static let lineSpacing: CGFloat = 18
     private static let readableWidth: CGFloat = 1300
     private static let wordmarkFont = Font.system(size: 110, weight: .heavy)
@@ -219,7 +212,6 @@ struct SettingsSentencesView: View {
     private static let styleChoiceFont = Font.system(size: 25, weight: .medium)
     private static let styleChoiceWordSpace: CGFloat = 7
     #elseif os(macOS)
-    private static let glowRadius: CGFloat = 420
     private static let lineSpacing: CGFloat = 10
     private static let readableWidth: CGFloat = 560
     private static let wordmarkFont = Font.system(size: 56, weight: .heavy)
@@ -227,7 +219,6 @@ struct SettingsSentencesView: View {
     private static let styleChoiceFont = Font.callout
     private static let styleChoiceWordSpace: CGFloat = 4
     #else
-    private static let glowRadius: CGFloat = 460
     private static let lineSpacing: CGFloat = 12
     private static let readableWidth: CGFloat = 600
     private static let wordmarkFont = Font.system(size: 96, weight: .heavy)
@@ -235,133 +226,4 @@ struct SettingsSentencesView: View {
     private static let styleChoiceFont = Font.footnote
     private static let styleChoiceWordSpace: CGFloat = 4
     #endif
-}
-
-/// One sentence: plain words and controls, wrapping between them like running text.
-private struct Sentence<Content: View>: View {
-    private let content: Content
-    private let font: Font
-    private let fixedWordSpace: CGFloat?
-    #if os(tvOS)
-    static var defaultFont: Font { .system(size: 38, weight: .semibold) }
-    @ScaledMetric(relativeTo: .title) private var wordSpace: CGFloat = 10
-    #elseif os(macOS)
-    static var defaultFont: Font { .system(size: 20, weight: .semibold) }
-    @ScaledMetric(relativeTo: .title) private var wordSpace: CGFloat = 5
-    #else
-    static var defaultFont: Font { .title.weight(.semibold) }
-    @ScaledMetric(relativeTo: .title) private var wordSpace: CGFloat = 7
-    #endif
-
-    /// A font other than the default needs its own word space, which scales with the text.
-    init(font: Font = defaultFont, wordSpace: CGFloat? = nil, @ViewBuilder content: () -> Content) {
-        self.font = font
-        fixedWordSpace = wordSpace
-        self.content = content()
-    }
-
-    var body: some View {
-        let space = fixedWordSpace ?? wordSpace
-        SentenceLayout(wordSpace: space, lineSpacing: space * 0.4) { content }
-            .font(font)
-    }
-}
-
-/// Plain words, one layout item each so lines can break between them. VoiceOver skips them:
-/// each control's label carries its setting's name.
-private struct Words: View {
-    let text: String
-
-    init(_ text: String) { self.text = text }
-
-    var body: some View {
-        ForEach(Array(text.split(separator: " ").enumerated()), id: \.offset) { _, word in
-            Text(word)
-                .layoutValue(key: FollowsWithoutSpace.self, value: word.first.map { ",.".contains($0) } ?? false)
-        }
-        .foregroundStyle(.secondary)
-        .accessibilityHidden(true)
-    }
-}
-
-/// Punctuation sits against the word before it.
-private struct FollowsWithoutSpace: LayoutValueKey {
-    static let defaultValue = false
-}
-
-private struct SentenceLayout: Layout {
-    let wordSpace: CGFloat
-    let lineSpacing: CGFloat
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        arrange(width: proposal.width ?? .infinity, subviews).size
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let frames = arrange(width: bounds.width, subviews).frames
-        for (subview, frame) in zip(subviews, frames) {
-            subview.place(at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
-                          proposal: ProposedViewSize(frame.size))
-        }
-    }
-
-    private func arrange(width: CGFloat, _ subviews: Subviews) -> (frames: [CGRect], size: CGSize) {
-        var frames: [CGRect] = []
-        var x: CGFloat = 0, y: CGFloat = 0, lineHeight: CGFloat = 0, widest: CGFloat = 0
-        for subview in subviews {
-            var size = subview.sizeThatFits(.unspecified)
-            // A control longer than a line, such as a long addon name, wraps inside itself.
-            if size.width > width { size = subview.sizeThatFits(ProposedViewSize(width: width, height: nil)) }
-            let attached = subview[FollowsWithoutSpace.self]
-            var gap = x == 0 || attached ? 0 : wordSpace
-            if x > 0, !attached, x + gap + size.width > width {
-                x = 0
-                y += lineHeight + lineSpacing
-                lineHeight = 0
-                gap = 0
-            }
-            frames.append(CGRect(origin: CGPoint(x: x + gap, y: y), size: size))
-            x += gap + size.width
-            lineHeight = max(lineHeight, size.height)
-            widest = max(widest, x)
-        }
-        return (frames, CGSize(width: widest, height: y + lineHeight))
-    }
-}
-
-/// A value in a sentence: white and underlined among grey words; on Apple TV, black on white
-/// under focus, like the app's other focused controls.
-private struct TokenLabel: View {
-    let text: String
-    var isWarning = false
-    var isUnderlined = true
-    #if os(tvOS)
-    @Environment(\.isFocused) private var isFocused
-    #else
-    private let isFocused = false
-    #endif
-
-    init(_ text: String, isWarning: Bool = false, isUnderlined: Bool = true) {
-        self.text = text
-        self.isWarning = isWarning
-        self.isUnderlined = isUnderlined
-    }
-
-    var body: some View {
-        Text(text)
-            .foregroundStyle(isFocused ? Color.black : isWarning ? Color.orange : Color.white)
-            .underline(isUnderlined && !isFocused, color: (isWarning ? Color.orange : Color.white).opacity(0.35))
-            .padding(.horizontal, 8)
-            .background(isFocused ? Color.white : Color.clear, in: .rect(cornerRadius: 8))
-            .padding(.horizontal, -8)
-            .multilineTextAlignment(.leading)
-    }
-}
-
-private struct TokenButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .opacity(configuration.isPressed ? 0.6 : 1)
-            .contentShape(.rect)
-    }
 }

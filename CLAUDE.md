@@ -7,7 +7,10 @@ The project, scheme, product and `LogeCore` package are all named loge; only the
 (`li.tjh.MediaApp`), Keychain service names and log subsystem keep the old working name, so
 saved data and sign-ins carry over. It browses catalogs from Stremio addons, shows details,
 lists streams and plays them with mpv. The look follows the Strand app: charcoal canvas,
-artwork-led, white accent, system font, no cards/gradients/badges.
+artwork-led, white accent, system font, no cards/badges. One light falls on the canvas
+(`PageGlow`): amber in a corner of pages without artwork, the backdrop's own colour on a
+title's page. Filters and settings read as sentences (`Sentence`): grey words, values white
+and underlined, each value the menu or link that changes it.
 
 What users get is described in README.md, docs/APP_OVERVIEW.md and ROADMAP.md (shipped
 features, proposals, scope). History of individual changes is in git and the PRs.
@@ -207,7 +210,7 @@ keeps Movie/Series labels because it can mix both.
   without following the redirect: Comet resolves its link on the first request (most of the
   time to the first frame) and keeps it an hour. Never a source marked uncached (that starts a
   debrid download), never the whole list; the player still opens the addon's URL, not a saved one.
-- The sources Filter's bitrate is the synced Maximum bitrate setting, and its Cached only the
+- The sources list's bitrate filter is the synced Maximum bitrate setting, and Cached only the
   synced `cachedOnly` (hides what an addon marks uncached: "[xx download]", ⏳, "uncached";
   unmarked sources stay); both also limit what Play starts by itself. Audio and picture
   reset per list. `SyncedSettings` still writes the retired `maximumSourceGigabytes`

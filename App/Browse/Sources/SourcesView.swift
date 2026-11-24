@@ -111,7 +111,7 @@ struct SourcesView: View {
         }
         #endif
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.canvas)
+        .background { PageGlow() }
         .hidingPhoneTabBar()
         #if !os(tvOS)
         .navigationTitle(route.title)
@@ -329,19 +329,8 @@ struct SourcesView: View {
         let hidden = all.count - groups.reduce(0) { $0 + $1.entries.count }
         ListContainer {
             let available = availableProviders
-            if available.count > 1, let chosen = providers.first, providers.count == 1 {
-                #if os(tvOS)
-                addonMenu(available, chosen: chosen)
-                filterMenu(all)
-                #else
-                HStack(spacing: 28) {
-                    addonMenu(available, chosen: chosen)
-                    filterMenu(all)
-                }
-                #endif
-            } else {
-                filterMenu(all)
-            }
+            filterSentence(all, available: available,
+                           chosen: available.count > 1 && providers.count == 1 ? providers.first : nil)
             if hidden > 0 && !groups.isEmpty {
                 messageRow("\(hidden) \(hidden == 1 ? "source" : "sources") hidden.", button: "Show all", action: showAll)
             }
@@ -464,84 +453,80 @@ struct SourcesView: View {
         ignoresCachedOnly = true
     }
 
-    /// Which addon's sources are listed, when they aren't combined.
-    private func addonMenu(_ available: [StreamProvider], chosen: StreamProvider) -> some View {
-        Menu {
-            Picker("Addon", selection: Binding(get: { chosen.id }, set: { chosenAddon = $0 })) {
-                ForEach(available) { Text($0.name).tag($0.id) }
-            }
-            .pickerStyle(.inline)
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "puzzlepiece.extension")
-                Text(chosen.name)
-                    .lineLimit(1)
-                Image(systemName: "chevron.down")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-            .font(.subheadline.weight(.medium))
-            .frame(minHeight: 44)
-        }
-        .accessibilityLabel("Addon")
-        .accessibilityValue(chosen.name)
-    }
-
-    /// Offers only the languages the listed sources mark.
-    private func filterMenu(_ sources: [ListedSource]) -> some View {
+    /// The addon and filters as a sentence whose values are the menus that change them.
+    private func filterSentence(_ sources: [ListedSource], available: [StreamProvider], chosen: StreamProvider?) -> some View {
         let marked = Set(sources.flatMap(\.details.languages))
         let languages = PlaybackPreferences.languages.filter { marked.contains($0.code) }
         let filter = filter
-        // "German · HDR · ≤ 50 Mbps": only what narrows the list. The limit is on by default,
-        // so it's named only where it hides something.
-        let limitHides = sources.contains { $0.details.isWithin(maximumBitrate: filter.maximumBitrate) == false }
-        let cachedOnlyHides = filter.cachedOnly && sources.contains { $0.details.isCached == false }
-        let parts = [
-            filter.audioLanguage.map { code in languages.first { $0.code == code }?.name ?? code },
-            filter.picture == .hdr ? "HDR" : filter.picture == .sdr ? "SDR" : nil,
-            limitHides ? "≤ \(filter.maximumBitrate) Mbps" : nil,
-            cachedOnlyHides ? "Cached" : nil,
-        ].compactMap { $0 }
-        return Menu {
-            // Submenus, so each list is named and shows its choice.
-            Group {
-                if !languages.isEmpty {
+        let language = filter.audioLanguage.map { code in languages.first { $0.code == code }?.name ?? code }
+        return Sentence.filters {
+            Words("Sources")
+            if let chosen {
+                Words("from")
+                Menu {
+                    Picker("Addon", selection: Binding(get: { chosen.id }, set: { chosenAddon = $0 })) {
+                        ForEach(available) { Text($0.name).tag($0.id) }
+                    }
+                } label: { TokenLabel(chosen.name) }
+                .accessibilityLabel("Addon")
+                .accessibilityValue(chosen.name)
+            }
+            if !languages.isEmpty {
+                Words("in")
+                Menu {
                     Picker("Audio", selection: $audioLanguage) {
                         Text("Any language").tag(String?.none)
                         ForEach(languages, id: \.code) { Text($0.name).tag(Optional($0.code)) }
                     }
-                }
+                } label: { TokenLabel(language ?? "any language") }
+                .accessibilityLabel("Audio")
+                .accessibilityValue(language ?? "Any language")
+                Words("and")
+            } else {
+                Words("in")
+            }
+            Menu {
                 Picker("Picture", selection: $picture) {
-                    Text("Any").tag(SourceSelection.Filter.Picture.any)
+                    Text("Any picture").tag(SourceSelection.Filter.Picture.any)
                     Text("HDR or Dolby Vision").tag(SourceSelection.Filter.Picture.hdr)
                     Text("SDR").tag(SourceSelection.Filter.Picture.sdr)
                 }
-                // Choosing a bitrate here changes the setting, and ends Show all's exception.
+            } label: {
+                TokenLabel(filter.picture == .hdr ? "HDR" : filter.picture == .sdr ? "SDR" : "any picture")
+            }
+            .accessibilityLabel("Picture")
+            .accessibilityValue(filter.picture == .hdr ? "HDR or Dolby Vision" : filter.picture == .sdr ? "SDR" : "Any picture")
+            Words(filter.maximumBitrate == 0 ? ", at" : ", up to")
+            Menu {
                 Picker("Bitrate", selection: Binding(get: { filter.maximumBitrate },
                                                      set: { maximumBitrate = $0; ignoresBitrateLimit = false })) {
                     Text("Any bitrate").tag(0)
                     ForEach(SyncedSettings.maximumBitrateOptions.filter { $0 > 0 }, id: \.self) {
-                        Text("Up to \($0) Mbps").tag($0)
+                        Text("\($0) Mbps").tag($0)
                     }
                 }
+            } label: {
+                TokenLabel(filter.maximumBitrate == 0 ? "any bitrate" : "\(filter.maximumBitrate) Mbps")
             }
-            .pickerStyle(.menu)
-            // Like the bitrate: a setting, which also keeps Play from starting an uncached source.
-            Toggle("Cached only", isOn: Binding(get: { filter.cachedOnly },
-                                                set: { cachedOnly = $0; ignoresCachedOnly = false }))
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "line.3.horizontal.decrease")
-                Text(parts.isEmpty ? "Filter" : "Filter: " + parts.joined(separator: " · "))
-                Image(systemName: "chevron.down")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+            .accessibilityLabel("Bitrate")
+            .accessibilityValue(filter.maximumBitrate == 0 ? "Any bitrate" : "Up to \(filter.maximumBitrate) Mbps")
+            Words(",")
+            Menu {
+                Picker("Cached", selection: Binding(get: { filter.cachedOnly },
+                                                    set: { cachedOnly = $0; ignoresCachedOnly = false })) {
+                    Text("Cached only").tag(true)
+                    Text("Cached or not").tag(false)
+                }
+            } label: {
+                TokenLabel(filter.cachedOnly ? "cached only" : "cached or not")
             }
-            .font(.subheadline.weight(.medium))
-            .frame(minHeight: 44)
+            .accessibilityLabel("Cached only")
+            .accessibilityValue(filter.cachedOnly ? "On" : "Off")
+            Words(".")
         }
-        .accessibilityLabel("Filter")
-        .accessibilityValue(parts.isEmpty ? "All sources" : parts.joined(separator: ", "))
+        .buttonStyle(TokenButtonStyle())
+        .menuStyle(.button)
+        .padding(.vertical, 8)
     }
 
     @ViewBuilder

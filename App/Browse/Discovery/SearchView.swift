@@ -14,11 +14,7 @@ struct SearchView: View {
     /// Newest first, one per line.
     @AppStorage("recentSearches") private var recentSearches = ""
     #if os(tvOS)
-    /// The genre just removed, whose tile takes focus back rather than the type picker.
-    @State private var removedGenre: String?
-    @FocusState private var focusedGenre: String?
-    /// A genre tile was just picked; the rows that replace it take focus. Not after a type change,
-    /// which happens as focus moves across the picker.
+    /// A genre tile was just picked; the rows that replace it take focus. Not after a type change.
     @State private var focusesFirstResult = false
     #endif
 
@@ -62,7 +58,7 @@ struct SearchView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.canvas)
+        .background { PageGlow() }
         #if !os(tvOS)
         // tvOS keeps a title fixed in place, over the content as it scrolls; the tab already says Search.
         .navigationTitle("Search")
@@ -114,52 +110,36 @@ struct SearchView: View {
         DiscoveryCatalogs.search.filtered(type: type, genre: nil).genres
     }
 
+    /// What the results are narrowed to, read as a sentence whose values are the menus that change them.
     private var filters: some View {
-        HStack(spacing: 20) {
-            Picker("Type", selection: $type) {
-                Text("All").tag(String?.none)
-                ForEach(DiscoveryCatalogs.search) { Text($0.title).tag(Optional($0.catalog.type)) }
-            }
-            .pickerStyle(.segmented)
-            .fixedSize()
-            // With nothing typed the genre list below is the way in, so only a chosen genre
-            // shows here, as something to remove; while searching, a menu narrows the results.
-            if let genre {
-                Button {
-                    #if os(tvOS)
-                    removedGenre = genre
-                    #endif
-                    self.genre = nil
-                } label: {
-                    HStack(spacing: 6) {
-                        Text(genre)
-                        Image(systemName: "xmark")
-                            .font(.caption.weight(.bold))
-                    }
-                    #if !os(tvOS)
-                    .padding(.horizontal, 14)
-                    .frame(minHeight: 32)
-                    .background(.white.opacity(0.12), in: .capsule)
-                    #endif
+        Sentence.filters {
+            Words("Looking for")
+            Menu {
+                Picker("Type", selection: $type) {
+                    Text("Movies and series").tag(String?.none)
+                    ForEach(DiscoveryCatalogs.search) { Text($0.title).tag(Optional($0.catalog.type)) }
                 }
-                #if !os(tvOS)
-                .buttonStyle(.plain)
-                #endif
-                .accessibilityLabel("\(genre), remove genre")
-                .fixedSize()
-            } else if !trimmedQuery.isEmpty {
-                Menu {
-                    Picker("Genre", selection: $genre) {
-                        Text("Any Genre").tag(String?.none)
-                        ForEach(genres, id: \.self) { Text($0).tag(Optional($0)) }
-                    }
-                } label: {
-                    Label("Genre", systemImage: "line.3.horizontal.decrease.circle")
-                }
-                .fixedSize()
+            } label: {
+                TokenLabel(DiscoveryCatalogs.search.first { $0.catalog.type == type }?.title.lowercased() ?? "movies and series")
             }
-            Spacer(minLength: 0)
+            .accessibilityLabel("Type")
+            .accessibilityValue(DiscoveryCatalogs.search.first { $0.catalog.type == type }?.title ?? "Movies and series")
+            Words("in")
+            Menu {
+                Picker("Genre", selection: $genre) {
+                    Text("Any genre").tag(String?.none)
+                    ForEach(genres, id: \.self) { Text($0).tag(Optional($0)) }
+                }
+            } label: {
+                TokenLabel(genre?.lowercased() ?? "any genre")
+            }
+            .accessibilityLabel("Genre")
+            .accessibilityValue(genre ?? "Any genre")
+            Words(".")
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .buttonStyle(TokenButtonStyle())
+        .menuStyle(.button)
         .labelsHidden()
         .padding(.horizontal, Metrics.gutter)
         .padding(.top, 12)
@@ -180,7 +160,6 @@ struct SearchView: View {
                 ForEach(genres.compactMap(DiscoveryCatalogs.genre(named:))) { genre in
                     Button {
                         #if os(tvOS)
-                        removedGenre = nil
                         focusesFirstResult = true
                         #endif
                         self.genre = genre.name
@@ -188,15 +167,6 @@ struct SearchView: View {
                         GenreTile(genre: genre, width: nil)
                     }
                     .tileButtonStyle()
-                    #if os(tvOS)
-                    .focused($focusedGenre, equals: genre.name)
-                    // Once the list is back on screen; asked for before, the request was dropped.
-                    .task {
-                        guard genre.name == removedGenre else { return }
-                        removedGenre = nil
-                        focusedGenre = genre.name
-                    }
-                    #endif
                 }
             }
             #if os(tvOS)

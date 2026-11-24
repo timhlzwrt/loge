@@ -61,6 +61,10 @@ enum DiscoveryFixture {
             }
         case "my-lists":
             if let library { MyListView().environment(library) }
+        case "my-lists-empty":
+            MyListView().environment(LibraryStore(defaults: UserDefaults(suiteName: "loge.discovery-empty-fixture")!))
+        case "search":
+            SearchView()
         case "recommended":
             HomeView()
                 .environment(recommendationLibrary)
