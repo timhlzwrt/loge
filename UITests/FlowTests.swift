@@ -168,21 +168,16 @@ final class FlowTests: XCTestCase {
     }
 
     @MainActor
-    func testSearchGenreCanBeRemovedAndNarrowsTypedSearches() {
+    func testSearchGenreCanBeChosenAndRemoved() {
         openTab("Search")
-        XCTAssertFalse(app.buttons["Genre"].exists, "The genre list is the way in before typing")
         app.buttons["Drama"].firstMatch.tap()
-        let chip = app.buttons["Drama, remove genre"]
-        XCTAssertTrue(chip.waitForExistence(timeout: 5))
-        screenshot("search-genre-chip")
-        chip.tap()
+        let genre = app.buttons["Genre"]
+        XCTAssertTrue(genre.waitForExistence(timeout: 5))
+        XCTAssertEqual(genre.value as? String, "Drama")
+        screenshot("search-genre-chosen")
+        genre.tap()
+        app.buttons["Any genre"].tap()
         XCTAssertTrue(app.staticTexts["Genres"].waitForExistence(timeout: 5))
-
-        let field = app.searchFields.firstMatch
-        field.tap()
-        field.typeText("heat")
-        XCTAssertTrue(app.buttons["Genre"].waitForExistence(timeout: 5))
-        screenshot("search-typed-genre-menu")
     }
 
     @MainActor
@@ -195,7 +190,8 @@ final class FlowTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Series · Comedy"].waitForExistence(timeout: 20))
         screenshot("search-genre-browse")
 
-        app.segmentedControls.buttons["Series"].tap()
+        app.buttons["Type"].tap()
+        app.buttons["Series"].firstMatch.tap()
         XCTAssertFalse(app.staticTexts["Movies · Comedy"].exists)
         let field = app.searchFields.firstMatch
         field.tap()
@@ -600,10 +596,9 @@ final class FlowTests: XCTestCase {
         let higherRate = app.buttons.matching(NSPredicate(format: "label MATCHES '.*25[,.]2 Mbps.*'")).firstMatch
         XCTAssertTrue(higherRate.waitForExistence(timeout: 15))
         screenshot("source-bitrates")
-        app.buttons["Filter"].tap()
-        screenshot("source-filter-menu")
         app.buttons["Bitrate"].tap()
-        app.buttons["Up to 25 Mbps"].tap()
+        screenshot("source-bitrate-menu")
+        app.buttons["25 Mbps"].tap()
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label ENDSWITH 'hidden.'")).firstMatch.exists)
         XCTAssertFalse(higherRate.exists)
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label MATCHES '.*23[,.]6 Mbps.*'")).firstMatch.exists)
@@ -611,9 +606,8 @@ final class FlowTests: XCTestCase {
         app.buttons["Show all"].tap()
         XCTAssertTrue(higherRate.exists)
         // The bitrate is the Maximum bitrate setting: back to its default for the other tests.
-        app.buttons["Filter"].tap()
         app.buttons["Bitrate"].tap()
-        app.buttons["Up to 100 Mbps"].tap()
+        app.buttons["100 Mbps"].tap()
     }
 
     /// A source that doesn't open hands over to the next one instead of stopping.

@@ -321,12 +321,13 @@ final class DiscoveryTVTests: XCTestCase {
             screenshot(remembersSource ? "tv-source-last-played-focused" : "tv-source-recommended-focused")
             let cell = app.cells.containing(.button, identifier: source.label).firstMatch
             waitForFocus(on: cell.exists ? cell : source)
-            // The filter stays reachable above the sources.
+            // The filters stay reachable above the sources: one row, a menu per filter.
+            let filter = app.cells.containing(.button, identifier: "Picture").firstMatch
             for _ in 0..<15 {
-                if containsFocus(app.buttons["Filter"]) { break }
+                if containsFocus(filter) { break }
                 XCUIRemote.shared.press(.up)
             }
-            waitForFocus(on: app.buttons["Filter"])
+            waitForFocus(on: filter)
         }
     }
 

@@ -122,6 +122,8 @@ struct MetaDetailView: View {
             ZStack(alignment: .top) {
                 Color.canvas.ignoresSafeArea()
                 HeroScroll.Fading(scroll: heroScroll) { backdrop(url: meta?.background ?? preview.background) }
+                // Over the faded backdrop, so its light carries on down the page without a seam.
+                ArtworkGlow(url: meta?.background ?? preview.background)
             }
         }
         .hidingPhoneTabBar()
