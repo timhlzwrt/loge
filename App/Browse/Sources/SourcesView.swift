@@ -421,7 +421,7 @@ struct SourcesView: View {
             let pick = playPick(providers)
             if let pick {
                 Section {
-                    row(pick, isLastPlayed: false, isRecommended: false, isSelected: false)
+                    row(pick, isLastPlayed: pick.id == lastPlayed, isRecommended: pick.id == recommended, isSelected: false)
                 } header: {
                     listHeader("Play picks")
                 }
