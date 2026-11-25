@@ -28,7 +28,10 @@ enum RoomTone {
     static func tone(for url: String?) async -> Color? {
         guard let url = url.flatMap(URL.init(string:)) else { return nil }
         if let known = tones[url] { return known }
-        guard let image = await ArtworkCache.image(for: url), let tone = tone(of: image) else { return nil }
+        guard let image = await ArtworkCache.image(for: url),
+              // Off the main thread: on Apple TV each focus move can bring a new backdrop.
+              let tone = await Task.detached(priority: .userInitiated, operation: { tone(of: image) }).value
+        else { return nil }
         tones[url] = tone
         return tone
     }

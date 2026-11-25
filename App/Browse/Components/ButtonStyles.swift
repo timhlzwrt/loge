@@ -2,7 +2,8 @@ import LogeCore
 import SwiftUI
 
 /// The one accent-coloured call to action on a screen: Play or Resume. On iPhone and iPad
-/// `.controlSize(.small)` draws it a size down, for a title page's centred row.
+/// `.controlSize(.small)` draws it a size down, for a title page's centred row. On Apple TV
+/// focus decides instead: the focused button is white, the others translucent.
 struct PrimaryButtonStyle: ButtonStyle {
     /// Translucent white rather than the accent, for a second choice beside the primary one.
     var isTranslucent = false
@@ -24,11 +25,11 @@ struct PrimaryButtonStyle: ButtonStyle {
             configuration.label
                 .font(font)
                 .labelStyle(PlayLabelStyle())
-                .foregroundStyle(isTranslucent ? .white : .black)
+                .foregroundStyle(isWhite ? .black : .white)
                 .padding(.leading, height * 0.44)
                 .padding(.trailing, height * 0.56)
                 .frame(minHeight: height)
-                .background(isTranslucent ? AnyShapeStyle(.white.opacity(0.12)) : AnyShapeStyle(.tint), in: shape)
+                .background(isWhite ? AnyShapeStyle(.tint) : AnyShapeStyle(.white.opacity(Metrics.isTV ? 0.14 : 0.12)), in: shape)
                 .opacity(configuration.isPressed ? 0.8 : 1)
                 #if os(tvOS)
                 .scaleEffect(isFocused ? 1.06 : 1)
@@ -38,9 +39,15 @@ struct PrimaryButtonStyle: ButtonStyle {
         }
 
         #if os(tvOS)
+        private var isWhite: Bool { isFocused }
         private let height: CGFloat = 78
         private let font = Font.system(size: 27, weight: .semibold)
-        private let shape = Capsule()
+        private let shape = RoundedRectangle(cornerRadius: 20)
+        #else
+        private var isWhite: Bool { !isTranslucent }
+        #endif
+
+        #if os(tvOS)
         #elseif os(macOS)
         private let height: CGFloat = 36
         private let font = Font.system(size: 14, weight: .semibold)
@@ -66,7 +73,8 @@ struct PrimaryButtonStyle: ButtonStyle {
 }
 
 /// A title's other actions: a circle with its name under it, filled white while it's on
-/// (saved to Watch Later, watched). On the Mac a translucent button with icon and name.
+/// (saved to Watch Later, watched). On the Mac and Apple TV a button with icon and name in a
+/// row beside Play.
 struct RoundButtonStyle: ButtonStyle {
     var isOn = false
 
@@ -80,8 +88,7 @@ struct RoundButtonStyle: ButtonStyle {
         @Environment(\.isEnabled) private var isEnabled
 
         var body: some View {
-            #if os(macOS)
-            // With a pointer the actions sit in a row beside Play, as buttons with their names.
+            #if os(macOS) || os(tvOS)
             PrimaryButtonStyle(isTranslucent: true).makeBody(configuration: configuration)
             #else
             VStack(spacing: 6) {
@@ -108,92 +115,83 @@ struct RoundButtonStyle: ButtonStyle {
     }
 }
 
-/// One of a few choices side by side on a phone: seasons, genres, lists, roles. The chosen
-/// one is white.
+/// One of a few choices side by side: seasons, genres, lists, roles. The chosen one is white;
+/// on Apple TV the focused one is, and the chosen one keeps a translucent plate.
 struct PillButtonStyle: ButtonStyle {
     let isSelected: Bool
 
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(isSelected ? AnyShapeStyle(.black) : AnyShapeStyle(.white.opacity(0.7)))
-            .padding(.horizontal, 14)
-            .frame(minHeight: 36)
-            .background(isSelected ? AnyShapeStyle(.white) : AnyShapeStyle(.white.opacity(0.08)), in: .capsule)
-            .opacity(configuration.isPressed ? 0.7 : 1)
-            // 44 pt to tap, without spacing the pills further apart.
-            .padding(.vertical, 4)
-            .contentShape(.rect)
-            .accessibilityAddTraits(isSelected ? .isSelected : [])
-    }
-}
-
-/// Round, icon-only Liquid Glass buttons beside the primary one: Watch Later, More.
-/// Drawn rather than using the `.glass` button style, which pads the circle beyond the
-/// primary button's height. They follow `.controlSize(.small)` as that button does.
-struct GlassIconButtonStyle: ButtonStyle {
-    /// A short name under the icon while focused on Apple TV. Elsewhere the icons stand
-    /// alone, and the Mac names them on hover.
-    var caption: String?
-
-    func makeBody(configuration: Configuration) -> some View {
-        StyledLabel(configuration: configuration, caption: caption)
+        StyledLabel(configuration: configuration, isSelected: isSelected)
     }
 
     private struct StyledLabel: View {
         let configuration: Configuration
-        let caption: String?
+        let isSelected: Bool
         #if os(tvOS)
         @Environment(\.isFocused) private var isFocused
-        #elseif os(iOS)
+        #endif
+
+        var body: some View {
+            configuration.label
+                .font(font)
+                .foregroundStyle(isWhite ? AnyShapeStyle(.black) : AnyShapeStyle(.white.opacity(isSelected ? 1 : 0.7)))
+                .padding(.horizontal, height * 0.4)
+                .frame(minHeight: height)
+                .background(plate, in: .capsule)
+                .opacity(configuration.isPressed ? 0.7 : 1)
+                #if os(tvOS)
+                .scaleEffect(isFocused ? 1.06 : 1)
+                .animation(.easeOut(duration: 0.15), value: isFocused)
+                #else
+                // 44 pt to tap, without spacing the pills further apart.
+                .padding(.vertical, 4)
+                .contentShape(.rect)
+                #endif
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
+        }
+
+        private var plate: AnyShapeStyle {
+            isWhite ? AnyShapeStyle(.white) : AnyShapeStyle(.white.opacity(isSelected ? 0.16 : 0.08))
+        }
+
+        #if os(tvOS)
+        private var isWhite: Bool { isFocused }
+        private let height: CGFloat = 56
+        private let font = Font.system(size: 24, weight: .semibold)
+        #else
+        private var isWhite: Bool { isSelected }
+        private let height: CGFloat = 36
+        private let font = Font.subheadline.weight(.semibold)
+        #endif
+    }
+}
+
+#if !os(tvOS)
+/// Round, icon-only Liquid Glass buttons beside the primary one, as Watch Later in the wide
+/// featured carousel. Drawn rather than using the `.glass` button style, which pads the circle
+/// beyond the primary button's height. They follow `.controlSize(.small)` as that button does.
+struct GlassIconButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        StyledLabel(configuration: configuration)
+    }
+
+    private struct StyledLabel: View {
+        let configuration: Configuration
+        #if os(iOS)
         @Environment(\.controlSize) private var controlSize
         #endif
 
-        @ViewBuilder
         var body: some View {
-            #if os(tvOS)
-            if let caption {
-                VStack(spacing: 12) {
-                    icon
-                    Text(caption)
-                        .font(.system(size: 20, weight: .medium))
-                        .fixedSize()
-                        .frame(width: size)
-                        .opacity(isFocused ? 1 : 0)
-                        .accessibilityHidden(true)
-                }
-            } else {
-                icon
-            }
-            #else
-            icon
-            #endif
-        }
-
-        private var icon: some View {
             configuration.label
                 .labelStyle(.iconOnly)
                 .font(font)
                 .frame(width: size, height: size)
                 .contentShape(.circle)
-                #if os(tvOS)
-                // Focus fills the circle, as the system's glass buttons do, in the accent.
-                .foregroundStyle(isFocused ? .black : .white)
-                .background(.tint.opacity(isFocused ? 1 : 0), in: .circle)
-                .glassEffect(.regular, in: .circle)
-                .scaleEffect(isFocused ? 1.06 : 1)
-                .shadow(color: .black.opacity(isFocused ? 0.5 : 0), radius: 24, y: 14)
-                .animation(.easeOut(duration: 0.15), value: isFocused)
-                #else
                 .foregroundStyle(.white)
                 .glassEffect(.regular.interactive(), in: .circle)
-                #endif
         }
 
-        #if os(tvOS)
-        private let size: CGFloat = 78
-        private let font = Font.system(size: 27, weight: .semibold)
-        #elseif os(macOS)
+        #if os(macOS)
         private let size: CGFloat = 36
         private let font = Font.system(size: 14, weight: .semibold)
         #else
@@ -202,13 +200,38 @@ struct GlassIconButtonStyle: ButtonStyle {
         #endif
     }
 }
+#endif
+
+#if os(tvOS)
+/// Apple TV's artwork tiles: the focused one lifts with a shadow, the others dim a little, so
+/// focus reads from across the room without an outline. Each tile reads only its own focus.
+struct LiftButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Lifted(configuration: configuration)
+    }
+
+    private struct Lifted: View {
+        let configuration: Configuration
+        @Environment(\.isFocused) private var isFocused
+
+        var body: some View {
+            configuration.label
+                .scaleEffect(isFocused ? 1.12 : 1)
+                .shadow(color: .black.opacity(isFocused ? 0.6 : 0), radius: 24, y: 18)
+                .opacity(isFocused ? 1 : 0.8)
+                .opacity(configuration.isPressed ? 0.85 : 1)
+                .animation(.easeOut(duration: 0.15), value: isFocused)
+        }
+    }
+}
+#endif
 
 extension View {
-    /// Artwork tiles that open something: tvOS lifts them as focus cards; elsewhere the artwork
+    /// Artwork tiles that open something: tvOS lifts them on focus; elsewhere the artwork
     /// itself carries `PointerHighlight`, so a caption under it stays clear.
     func tileButtonStyle() -> some View {
         #if os(tvOS)
-        buttonStyle(.card)
+        buttonStyle(LiftButtonStyle())
         #else
         buttonStyle(.plain)
         #endif

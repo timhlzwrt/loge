@@ -62,7 +62,6 @@ struct TVHome: View {
                 .scrollTargetBehavior(.viewAligned)
             }
         }
-        .background(Color.canvas)
         .task {
             // Fills the header before anything has focus. Not from the row: the lazy stack may
             // not build it until focus moves down. Catalog requests are shared, so this loads once.
@@ -78,36 +77,42 @@ struct TVHome: View {
     }
 }
 
-/// The focused title's or genre's backdrop.
+/// The focused title's or genre's room: its backdrop in the upper right, fading left and
+/// down into its tone, which fills the rest of the screen.
 struct TVHomeBackdrop: View {
     let focus: HomeFocus
     /// The backdrop on screen, which changes only once the next one has been decoded, so
     /// the crossfade goes from image to image rather than through the empty placeholder.
     @State private var shown: String?
+    @State private var tone = Color.canvas
 
     var body: some View {
         let url = focus.genre?.still ?? focus.title?.featuredBackground
-        ZStack {
-            // Each backdrop is its own view, so the crossfade blends two layers on the GPU.
-            // Animating one image view's content instead redrew both images on the CPU every frame.
-            Artwork(url: shown)
-                .id(shown)
-                .transition(.opacity)
+        ZStack(alignment: .topTrailing) {
+            Room(tone: tone)
+            ZStack {
+                // Each backdrop is its own view, so the crossfade blends two layers on the GPU.
+                // Animating one image view's content instead redrew both images on the CPU every frame.
+                Artwork(url: shown)
+                    .id(shown)
+                    .transition(.opacity)
+            }
+            .overlay { BackdropFade(tone: tone) }
+            .mask {
+                LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.35)],
+                               startPoint: .leading, endPoint: .trailing)
+            }
+            .containerRelativeFrame([.horizontal, .vertical]) { length, axis in
+                length * (axis == .horizontal ? 0.78 : 0.68)
+            }
         }
         .ignoresSafeArea()
-        .overlay {
-            // Darken the left and bottom, where the text and rows sit.
-            LinearGradient(colors: [.canvas.opacity(0.85), .canvas.opacity(0)], startPoint: .leading, endPoint: .center)
-                .ignoresSafeArea()
-            BackdropFade().ignoresSafeArea()
-        }
         .animation(.easeInOut(duration: 0.4), value: shown)
         .task(id: url) {
-            if let address = url, let imageURL = URL(string: address) {
-                // A failed image still replaces the old one, as the placeholder.
-                _ = await ArtworkCache.image(for: imageURL)
-                guard !Task.isCancelled else { return }
-            }
+            // A failed image still replaces the old one, as the placeholder, in the plain canvas.
+            let found = await RoomTone.tone(for: url)
+            guard !Task.isCancelled else { return }
+            tone = found ?? .canvas
             shown = url
         }
     }
@@ -158,7 +163,7 @@ struct TVHomeHeader: View {
 
     private func details(_ focused: MetaPreview) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            TitleLogo(logo: focused.logo, name: focused.name, maxHeight: 140)
+            TitleLogo(logo: focused.logo, name: focused.name, maxHeight: 140, isWhite: true)
                 .frame(maxWidth: 600, alignment: .leading)
             focused.infoLine
             if let description = focused.description {
