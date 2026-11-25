@@ -14,7 +14,7 @@ enum Metrics {
     static let posterWidth: CGFloat = 210
     /// Continue Watching stills.
     static let cardWidth: CGFloat = 354
-    static let episodeWidth: CGFloat = 375
+    static let episodeWidth: CGFloat = 390
     // tvOS already insets content by its own safe area margins.
     static let gutter: CGFloat = 0
     static let rowSpacing: CGFloat = 40

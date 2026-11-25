@@ -64,8 +64,7 @@ struct MetaDetailView: View {
                             backdrop: meta.background ?? preview.background,
                             runtime: meta.runtime,
                             route: route(for:),
-                            choose: { choosingSource = route(for: $0) },
-                            staysInColumn: usesColumns
+                            choose: { choosingSource = route(for: $0) }
                         )
                         .detailColumn(.side)
                     }
@@ -79,6 +78,10 @@ struct MetaDetailView: View {
                         }
                         .padding(.horizontal, Metrics.gutter)
                     }
+                    #if os(tvOS)
+                    // At ten feet, what to watch next comes before who made this one.
+                    MoreLikeThisRow(titles: tmdbDetails?.recommendations ?? [])
+                    #endif
                     let people = creditedPeople(fallback: meta.people)
                     if !people.isEmpty {
                         PeopleRow(people: people, title: preview, staysInColumn: usesColumns)
@@ -90,8 +93,10 @@ struct MetaDetailView: View {
                         CollectionRow(collection: collection, currentID: tmdbDetails?.tmdbID)
                             .detailColumn(.side)
                     }
+                    #if !os(tvOS)
                     MoreLikeThisRow(titles: tmdbDetails?.recommendations ?? [])
                         .detailColumn(.side)
+                    #endif
                 } else if case .failed(let message) = state {
                     HStack {
                         Text(message)
@@ -399,37 +404,9 @@ struct MetaDetailView: View {
             .accessibilityHidden(true)
     }
 
-    /// The title and Play lead. Apple TV follows with the description and the facts and
-    /// scores one size down beneath it, then the buttons.
-    @ViewBuilder
-    private func hero(meta: Meta?, play: PlayAction?) -> some View {
-        #if os(tvOS)
-            VStack(alignment: heroAlignment, spacing: 20) {
-                logo(meta: meta)
-                VStack(alignment: .leading, spacing: 10) {
-                    if let description = meta?.description ?? preview.description {
-                        Text(description)
-                            .font(.synopsis)
-                            .foregroundStyle(.white.opacity(0.88))
-                            .lineLimit(synopsisLines)
-                            .frame(maxWidth: synopsisWidth, alignment: .leading)
-                    }
-                    facts(meta: meta)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                buttons(meta: meta, play: play)
-            }
-            .frame(maxWidth: .infinity, alignment: Alignment(horizontal: heroAlignment, vertical: .bottom))
-            .frame(minHeight: heroHeight, alignment: .bottom)
-            .padding(.horizontal, Metrics.gutter)
-        #else
-        column(meta: meta, play: play)
-        #endif
-    }
-
     private func logo(meta: Meta?) -> some View {
         TitleLogo(logo: meta?.logo ?? preview.logo, name: preview.name, maxHeight: logoHeight, restsOnLettering: true,
-                  isWhite: !Metrics.isTV)
+                  isWhite: true)
             // As tall as the logo is, not as tall as it may be: a wide, low one otherwise
             // floats in the middle of that room, far above the buttons.
             .fixedSize(horizontal: false, vertical: true)
@@ -438,7 +415,9 @@ struct MetaDetailView: View {
 
     /// The logo low on the backdrop, one line of facts, Play, the other actions with their
     /// names, then the description: centred down a phone, the left column on iPad and Mac.
-    private func column(meta: Meta?, play: PlayAction?) -> some View {
+    /// Apple TV puts two lines of description before the buttons, with nothing focusable in
+    /// between, so one press down from Play reaches the episodes.
+    private func hero(meta: Meta?, play: PlayAction?) -> some View {
         VStack(alignment: heroAlignment, spacing: 0) {
             logo(meta: meta)
                 // The logo's foot stays in one place, so taller logos reach further up the backdrop.
@@ -446,7 +425,27 @@ struct MetaDetailView: View {
             facts(meta: meta)
                 .multilineTextAlignment(heroAlignment == .center ? .center : .leading)
                 .padding(.top, 14)
-            #if os(macOS)
+            #if os(tvOS)
+            if let description = meta?.description ?? preview.description {
+                Text(description)
+                    .font(.synopsis)
+                    .foregroundStyle(.white.opacity(0.65))
+                    .lineLimit(2)
+                    .frame(maxWidth: 900, alignment: .leading)
+                    .padding(.top, 14)
+            }
+            HStack(spacing: 24) {
+                playButton(play)
+                actions(meta: meta, play: play)
+            }
+            .padding(.top, 34)
+            if let left = timeLeft(play) {
+                Text(left)
+                    .font(.metaLine)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 20)
+            }
+            #elseif os(macOS)
             // With a pointer the actions fit beside Play, each with its name.
             HStack(spacing: 10) {
                 playButton(play)
@@ -459,14 +458,25 @@ struct MetaDetailView: View {
             actions(meta: meta, play: play)
                 .padding(.top, 16)
             #endif
+            #if !os(tvOS)
             if let description = meta?.description ?? preview.description {
                 ExpandableText(text: description)
                     .padding(.top, 18)
             }
+            #endif
         }
         .frame(maxWidth: .infinity, alignment: Alignment(horizontal: heroAlignment, vertical: .top))
         .padding(.horizontal, Metrics.gutter)
     }
+
+    #if os(tvOS)
+    /// "31 min left" of what Play resumes, under the buttons.
+    private func timeLeft(_ play: PlayAction?) -> String? {
+        guard let id = play?.route.id, let progress = library.progress[id], !progress.isFinished,
+              library.resumePosition(for: id) != nil else { return nil }
+        return "\(max(Int((progress.duration - progress.position) / 60), 1)) min left"
+    }
+    #endif
 
     /// Genres, year and runtime with the scores after them, or under them where one line
     /// doesn't hold both, as with large text.
@@ -486,32 +496,12 @@ struct MetaDetailView: View {
         }
     }
 
-    #if os(tvOS)
-    /// Play with Watch Later and More, starting at the leading edge.
-    private func buttons(meta: Meta?, play: PlayAction?) -> some View {
-        let saved = savedPreview(meta)
-        // No merging distance: the circles stay apart, as separate buttons.
-        return GlassEffectContainer(spacing: 0) {
-            // From the top: on Apple TV a focused circle has its name under it, which would
-            // otherwise push Play down to stay centred.
-            HStack(alignment: .top, spacing: 16) {
-                playButton(play)
-                MyListButton(isSaved: library.isSaved(preview.id)) {
-                    library.toggleSaved(saved)
-                }
-                TitleMoreMenu(trailer: trailerURL(meta), chooseSource: chooseSource(play),
-                              movie: preview.type == MediaType.series ? nil : play?.route.item)
-            }
-        }
-    }
-    #endif
-
     /// Everything besides Play, each with its name: circles in equal columns, or on the Mac
     /// buttons in a row.
     private func actions(meta: Meta?, play: PlayAction?) -> some View {
         let isSaved = library.isSaved(preview.id)
         let saved = savedPreview(meta)
-        return HStack(alignment: .top, spacing: 0) {
+        return HStack(alignment: .top, spacing: Self.actionSpacing) {
             Button(isSaved ? "In Watch Later" : "Watch Later", systemImage: isSaved ? "checkmark" : "plus") {
                 library.toggleSaved(saved)
             }
@@ -568,6 +558,15 @@ struct MetaDetailView: View {
         }
     }
 
+    /// Circles share the width in equal columns; the Mac's and TV's buttons sit apart.
+    #if os(tvOS)
+    private static let actionSpacing: CGFloat = 24
+    #elseif os(macOS)
+    private static let actionSpacing: CGFloat = 10
+    #else
+    private static let actionSpacing: CGFloat = 0
+    #endif
+
     /// The sources for what Play would start, to pick one by hand.
     private func chooseSource(_ play: PlayAction?) -> (() -> Void)? {
         play.map { play in
@@ -592,13 +591,11 @@ struct MetaDetailView: View {
                     .frame(maxWidth: .infinity)
                     #elseif os(macOS)
                     .frame(minWidth: 160)
+                    #else
+                    .frame(minWidth: 260)
                     #endif
             }
             .buttonStyle(PrimaryButtonStyle())
-            .contextMenu {
-                // Movies only: a series is marked by season or episode.
-                if preview.type != MediaType.series { WatchedMarkButton(item: play.route.item) }
-            }
         }
     }
 
@@ -618,8 +615,6 @@ struct MetaDetailView: View {
     private let heroHeight: CGFloat = 560
     private let logoHeight: CGFloat = 160
     private let logoWidth: CGFloat = 560
-    private let synopsisWidth: CGFloat = 900
-    private let synopsisLines = 3
     #elseif os(macOS)
     private let heroAlignment = HorizontalAlignment.leading
     private let heroHeight: CGFloat = 420
@@ -636,24 +631,6 @@ struct MetaDetailView: View {
     private var logoWidth: CGFloat { isWide ? 400 : .infinity }
     #endif
 }
-
-#if os(tvOS)
-private struct MyListButton: View {
-    let isSaved: Bool
-    let toggle: () -> Void
-
-    var body: some View {
-        Button(action: toggle) {
-            Label(title, systemImage: isSaved ? "checkmark" : "plus")
-                .contentTransition(.symbolEffect(.replace))
-        }
-        .buttonStyle(GlassIconButtonStyle(caption: isSaved ? "Saved" : "Watch Later"))
-        .help(title)
-    }
-
-    private var title: String { isSaved ? "Remove from Watch Later" : "Add to Watch Later" }
-}
-#endif
 
 /// viewer left off: the unfinished episode, else the one after the last finished, else the first.
 @MainActor
