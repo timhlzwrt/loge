@@ -52,7 +52,12 @@ struct Words: View {
             Text(word)
                 .layoutValue(key: FollowsWithoutSpace.self, value: word.first.map { ",.".contains($0) } ?? false)
         }
+        #if os(iOS)
+        // Dimmer than secondary text, so the white values carry the sentence.
+        .foregroundStyle(.white.opacity(0.45))
+        #else
         .foregroundStyle(.secondary)
+        #endif
         .accessibilityHidden(true)
     }
 }

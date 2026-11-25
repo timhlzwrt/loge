@@ -14,6 +14,9 @@ struct SettingsSentencesView: View {
     @AppStorage(SyncedSettings.Key.combinesAddonSources) private var combinesAddonSources = false
     @AppStorage(HomeLayout.storageKey) private var homeLayout: Data?
     @State private var isConnectingTMDB = false
+    #if os(iOS)
+    @State private var isSharing = false
+    #endif
 
     var body: some View {
         GeometryReader { proxy in
@@ -32,17 +35,14 @@ struct SettingsSentencesView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, Metrics.gutter)
                 .padding(.vertical, Self.lineSpacing)
-                // A phone keeps the text above the tab bar, in reach of the thumb, with the glow in the
-                // space above; larger screens centre it.
-                .frame(minHeight: proxy.size.height, alignment: Metrics.isPhone ? .bottom : .center)
+                // A phone reads it from the top, like its other pages; larger screens centre it.
+                .frame(minHeight: proxy.size.height, alignment: Metrics.isPhone ? .top : .center)
                 .buttonStyle(TokenButtonStyle())
                 .menuStyle(.button)
             }
         }
-        .background {
-            // A glow in the empty corner above the name, where the app's other pages lead with artwork.
-            PageGlow()
-        }
+        // Plain charcoal, as on every page without a title's room.
+        .background(Color.canvas.ignoresSafeArea())
         #if !os(tvOS)
         // Names the page for the back button and the Mac's window; the tab bar already says where this is.
         .navigationTitle("Settings")
@@ -65,9 +65,27 @@ struct SettingsSentencesView: View {
             }
             cast
             syncing
+            #if os(iOS)
+            setupButtons
+            #endif
             styleChoice
         }
     }
+
+    #if os(iOS)
+    /// A copy of the addons for someone else, or theirs for this device.
+    private var setupButtons: some View {
+        HStack(spacing: 10) {
+            Button { isSharing = true } label: { Text("Share Setup").frame(maxWidth: .infinity) }
+                .disabled(store.addons.isEmpty)
+            NavigationLink { ImportSetupView() } label: { Text("Import Setup").frame(maxWidth: .infinity) }
+        }
+        .buttonStyle(PrimaryButtonStyle(isTranslucent: true))
+        .controlSize(.small)
+        .padding(.top, Self.lineSpacing * 2)
+        .sheet(isPresented: $isSharing) { NavigationStack { ShareSetupView() } }
+    }
+    #endif
 
     private var playback: some View {
         Sentence {
@@ -221,8 +239,8 @@ struct SettingsSentencesView: View {
     #else
     private static let lineSpacing: CGFloat = 12
     private static let readableWidth: CGFloat = 600
-    private static let wordmarkFont = Font.system(size: 96, weight: .heavy)
-    private static let wordmarkTracking: CGFloat = -4
+    private static let wordmarkFont = Font.system(size: 64, weight: .heavy)
+    private static let wordmarkTracking: CGFloat = -3
     private static let styleChoiceFont = Font.footnote
     private static let styleChoiceWordSpace: CGFloat = 4
     #endif
