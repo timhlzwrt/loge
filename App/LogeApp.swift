@@ -17,6 +17,10 @@ struct LogeApp: App {
     @State private var schedule = EpisodeSchedule()
     /// Here rather than in `RootView`, so the Mac's menu commands can switch tabs.
     @State private var selectedTab = RootTab.home
+    #if os(macOS)
+    /// Counts ⌘F presses, each of which puts the cursor in the toolbar's search field.
+    @State private var searchRequests = 0
+    #endif
     /// Coming back from Control Center or a system sheet isn't a return to the app.
     @State private var leftForeground = false
     #if !os(tvOS)
@@ -169,12 +173,8 @@ struct LogeApp: App {
                 Button("Check for Updates…", action: appUpdater.checkForUpdates)
                     .disabled(!appUpdater.canCheckForUpdates)
             }
-            CommandGroup(replacing: .appSettings) {
-                Button("Settings…") { selectedTab = .settings }
-                    .keyboardShortcut(",")
-            }
             CommandGroup(after: .textEditing) {
-                Button("Search") { selectedTab = .search }
+                Button("Search") { searchRequests += 1 }
                     .keyboardShortcut("f")
             }
             // Every window would rerun the launch work and react to playback on its own, over shared stores.
@@ -182,6 +182,20 @@ struct LogeApp: App {
         }
         #endif
         #if os(macOS)
+        // The standard Settings window, from ⌘,: the sentence and the pages it opens.
+        Settings {
+            NavigationStack { SettingsView() }
+                .frame(width: 680, height: 560)
+                .environmentObject(appUpdater)
+                .environment(addonStore)
+                .environment(library)
+                .environment(playback)
+                .environment(tmdb)
+                .environment(accountSync)
+                .environment(schedule)
+                .preferredColorScheme(.dark)
+                .tint(.white)
+        }
         // A window of its own, so playback can go full screen and sit beside the browser.
         Window("Player", id: PlayerView.windowID) {
             PlayerView()
@@ -244,8 +258,16 @@ struct LogeApp: App {
                     roles: [.director], tmdbID: id)))
             }
         } else {
-            RootView(selection: $selectedTab)
+            rootView
         }
+        #else
+        rootView
+        #endif
+    }
+
+    private var rootView: some View {
+        #if os(macOS)
+        RootView(selection: $selectedTab, searchRequests: searchRequests)
         #else
         RootView(selection: $selectedTab)
         #endif
@@ -290,6 +312,13 @@ enum RootTab: Hashable {
 
 struct RootView: View {
     @Binding var selection: RootTab
+    #if os(macOS)
+    /// Changes with each ⌘F.
+    var searchRequests = 0
+    /// The toolbar's search field; while it has text, its results cover the tab.
+    @State private var searchQuery = ""
+    @FocusState private var isSearchFocused: Bool
+    #endif
     @Environment(PlaybackSession.self) private var playback
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -323,6 +352,8 @@ struct RootView: View {
             tab("My Lists", systemImage: "bookmark", value: .myLists) {
                 BrowseStack { MyListView() }
             }
+            // The Mac searches from the toolbar and keeps Settings in its own window.
+            #if !os(macOS)
             // The search role sets the tab apart from the others, which a phone's one pill has no room for.
             tab("Search", systemImage: "magnifyingglass", value: .search, role: Metrics.isPhone ? nil : .search) {
                 BrowseStack { SearchView() }
@@ -330,8 +361,21 @@ struct RootView: View {
             tab("Settings", systemImage: "gearshape", value: .settings) {
                 NavigationStack { SettingsView() }
             }
+            #endif
         }
         .tabViewStyle(.tabBarOnly)
+        #if os(macOS)
+        .overlay {
+            if !searchQuery.isEmpty {
+                BrowseStack { SearchView(toolbarQuery: $searchQuery) }
+            }
+        }
+        .searchable(text: $searchQuery, placement: .toolbar, prompt: "Search")
+        .searchFocused($isSearchFocused)
+        .onChange(of: searchRequests) { isSearchFocused = true }
+        // Choosing a tab leaves the search for it.
+        .onChange(of: selection) { searchQuery = "" }
+        #endif
     }
 
     /// A tab that shows only its icon in the phone's tab bar, where the symbols are
@@ -374,12 +418,13 @@ private struct BrowseStack<Content: View>: View {
 }
 
 #if os(iOS)
-/// iPhone browsing stays upright; only the player turns with the phone.
+/// iPhone browsing stays upright, and only the player turns with the phone. The iPad is
+/// landscape only, the player included.
 final class AppDelegate: NSObject, UIApplicationDelegate {
     private static var allowsLandscape = false
 
     func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
-        guard UIDevice.current.userInterfaceIdiom == .phone else { return .all }
+        guard UIDevice.current.userInterfaceIdiom == .phone else { return .landscape }
         return Self.allowsLandscape ? .allButUpsideDown : .portrait
     }
 
