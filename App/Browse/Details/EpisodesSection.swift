@@ -6,6 +6,8 @@ struct EpisodesSection: View {
     let upNextID: String?
     /// The series' backdrop, shown for episodes without a still of their own.
     let backdrop: String?
+    /// The series' usual episode length, "49 min", for a phone's episode rows.
+    let runtime: String?
     let route: (Video) -> SourcesRoute
     /// Opens the sources for an episode.
     let choose: (Video) -> Void
@@ -15,11 +17,12 @@ struct EpisodesSection: View {
     @State private var isConfirmingUnwatched = false
     @Environment(LibraryStore.self) private var library
 
-    init(videos: [Video], upNextID: String?, backdrop: String?, route: @escaping (Video) -> SourcesRoute,
-         choose: @escaping (Video) -> Void, staysInColumn: Bool = false) {
+    init(videos: [Video], upNextID: String?, backdrop: String?, runtime: String?,
+         route: @escaping (Video) -> SourcesRoute, choose: @escaping (Video) -> Void, staysInColumn: Bool = false) {
         self.videos = videos
         self.upNextID = upNextID
         self.backdrop = backdrop
+        self.runtime = runtime
         self.route = route
         self.choose = choose
         self.staysInColumn = staysInColumn
@@ -29,6 +32,62 @@ struct EpisodesSection: View {
     }
 
     var body: some View {
+        Group {
+            if Metrics.isPhone {
+                phoneList
+            } else {
+                shelf
+            }
+        }
+        .confirmationDialog("Mark \(Self.seasonName(season)) as unwatched?", isPresented: $isConfirmingUnwatched,
+                            titleVisibility: .visible) {
+            Button("Mark as Unwatched", role: .destructive) {
+                library.markUnwatched(episodes.map(\.id))
+            }
+        } message: {
+            Text("Progress and watched marks for its episodes are removed.")
+        }
+    }
+
+    /// Seasons as a row of pills over the season's episodes, one per row, as a phone lists them.
+    private var phoneList: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ScrollView(.horizontal) {
+                HStack(spacing: 8) {
+                    ForEach(Self.seasons(in: videos), id: \.self) { number in
+                        Button(Self.seasonName(number)) { season = number }
+                            .buttonStyle(SeasonPillStyle(isSelected: number == season))
+                            .accessibilityAddTraits(number == season ? .isSelected : [])
+                            // Long-pressing a season selects it and offers its marks.
+                            .contextMenu {
+                                Button("Mark Season as Watched", systemImage: "checkmark.circle") {
+                                    season = number
+                                    library.markWatched(episodes(in: number).filter { $0.isReleased() }.map { route($0).item })
+                                }
+                                Button("Mark Season as Unwatched", systemImage: "eye.slash") {
+                                    season = number
+                                    isConfirmingUnwatched = true
+                                }
+                            }
+                    }
+                }
+            }
+            .contentMargins(.horizontal, Metrics.gutter, for: .scrollContent)
+            .scrollIndicators(.hidden)
+            .padding(.bottom, 4)
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(episodes) { video in
+                    Button { choose(video) } label: {
+                        EpisodeRow(video: video, backdrop: backdrop, runtime: runtime)
+                    }
+                    .buttonStyle(.plain)
+                    .contextMenu { watchedActions(for: video) }
+                }
+            }
+        }
+    }
+
+    private var shelf: some View {
         VStack(alignment: .leading, spacing: Metrics.headerSpacing) {
             seasonMenu
                 .padding(.horizontal, Metrics.gutter)
@@ -118,14 +177,6 @@ struct EpisodesSection: View {
         .fixedSize()
         .accessibilityLabel("Season")
         .accessibilityValue(Self.seasonName(season))
-        .confirmationDialog("Mark \(Self.seasonName(season)) as unwatched?", isPresented: $isConfirmingUnwatched,
-                            titleVisibility: .visible) {
-            Button("Mark as Unwatched", role: .destructive) {
-                library.markUnwatched(episodes.map(\.id))
-            }
-        } message: {
-            Text("Progress and watched marks for its episodes are removed.")
-        }
     }
 
     @ViewBuilder
@@ -142,6 +193,10 @@ struct EpisodesSection: View {
     }
 
     private var episodes: [Video] {
+        episodes(in: season)
+    }
+
+    private func episodes(in season: Int) -> [Video] {
         videos.filter { $0.season == season }.sorted { ($0.episode ?? 0) < ($1.episode ?? 0) }
     }
 
@@ -199,6 +254,85 @@ struct SeasonMenuStyle: ButtonStyle {
     }
 }
 #endif
+
+/// A season to pick on a phone; the chosen one is white.
+private struct SeasonPillStyle: ButtonStyle {
+    let isSelected: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(isSelected ? AnyShapeStyle(.black) : AnyShapeStyle(.white.opacity(0.7)))
+            .padding(.horizontal, 14)
+            .frame(minHeight: 36)
+            .background(isSelected ? AnyShapeStyle(.white) : AnyShapeStyle(.white.opacity(0.08)), in: .capsule)
+            .opacity(configuration.isPressed ? 0.7 : 1)
+            // 44 pt to tap, without spacing the pills further apart.
+            .padding(.vertical, 4)
+            .contentShape(.rect)
+    }
+}
+
+/// An episode on a phone: its still on the left with the progress over it, the number and
+/// title, and how much is left; a check once it's watched.
+private struct EpisodeRow: View {
+    let video: Video
+    let backdrop: String?
+    let runtime: String?
+    @Environment(LibraryStore.self) private var library
+
+    var body: some View {
+        let progress = library.progress[video.id]
+        let isWatched = progress?.isFinished == true
+        HStack(alignment: .top, spacing: 14) {
+            Artwork(url: video.thumbnail, fallbacks: [backdrop].compactMap { $0 })
+                .overlay {
+                    if let progress, !isWatched { WatchProgressBar(progress: progress, inset: 7) }
+                }
+                .frame(width: 132, height: 74)
+                .clipShape(.rect(cornerRadius: 9))
+                .brightness(isWatched ? -0.25 : 0)
+                .opacity(video.isReleased() ? 1 : 0.5)
+            VStack(alignment: .leading, spacing: 3) {
+                Text([video.episode.map { "\($0)." }, video.displayTitle ?? "Untitled"].compactMap { $0 }.joined(separator: " "))
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(2)
+                if let detail = detail(progress) {
+                    Text(detail)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.top, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if isWatched {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.title3)
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.black, .white.opacity(0.85))
+                    .padding(.top, 4)
+            }
+        }
+        .padding(.horizontal, Metrics.gutter)
+        .padding(.vertical, 10)
+        .contentShape(.rect)
+        .accessibilityElement(children: .ignore)
+        // Read as the cards on wider screens are: "Episode 4, Woe's Hollow".
+        .accessibilityLabel([video.episode.map { "Episode \($0)" }, video.displayTitle].compactMap { $0 }.joined(separator: ", "))
+        .accessibilityValue([isWatched ? "Watched" : nil, detail(progress)].compactMap { $0 }.joined(separator: ", "))
+    }
+
+    /// "31 min left", when an upcoming episode airs, or the series' usual length.
+    private func detail(_ progress: WatchProgress?) -> String? {
+        if !video.isReleased(), let date = video.releaseDate {
+            return "Airs \(date.formatted(.dateTime.day().month().locale(.interface)))"
+        }
+        if let progress, !progress.isFinished {
+            return "\(max(Int((progress.duration - progress.position) / 60), 1)) min left"
+        }
+        return runtime
+    }
+}
 
 struct EpisodeCard: View {
     let video: Video

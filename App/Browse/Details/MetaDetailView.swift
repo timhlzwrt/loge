@@ -25,6 +25,10 @@ struct MetaDetailView: View {
     /// Set by "Choose a Source" and by picking an episode, which bypass the remembered source.
     @State private var choosingSource: SourcesRoute?
     @State private var heroScroll = HeroScroll()
+    /// Taken from the backdrop; the canvas until it's known.
+    @State private var tone = Color.canvas
+    @State private var isConfirmingSeriesUnwatched = false
+    @Environment(\.openURL) private var openURL
 
     private enum LoadState {
         case loading
@@ -59,6 +63,7 @@ struct MetaDetailView: View {
                             videos: videos,
                             upNextID: library.upNext(metaID: preview.id, videos: videos)?.video.id,
                             backdrop: meta.background ?? preview.background,
+                            runtime: meta.runtime,
                             route: route(for:),
                             choose: { choosingSource = route(for: $0) },
                             staysInColumn: usesColumns
@@ -79,14 +84,14 @@ struct MetaDetailView: View {
                         PeopleRow(people: people, title: preview, staysInColumn: usesColumns)
                             .detailColumn(.side)
                     }
+                    InformationSection(meta: meta, details: tmdbDetails, people: people)
+                        .detailColumn(.side)
                     if let collection {
                         CollectionRow(collection: collection, currentID: tmdbDetails?.tmdbID)
                             .detailColumn(.full)
                     }
                     MoreLikeThisRow(titles: tmdbDetails?.recommendations ?? [])
                         .detailColumn(.full)
-                    InformationSection(meta: meta, details: tmdbDetails, people: people)
-                        .detailColumn(.side)
                 } else if case .failed(let message) = state {
                     HStack {
                         Text(message)
@@ -120,15 +125,19 @@ struct MetaDetailView: View {
         // down as the backdrop on a wide iPad page, leaving the rest of the page black.
         .background {
             ZStack(alignment: .top) {
-                Color.canvas.ignoresSafeArea()
+                Room(tone: tone)
                 HeroScroll.Fading(scroll: heroScroll) { backdrop(url: meta?.background ?? preview.background) }
-                // Over the faded backdrop, so its light carries on down the page without a seam.
-                ArtworkGlow(url: meta?.background ?? preview.background)
             }
         }
+        .roomTone(of: meta?.background ?? preview.background, into: $tone)
         .hidingPhoneTabBar()
         #if os(iOS)
         .toolbarBackground(.hidden, for: .navigationBar)
+        // The name takes the bar once the logo has scrolled away.
+        .toolbar {
+            ToolbarItem(placement: .principal) { HeroScroll.Title(scroll: heroScroll, name: preview.name) }
+        }
+        .navigationBarTitleDisplayMode(.inline)
         #elseif os(macOS)
         // Otherwise the window title falls back to the app's name.
         .navigationTitle(preview.name)
@@ -359,10 +368,11 @@ struct MetaDetailView: View {
 
     private func backdrop(url: String?) -> some View {
         Artwork(url: url)
-            .overlay { BackdropFade() }
+            .overlay { BackdropFade(tone: tone) }
             #if !os(iOS)
             .overlay {
-                LinearGradient(colors: [.canvas.opacity(0.8), .canvas.opacity(0)], startPoint: .leading, endPoint: .center)
+                LinearGradient(colors: [tone.opacity(0.8), tone.opacity(0)], startPoint: .leading, endPoint: .center)
+                    .animation(.easeOut(duration: 0.6), value: tone)
             }
             #endif
             #if os(tvOS)
@@ -380,44 +390,64 @@ struct MetaDetailView: View {
             .accessibilityHidden(true)
     }
 
-    /// The title and Play lead. The description follows with the facts and scores one size
-    /// down beneath it; on a phone that's under the buttons, so it doesn't push them down.
+    /// The title and Play lead. Wide screens follow with the description and the facts and
+    /// scores one size down beneath it, then the buttons.
+    @ViewBuilder
     private func hero(meta: Meta?, play: PlayAction?) -> some View {
-        VStack(alignment: heroAlignment, spacing: 20) {
-            TitleLogo(logo: meta?.logo ?? preview.logo, name: preview.name, maxHeight: logoHeight, restsOnLettering: true)
-                // As tall as the logo is, not as tall as it may be: a wide, low one otherwise
-                // floats in the middle of that room, far above the buttons.
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: logoWidth, alignment: Alignment(horizontal: heroAlignment, vertical: .center))
-            if synopsisUnderButtons {
-                buttons(meta: meta, play: play)
-                about(meta: meta)
-            } else {
-                about(meta: meta)
+        if synopsisUnderButtons {
+            narrowHero(meta: meta, play: play)
+        } else {
+            VStack(alignment: heroAlignment, spacing: 20) {
+                logo(meta: meta)
+                VStack(alignment: .leading, spacing: 10) {
+                    if let description = meta?.description ?? preview.description {
+                        Text(description)
+                            .font(.synopsis)
+                            .foregroundStyle(.white.opacity(0.88))
+                            .lineLimit(synopsisLines)
+                            .frame(maxWidth: synopsisWidth, alignment: .leading)
+                    }
+                    facts(meta: meta)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 buttons(meta: meta, play: play)
             }
+            .frame(maxWidth: .infinity, alignment: Alignment(horizontal: heroAlignment, vertical: .bottom))
+            .frame(minHeight: heroHeight, alignment: .bottom)
+            .padding(.horizontal, Metrics.gutter)
         }
-        .frame(maxWidth: .infinity, alignment: Alignment(horizontal: heroAlignment, vertical: .bottom))
-        .frame(minHeight: heroHeight, alignment: .bottom)
-        .padding(.horizontal, Metrics.gutter)
     }
 
-    private func about(meta: Meta?) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if let description = meta?.description ?? preview.description {
-                if synopsisUnderButtons {
-                    ExpandableText(text: description)
-                } else {
-                    Text(description)
-                        .font(.synopsis)
-                        .foregroundStyle(.white.opacity(0.88))
-                        .lineLimit(synopsisLines)
-                        .frame(maxWidth: synopsisWidth, alignment: .leading)
-                }
-            }
+    private func logo(meta: Meta?) -> some View {
+        TitleLogo(logo: meta?.logo ?? preview.logo, name: preview.name, maxHeight: logoHeight, restsOnLettering: true,
+                  isWhite: synopsisUnderButtons)
+            // As tall as the logo is, not as tall as it may be: a wide, low one otherwise
+            // floats in the middle of that room, far above the buttons.
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: logoWidth, alignment: Alignment(horizontal: heroAlignment, vertical: .center))
+    }
+
+    /// A phone's column: the logo low on the backdrop, one line of facts, Play across the
+    /// width, the other actions as labelled circles, then the description.
+    private func narrowHero(meta: Meta?, play: PlayAction?) -> some View {
+        VStack(spacing: 0) {
+            logo(meta: meta)
+                // The logo's foot stays in one place, so taller logos reach further up the backdrop.
+                .frame(minHeight: heroHeight - 175, alignment: .bottom)
             facts(meta: meta)
+                .multilineTextAlignment(.center)
+                .padding(.top, 14)
+            playButton(play)
+                .padding(.top, 16)
+            actions(meta: meta, play: play)
+                .padding(.top, 16)
+            if let description = meta?.description ?? preview.description {
+                ExpandableText(text: description)
+                    .padding(.top, 18)
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, Metrics.gutter)
     }
 
     /// Genres, year and runtime with the scores after them, or under them where one line
@@ -431,47 +461,105 @@ struct MetaDetailView: View {
                 line
                 scores
             }
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: synopsisUnderButtons ? .center : .leading, spacing: 6) {
                 line
                 scores
             }
         }
     }
 
-    /// Play with Watch Later and More. A phone centres the three under its title, Play in the
-    /// middle and a size down; wider screens start with Play, at the leading edge.
+    /// Play with Watch Later and More, starting at the leading edge.
     private func buttons(meta: Meta?, play: PlayAction?) -> some View {
         let saved = savedPreview(meta)
-        let watchLater = MyListButton(isSaved: library.isSaved(preview.id)) {
-            library.toggleSaved(saved)
-        }
-        let more = TitleMoreMenu(
-            trailer: Self.trailerURL(youTubeID: tmdbDetails?.trailerYouTubeID ?? meta?.trailers?.youTubeID),
-            chooseSource: play.map { play in
-                {
-                    var route = play.route
-                    route.autoplay = false
-                    choosingSource = route
-                }
-            },
-            movie: preview.type == MediaType.series ? nil : play?.route.item)
         // No merging distance: the circles stay apart, as separate buttons.
         return GlassEffectContainer(spacing: 0) {
             // From the top: on Apple TV a focused circle has its name under it, which would
             // otherwise push Play down to stay centred.
-            HStack(alignment: .top, spacing: synopsisUnderButtons ? 12 : 16) {
-                if synopsisUnderButtons {
-                    watchLater
-                    playButton(play)
-                    more
-                } else {
-                    playButton(play)
-                    watchLater
-                    more
+            HStack(alignment: .top, spacing: 16) {
+                playButton(play)
+                MyListButton(isSaved: library.isSaved(preview.id)) {
+                    library.toggleSaved(saved)
                 }
+                TitleMoreMenu(trailer: trailerURL(meta), chooseSource: chooseSource(play),
+                              movie: preview.type == MediaType.series ? nil : play?.route.item)
             }
         }
-        .controlSize(synopsisUnderButtons ? .small : .regular)
+    }
+
+    /// Everything besides Play, each a circle with its name under it, in equal columns.
+    private func actions(meta: Meta?, play: PlayAction?) -> some View {
+        let isSaved = library.isSaved(preview.id)
+        let saved = savedPreview(meta)
+        return HStack(alignment: .top, spacing: 0) {
+            Button(isSaved ? "In Watch Later" : "Watch Later", systemImage: isSaved ? "checkmark" : "plus") {
+                library.toggleSaved(saved)
+            }
+            .buttonStyle(RoundButtonStyle(isOn: isSaved))
+            .accessibilityLabel(isSaved ? "Remove from Watch Later" : "Add to Watch Later")
+            if let trailer = trailerURL(meta) {
+                Button("Trailer", systemImage: "play.rectangle") { openURL(trailer) }
+                    .buttonStyle(RoundButtonStyle())
+            }
+            Button("Sources", systemImage: "list.bullet") { chooseSource(play)?() }
+                .buttonStyle(RoundButtonStyle())
+                .disabled(play == nil)
+            watchedButton(meta: meta, play: play)
+        }
+        .confirmationDialog("Mark \(preview.name) as unwatched?", isPresented: $isConfirmingSeriesUnwatched,
+                            titleVisibility: .visible) {
+            Button("Mark as Unwatched", role: .destructive) {
+                library.markUnwatched((meta?.videos ?? []).map(\.id))
+            }
+        } message: {
+            Text("Progress and watched marks for all its episodes are removed.")
+        }
+    }
+
+    /// A movie's mark, or for a series every episode out so far; taking a series' marks
+    /// away clears all its progress, so that asks first.
+    @ViewBuilder
+    private func watchedButton(meta: Meta?, play: PlayAction?) -> some View {
+        if preview.type == MediaType.series {
+            let released = (meta?.videos ?? []).filter { $0.isReleased() && $0.season != 0 }
+            let isWatched = !released.isEmpty && released.allSatisfy { library.isWatched($0.id) }
+            Menu {
+                if !isWatched {
+                    Button("Mark All as Watched", systemImage: "checkmark.circle") {
+                        library.markWatched(released.map { route(for: $0).item })
+                    }
+                }
+                if released.contains(where: { library.progress[$0.id] != nil }) {
+                    Button("Mark All as Unwatched", systemImage: "eye.slash") { isConfirmingSeriesUnwatched = true }
+                }
+            } label: {
+                Label("Watched", systemImage: "checkmark.circle")
+            }
+            .menuIndicator(.hidden)
+            .buttonStyle(RoundButtonStyle(isOn: isWatched))
+            .disabled(released.isEmpty)
+        } else if let item = play?.route.item {
+            let isWatched = library.isWatched(item.id)
+            Button("Watched", systemImage: "checkmark.circle") {
+                if isWatched { library.markUnwatched([item.id]) } else { library.markWatched([item]) }
+            }
+            .buttonStyle(RoundButtonStyle(isOn: isWatched))
+            .accessibilityLabel(isWatched ? "Mark as Unwatched" : "Mark as Watched")
+        }
+    }
+
+    /// The sources for what Play would start, to pick one by hand.
+    private func chooseSource(_ play: PlayAction?) -> (() -> Void)? {
+        play.map { play in
+            {
+                var route = play.route
+                route.autoplay = false
+                choosingSource = route
+            }
+        }
+    }
+
+    private func trailerURL(_ meta: Meta?) -> URL? {
+        Self.trailerURL(youTubeID: tmdbDetails?.trailerYouTubeID ?? meta?.trailers?.youTubeID)
     }
 
     @ViewBuilder
@@ -479,9 +567,7 @@ struct MetaDetailView: View {
         if let play {
             NavigationLink(value: play.route) {
                 Label(play.label, systemImage: "play.fill")
-                    // 172 pt with the button's own padding: room for "Resume S2, E10", so the
-                    // circles beside it sit in the same place on every title.
-                    .frame(minWidth: synopsisUnderButtons ? 128 : nil)
+                    .frame(maxWidth: synopsisUnderButtons ? .infinity : nil)
             }
             .buttonStyle(PrimaryButtonStyle())
             .contextMenu {
@@ -533,7 +619,7 @@ struct MetaDetailView: View {
     private let synopsisWidth: CGFloat = 620
     /// iPad's larger text would otherwise show less of the synopsis, with no way to read the rest.
     private let synopsisLines = 4
-    /// On a phone the buttons come first, so the synopsis doesn't push them down.
+    /// A phone's single column, with the buttons before the synopsis so it doesn't push them down.
     private var synopsisUnderButtons: Bool { !isWide }
     #endif
 }
@@ -557,7 +643,7 @@ private struct MyListButton: View {
 /// viewer left off: the unfinished episode, else the one after the last finished, else the first.
 @MainActor
 struct PlayAction {
-    /// "Play", "Resume" or "Resume S1, E6".
+    /// "Play", "Resume" or "Resume S1 E6".
     let label: String
     /// Autoplays the remembered source, if there is one.
     let route: SourcesRoute
@@ -571,10 +657,10 @@ struct PlayAction {
         }
         guard let videos = meta?.videos else { return nil }
         if let next = library.upNext(metaID: preview.id, videos: videos) {
-            label = "\(next.resumeAt == nil ? "Play" : "Resume") \(Self.shortCode(for: next.video))"
+            label = "\(next.resumeAt == nil ? "Play" : "Resume") \(EpisodesSection.code(for: next.video))"
             route = Self.route(for: next.video, preview: preview, meta: meta, autoplay: true)
         } else if let first = EpisodesSection.firstEpisode(in: videos) {
-            label = "Play \(Self.shortCode(for: first))"
+            label = "Play \(EpisodesSection.code(for: first))"
             route = Self.route(for: first, preview: preview, meta: meta, autoplay: true)
         } else {
             return nil
@@ -601,13 +687,6 @@ struct PlayAction {
         return SourcesRoute(item: item, title: title, autoplay: autoplay, runtime: runtime)
     }
 
-    /// "S1, E6", as the button says it.
-    private static func shortCode(for video: Video) -> String {
-        switch (video.season, video.episode) {
-        case let (season?, episode?): "S\(season), E\(episode)"
-        default: EpisodesSection.code(for: video)
-        }
-    }
 }
 
 /// How far the hero has scrolled away, from 0 to 1. An object of its own, so scrolling
@@ -624,6 +703,21 @@ private final class HeroScroll {
             // Flattened first: faded layer by layer, the image shows through the opaque foot of
             // its bottom fade, and the frame's edge appears as a hard line.
             content.compositingGroup().opacity(1 - scroll.progress)
+        }
+    }
+
+    /// The title's name in the bar, once the logo has scrolled under it.
+    struct Title: View {
+        let scroll: HeroScroll
+        let name: String
+
+        var body: some View {
+            Text(name)
+                .font(.headline)
+                .lineLimit(1)
+                .opacity(scroll.progress > 0.85 ? 1 : 0)
+                .animation(.easeOut(duration: 0.2), value: scroll.progress > 0.85)
+                .accessibilityHidden(scroll.progress <= 0.85)
         }
     }
 }
