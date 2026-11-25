@@ -59,7 +59,11 @@ struct PersonView: View {
                 .padding(.top, 80)
             case .filmography(let person):
                 VStack(alignment: .leading, spacing: 28) {
-                    profile(person)
+                    if Metrics.isPhone {
+                        phoneProfile(person)
+                    } else {
+                        profile(person)
+                    }
                     filmography(person.titles)
                 }
                 .padding(.vertical, 24)
@@ -138,6 +142,47 @@ struct PersonView: View {
         .padding(.vertical, 24)
     }
 
+    /// The portrait in a circle beside the name and what they do, then three lines of biography.
+    private func phoneProfile(_ person: TMDBPersonDetails) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 16) {
+                PersonAvatar(name: person.name, portraitURL: person.portraitURL ?? route.person.portraitURL, size: 84)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(person.name)
+                        .font(.title.bold())
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.7)
+                    if let line = Self.summary(of: person) {
+                        Text(line)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            if let biography = person.biography {
+                ExpandableText(text: biography)
+            }
+            Link("View profile on TMDB", destination: URL(string: "https://www.themoviedb.org/person/\(person.id)")!)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .frame(minHeight: 44)
+        }
+        .padding(.horizontal, Metrics.gutter)
+    }
+
+    /// "Director · born 1967".
+    private static func summary(of person: TMDBPersonDetails) -> String? {
+        let work: String? = switch person.knownFor {
+        case "Acting": "Actor"
+        case "Directing": "Director"
+        case "Writing": "Writer"
+        case let department?: department
+        case nil: nil
+        }
+        let born = person.birthday.flatMap { $0.wholeMatch(of: /(\d{4})-\d{2}-\d{2}/)?.1 }.map { "born \($0)" }
+        return [work, born].compactMap { $0 }.joined(separator: " · ").nilIfEmpty
+    }
+
     private func profile(_ person: TMDBPersonDetails) -> some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack(alignment: .top, spacing: 20) {
@@ -203,67 +248,26 @@ struct PersonView: View {
         .padding(.horizontal, Metrics.gutter)
     }
 
-    private func filmography(_ titles: [TMDBCreditTitle]) -> some View {
-        let titles = titles.filter { title in role.map { title.creditRoles.contains($0) } ?? true }
+    private func filmography(_ credits: [TMDBCreditTitle]) -> some View {
+        let titles = credits.filter { title in role.map { title.creditRoles.contains($0) } ?? true }
         let movies = titles.filter { $0.type == MediaType.movie }.count
         let series = titles.filter { $0.type == MediaType.series }.count
         let visible = sortedTitles(titles.filter {
             filter == .all || (filter == .movies && $0.type == MediaType.movie) || (filter == .series && $0.type == MediaType.series)
         })
         return VStack(alignment: .leading, spacing: 20) {
-            Text("Filmography").font(.sectionTitle)
-            Picker("Title type", selection: $filter) {
-                Text("All (\(titles.count))").tag(CreditFilter.all)
-                Text("Movies (\(movies))").tag(CreditFilter.movies)
-                Text("Series (\(series))").tag(CreditFilter.series)
-            }
-            .pickerStyle(.segmented)
-            #if os(tvOS)
-            Picker("Credit role", selection: $role) {
-                Text("All roles").tag(TMDBCreditRole?.none)
-                ForEach(TMDBCreditRole.allCases, id: \.self) { role in
-                    Text(role.rawValue).tag(Optional(role))
-                }
-            }
-            .pickerStyle(.segmented)
-            .accessibilityIdentifier("person-role-filter")
-            #endif
-            HStack {
-                #if !os(tvOS)
-                Menu {
-                    Picker("Credit role", selection: $role) {
-                        Text("All roles").tag(TMDBCreditRole?.none)
-                        ForEach(TMDBCreditRole.allCases, id: \.self) { role in
-                            Text(role.rawValue).tag(Optional(role))
-                        }
-                    }
-                } label: {
-                    Label(role?.rawValue ?? "All roles", systemImage: "line.3.horizontal.decrease")
-                        .font(.metaLine)
-                        .frame(minHeight: 44)
-                }
-                .accessibilityLabel("Credit role")
-                .accessibilityValue(role?.rawValue ?? "All roles")
-                .accessibilityIdentifier("person-role-filter")
-                #endif
-                Spacer()
-                Menu {
-                    Picker("Sort", selection: $sort) {
-                        ForEach(CreditSort.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                    }
-                } label: {
-                    Label(sort.rawValue, systemImage: "arrow.up.arrow.down")
-                        .font(.metaLine)
-                        .frame(minHeight: 44)
-                }
-                .accessibilityLabel("Sort")
-                .accessibilityValue(sort.rawValue)
+            if Metrics.isPhone {
+                rolePills(credits)
+            } else {
+                filters(titles: titles, movies: movies, series: series)
             }
             if visible.isEmpty {
                 Text("No credits in this category.").foregroundStyle(.secondary)
             } else {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: Metrics.posterWidth), spacing: Metrics.rowSpacing, alignment: .top)],
-                          alignment: .leading, spacing: Metrics.rowSpacing) {
+                LazyVGrid(columns: Metrics.isPhone
+                              ? Metrics.posterGridColumns
+                              : [GridItem(.adaptive(minimum: Metrics.posterWidth), spacing: Metrics.rowSpacing, alignment: .top)],
+                          alignment: .leading, spacing: Metrics.isPhone ? 16 : Metrics.rowSpacing) {
                     ForEach(visible) { title in
                         // By value, as genre tiles: a view-built destination left
                         // the links inside the resolved details dead.
@@ -284,6 +288,88 @@ struct PersonView: View {
             }
         }
         .padding(.horizontal, Metrics.gutter)
+    }
+
+    /// A phone's filter: the roles they have credits in, as pills, newest first.
+    @ViewBuilder
+    private func rolePills(_ credits: [TMDBCreditTitle]) -> some View {
+        let present = TMDBCreditRole.allCases.filter { role in credits.contains { $0.creditRoles.contains(role) } }
+        if present.count > 1 {
+            ScrollView(.horizontal) {
+                HStack(spacing: 8) {
+                    Button("All") { role = nil }
+                        .buttonStyle(PillButtonStyle(isSelected: role == nil))
+                    ForEach(present, id: \.self) { option in
+                        Button(Self.name(of: option)) { role = option }
+                            .buttonStyle(PillButtonStyle(isSelected: role == option))
+                    }
+                }
+            }
+            .contentMargins(.horizontal, Metrics.gutter, for: .scrollContent)
+            .scrollIndicators(.hidden)
+            .padding(.horizontal, -Metrics.gutter)
+            .accessibilityIdentifier("person-role-filter")
+        }
+    }
+
+    private static func name(of role: TMDBCreditRole) -> String {
+        switch role {
+        case .acting: "Actor"
+        case .directing: "Director"
+        case .otherCrew: "Crew"
+        }
+    }
+
+    @ViewBuilder
+    private func filters(titles: [TMDBCreditTitle], movies: Int, series: Int) -> some View {
+        Text("Filmography").font(.sectionTitle)
+        Picker("Title type", selection: $filter) {
+            Text("All (\(titles.count))").tag(CreditFilter.all)
+            Text("Movies (\(movies))").tag(CreditFilter.movies)
+            Text("Series (\(series))").tag(CreditFilter.series)
+        }
+        .pickerStyle(.segmented)
+        #if os(tvOS)
+        Picker("Credit role", selection: $role) {
+            Text("All roles").tag(TMDBCreditRole?.none)
+            ForEach(TMDBCreditRole.allCases, id: \.self) { role in
+                Text(role.rawValue).tag(Optional(role))
+            }
+        }
+        .pickerStyle(.segmented)
+        .accessibilityIdentifier("person-role-filter")
+        #endif
+        HStack {
+            #if !os(tvOS)
+            Menu {
+                Picker("Credit role", selection: $role) {
+                    Text("All roles").tag(TMDBCreditRole?.none)
+                    ForEach(TMDBCreditRole.allCases, id: \.self) { role in
+                        Text(role.rawValue).tag(Optional(role))
+                    }
+                }
+            } label: {
+                Label(role?.rawValue ?? "All roles", systemImage: "line.3.horizontal.decrease")
+                    .font(.metaLine)
+                    .frame(minHeight: 44)
+            }
+            .accessibilityLabel("Credit role")
+            .accessibilityValue(role?.rawValue ?? "All roles")
+            .accessibilityIdentifier("person-role-filter")
+            #endif
+            Spacer()
+            Menu {
+                Picker("Sort", selection: $sort) {
+                    ForEach(CreditSort.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                }
+            } label: {
+                Label(sort.rawValue, systemImage: "arrow.up.arrow.down")
+                    .font(.metaLine)
+                    .frame(minHeight: 44)
+            }
+            .accessibilityLabel("Sort")
+            .accessibilityValue(sort.rawValue)
+        }
     }
 
     private static func formattedBirthday(_ value: String) -> String? {

@@ -65,7 +65,8 @@ struct CatalogGridView: View {
                         sortMenu
                     }
                 }
-                if hasGenres {
+                // A phone lists the genres as chips over the grid.
+                if hasGenres && !Metrics.isPhone {
                     ToolbarItem {
                         genreMenu
                     }
@@ -115,7 +116,10 @@ struct CatalogGridView: View {
 
     private var grid: some View {
         ScrollView {
-            LazyVGrid(columns: Metrics.posterGridColumns, spacing: Metrics.rowSpacing) {
+            if hasGenres && Metrics.isPhone {
+                genreChips
+            }
+            LazyVGrid(columns: Metrics.posterGridColumns, spacing: Metrics.isPhone ? 16 : Metrics.rowSpacing) {
                 ForEach(items) { meta in
                     #if os(tvOS)
                     if meta.id == items.first?.id {
@@ -147,7 +151,7 @@ struct CatalogGridView: View {
 
     private func tile(_ meta: MetaPreview) -> some View {
         NavigationLink(value: meta) {
-            PosterTile(meta: meta, width: nil)
+            PosterTile(meta: meta, width: nil, caption: Metrics.isPhone ? .line(meta.releaseInfo) : .none)
         }
         .tileButtonStyle()
         .onAppear {
@@ -188,6 +192,25 @@ struct CatalogGridView: View {
         } label: {
             Label(noun, systemImage: "line.3.horizontal.decrease.circle")
         }
+    }
+
+    /// The genre menu's choices in a row that scrolls sideways, the chosen one white.
+    private var genreChips: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                if !catalog.requiresGenre {
+                    Button(catalog.genresAreYears ? "All Years" : "All") { genre = nil }
+                        .buttonStyle(PillButtonStyle(isSelected: genre == nil))
+                }
+                ForEach(catalog.genres, id: \.self) { option in
+                    Button(option) { genre = option }
+                        .buttonStyle(PillButtonStyle(isSelected: genre == option))
+                }
+            }
+        }
+        .contentMargins(.horizontal, Metrics.gutter, for: .scrollContent)
+        .scrollIndicators(.hidden)
+        .padding(.bottom, 8)
     }
 
     /// Sort orders come from the addon's manifest: the installed copy, or for the built-in
