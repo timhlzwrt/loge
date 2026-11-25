@@ -88,6 +88,7 @@ struct EpisodesSection: View {
                 ForEach(Self.seasons(in: videos), id: \.self) { number in
                     Button(Self.seasonName(number)) { season = number }
                         .buttonStyle(PillButtonStyle(isSelected: number == season))
+                        .fixedSize()
                         .disabled(!pillsReachable)
                         .onMoveCommand { if $0 == .up { pillsReachable = false } }
                         .contextMenu { seasonActions(number) }

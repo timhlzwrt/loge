@@ -249,8 +249,14 @@ private struct SourcesFixture: View {
             if let addons, let library {
                 let route = SourcesRoute(item: item, title: "Interstellar", autoplay: screen == "sources-autoplay")
                 if screen.hasSuffix("-sheet") {
+                    #if os(tvOS)
+                    // How a title page presents it there.
+                    Color.canvas.fullScreenCover(isPresented: .constant(true)) { SourcesView(route: route, isChoosing: true) }
+                        .environment(addons).environment(library)
+                    #else
                     Color.canvas.sheet(isPresented: .constant(true)) { SourcesView(route: route, isChoosing: true) }
                         .environment(addons).environment(library)
+                    #endif
                 } else {
                     SourcesView(route: route).environment(addons).environment(library)
                 }

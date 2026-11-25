@@ -18,7 +18,7 @@ struct StreamRow: View {
         return HStack(spacing: 12) {
             Text(details.resolution.map { $0 == .ultraHD || $0 == .sd ? $0.label : "\($0.rawValue)" } ?? "")
                 .font(.footnote.weight(.bold))
-                .frame(width: 46, height: 26)
+                .frame(width: Self.boxSize.width, height: Self.boxSize.height)
                 .overlay {
                     if details.resolution != nil {
                         RoundedRectangle(cornerRadius: 7).strokeBorder(.tertiary, lineWidth: 1.5)
@@ -97,11 +97,14 @@ struct StreamRow: View {
     #endif
 
     #if os(tvOS)
+    private static let boxSize = CGSize(width: 84, height: 44)
     private let rowHeight: CGFloat = 66
     #elseif os(macOS)
+    private static let boxSize = CGSize(width: 46, height: 26)
     /// A minimum only: rows with nothing under the title stay one line tall.
     private let rowHeight: CGFloat = 32
     #else
+    private static let boxSize = CGSize(width: 46, height: 26)
     /// The touch target; rows with nothing under the title stay one line tall.
     private let rowHeight: CGFloat = 44
     #endif

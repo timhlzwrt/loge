@@ -1,4 +1,4 @@
-#if os(iOS)
+#if !os(macOS)
 import XCTest
 
 final class DiscoverySnapshotTests: XCTestCase {
@@ -8,8 +8,10 @@ final class DiscoverySnapshotTests: XCTestCase {
             throw XCTSkip("Set TEST_RUNNER_DISCOVERY_SCREENSHOT_DIR to capture comparison screens.")
         }
         continueAfterFailure = false
+        #if os(iOS)
         // The iPad is landscape only; the iPhone browses upright.
         XCUIDevice.shared.orientation = UIDevice.current.userInterfaceIdiom == .pad ? .landscapeLeft : .portrait
+        #endif
         let environment = ProcessInfo.processInfo.environment
         let screens = environment["DISCOVERY_SCREENS"]?.split(separator: ",").map(String.init) ?? ["person"]
         // Seconds for artwork and addon responses to arrive, and how many screens further down to capture.
@@ -26,7 +28,13 @@ final class DiscoverySnapshotTests: XCTestCase {
             sleep(settle)
             for page in 0...scrolls {
                 if page > 0 {
+                    #if os(iOS)
                     app.swipeUp(velocity: .slow)
+                    #else
+                    // Apple TV moves by focus: two presses down to the next rows.
+                    XCUIRemote.shared.press(.down)
+                    XCUIRemote.shared.press(.down)
+                    #endif
                     sleep(2)
                 }
                 let url = URL(fileURLWithPath: directory).appending(path: page == 0 ? "\(screen).png" : "\(screen)-\(page).png")

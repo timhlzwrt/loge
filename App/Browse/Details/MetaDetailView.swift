@@ -27,6 +27,12 @@ struct MetaDetailView: View {
     /// Taken from the backdrop; the canvas until it's known.
     @State private var tone = Color.canvas
     @State private var isConfirmingSeriesUnwatched = false
+    #if os(tvOS)
+    /// Focus starts on Play, whichever button the engine would otherwise pick. A series'
+    /// Play arrives with its episodes, after focus has landed, so it's moved there once.
+    @FocusState private var isPlayFocused: Bool
+    @State private var hasFocusedPlay = false
+    #endif
     @Environment(\.openURL) private var openURL
 
     private enum LoadState {
@@ -596,6 +602,14 @@ struct MetaDetailView: View {
                     #endif
             }
             .buttonStyle(PrimaryButtonStyle())
+            #if os(tvOS)
+            .focused($isPlayFocused)
+            .onAppear {
+                guard !hasFocusedPlay else { return }
+                hasFocusedPlay = true
+                isPlayFocused = true
+            }
+            #endif
         }
     }
 

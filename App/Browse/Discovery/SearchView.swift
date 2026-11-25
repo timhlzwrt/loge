@@ -457,7 +457,9 @@ private struct PersonMatch: View {
     @State private var person: Person?
 
     var body: some View {
-        Group {
+        // A view even without a match, so the lookup below has something to run on.
+        ZStack {
+            Color.clear.frame(width: 0, height: 0)
             if let person {
                 NavigationLink(value: PersonRoute(person: person)) {
                     PersonTile(person: person)
