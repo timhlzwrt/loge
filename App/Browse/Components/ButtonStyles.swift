@@ -4,12 +4,16 @@ import SwiftUI
 /// The one accent-coloured call to action on a screen: Play or Resume. On iPhone and iPad
 /// `.controlSize(.small)` draws it a size down, for a title page's centred row.
 struct PrimaryButtonStyle: ButtonStyle {
+    /// Translucent white rather than the accent, for a second choice beside the primary one.
+    var isTranslucent = false
+
     func makeBody(configuration: Configuration) -> some View {
-        StyledLabel(configuration: configuration)
+        StyledLabel(configuration: configuration, isTranslucent: isTranslucent)
     }
 
     private struct StyledLabel: View {
         let configuration: Configuration
+        let isTranslucent: Bool
         #if os(tvOS)
         @Environment(\.isFocused) private var isFocused
         #elseif os(iOS)
@@ -20,11 +24,11 @@ struct PrimaryButtonStyle: ButtonStyle {
             configuration.label
                 .font(font)
                 .labelStyle(PlayLabelStyle())
-                .foregroundStyle(.black)
+                .foregroundStyle(isTranslucent ? .white : .black)
                 .padding(.leading, height * 0.44)
                 .padding(.trailing, height * 0.56)
                 .frame(minHeight: height)
-                .background(.tint, in: .capsule)
+                .background(isTranslucent ? AnyShapeStyle(.white.opacity(0.12)) : AnyShapeStyle(.tint), in: shape)
                 .opacity(configuration.isPressed ? 0.8 : 1)
                 #if os(tvOS)
                 .scaleEffect(isFocused ? 1.06 : 1)
@@ -36,12 +40,16 @@ struct PrimaryButtonStyle: ButtonStyle {
         #if os(tvOS)
         private let height: CGFloat = 78
         private let font = Font.system(size: 27, weight: .semibold)
+        private let shape = Capsule()
         #elseif os(macOS)
         private let height: CGFloat = 36
         private let font = Font.system(size: 14, weight: .semibold)
+        private let shape = Capsule()
         #else
         // 44 pt is as small as a button stays comfortable to tap.
         private var height: CGFloat { controlSize == .small ? 44 : 50 }
+        /// A phone stretches it across the page, where a capsule reads as a text field.
+        private var shape: AnyShape { Metrics.isPhone ? AnyShape(.rect(cornerRadius: 14)) : AnyShape(.capsule) }
         private var font: Font { controlSize == .small ? .subheadline.weight(.semibold) : .headline }
         #endif
     }
@@ -53,6 +61,44 @@ struct PrimaryButtonStyle: ButtonStyle {
                 configuration.icon.imageScale(.small)
                 configuration.title
             }
+        }
+    }
+}
+
+/// A title's other actions on a phone: a circle with its name under it, filled white while
+/// it's on (saved to Watch Later, watched).
+struct RoundButtonStyle: ButtonStyle {
+    var isOn = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        StyledLabel(configuration: configuration, isOn: isOn)
+    }
+
+    private struct StyledLabel: View {
+        let configuration: Configuration
+        let isOn: Bool
+        @Environment(\.isEnabled) private var isEnabled
+
+        var body: some View {
+            VStack(spacing: 6) {
+                configuration.label
+                    .labelStyle(.iconOnly)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(isOn ? .black : .white)
+                    .frame(width: 46, height: 46)
+                    .background(isOn ? AnyShapeStyle(.white) : AnyShapeStyle(.white.opacity(0.12)), in: .circle)
+                    .contentTransition(.symbolEffect(.replace))
+                configuration.label
+                    .labelStyle(.titleOnly)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.white.opacity(0.75))
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+            .frame(maxWidth: .infinity)
+            .contentShape(.rect)
+            .opacity(isEnabled ? (configuration.isPressed ? 0.6 : 1) : 0.4)
+            .animation(.easeOut(duration: 0.15), value: isOn)
         }
     }
 }

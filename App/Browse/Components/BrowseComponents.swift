@@ -148,6 +148,8 @@ extension Font {
 /// or a checkmark in the corner once it's finished.
 struct WatchProgressBar: View {
     let progress: WatchProgress
+    /// From the artwork's sides; smaller artwork sets it in less.
+    var inset = WatchProgressBar.inset
 
     var body: some View {
         if progress.isFinished {
@@ -155,7 +157,7 @@ struct WatchProgressBar: View {
                 .font(Self.checkmarkFont)
                 .symbolRenderingMode(.palette)
                 .foregroundStyle(.black, .tint)
-                .padding(Self.inset * 0.8)
+                .padding(inset * 0.8)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                 .accessibilityLabel("Watched")
         } else {
@@ -167,8 +169,8 @@ struct WatchProgressBar: View {
                     }
                 }
                 .frame(height: Self.height)
-                .padding(.horizontal, Self.inset)
-                .padding(.bottom, Self.inset * 0.75)
+                .padding(.horizontal, inset)
+                .padding(.bottom, inset * 0.75)
                 .frame(maxHeight: .infinity, alignment: .bottom)
                 .accessibilityLabel("\(Int(progress.fraction * 100)) percent watched")
         }
@@ -185,17 +187,21 @@ struct WatchProgressBar: View {
     #endif
 }
 
-/// Fades a backdrop into the canvas so text placed over its lower part stays legible.
+/// Fades a backdrop into the canvas, or a title's room tone, so text placed over its lower
+/// part stays legible.
 struct BackdropFade: View {
+    var tone = Color.canvas
+
     var body: some View {
         LinearGradient(
             stops: [
-                .init(color: .canvas.opacity(0), location: 0.25),
-                .init(color: .canvas.opacity(0.85), location: 0.6),
-                .init(color: .canvas, location: 0.85),
+                .init(color: tone.opacity(0), location: 0.25),
+                .init(color: tone.opacity(0.85), location: 0.6),
+                .init(color: tone, location: 0.85),
             ],
             startPoint: .top, endPoint: .bottom
         )
+        .animation(.easeOut(duration: 0.6), value: tone)
     }
 }
 
@@ -207,6 +213,10 @@ struct TitleLogo: View {
     /// Lets sparkle or glow under the lettering hang into the space below, so what follows
     /// keeps its distance from the letters rather than from the faintest pixel.
     var restsOnLettering = false
+    /// Drawn in white and greys whatever its own colours, as the redesigned heroes show every
+    /// title. Not flattened to one white: logos with solid panels or brush strokes lose their
+    /// lettering that way.
+    var isWhite = false
     @State private var height: CGFloat = 0
     @State private var prepared: (url: String, trimmed: LogoTrim.Trimmed)?
 
@@ -219,6 +229,8 @@ struct TitleLogo: View {
                         .renderingMode(trimmed.isDark ? .template : .original)
                         .resizable().scaledToFit()
                         .foregroundStyle(.white)
+                        .saturation(isWhite ? 0 : 1)
+                        .brightness(isWhite && !trimmed.isDark ? 0.15 : 0)
                         // No wider than the height allows: a tall logo given more width
                         // would sit centred in it, away from the text it leads.
                         .frame(maxWidth: maxHeight * CGFloat(trimmed.image.width) / CGFloat(max(trimmed.image.height, 1)),
