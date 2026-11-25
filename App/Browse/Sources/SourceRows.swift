@@ -1,8 +1,8 @@
 import LogeCore
 import SwiftUI
 
-/// A resolution's heading and its rows, on a rounded panel except on tvOS, where the
-/// rows are focus targets of their own.
+/// A resolution's heading and its rows: on a rounded panel on the Mac, and on tvOS as a
+/// section whose rows are focus targets of their own. iPhone and iPad list every row in one.
 struct SourceGroupView<Content: View>: View {
     let title: String
     @ViewBuilder let content: Content
@@ -58,6 +58,68 @@ struct StreamRow: View {
     let connectionSpeed: Double?
 
     var body: some View {
+        #if os(iOS)
+        phoneRow
+        #else
+        row
+        #endif
+    }
+
+    #if os(iOS)
+    /// The resolution in a small outlined box, what the file is, how it plays, and its size.
+    private var phoneRow: some View {
+        let details = entry.details
+        let isCold = details.isCached == false
+        return HStack(spacing: 12) {
+            Text(details.resolution.map { $0 == .ultraHD || $0 == .sd ? $0.label : "\($0.rawValue)" } ?? "")
+                .font(.footnote.weight(.bold))
+                .frame(width: 46, height: 26)
+                .overlay {
+                    if details.resolution != nil {
+                        RoundedRectangle(cornerRadius: 7).strokeBorder(.white.opacity(0.35), lineWidth: 1.5)
+                    }
+                }
+            VStack(alignment: .leading, spacing: 2) {
+                Text([title, details.dynamicRange.first].compactMap { $0 }.joined(separator: " · "))
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                if let detail = isCold ? "Not cached, starts slowly" : playDetail {
+                    Text(detail)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                if isLastPlayed || connectionSpeed != nil, let note {
+                    Text(note)
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(Self.highlight)
+                }
+            }
+            Spacer(minLength: 8)
+            if let size = details.sizeLabel {
+                Text(size)
+                    .font(.subheadline.weight(.medium).monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.8))
+                    .fixedSize()
+            }
+        }
+        .opacity(isCold ? 0.5 : 1)
+        .padding(.vertical, 12)
+        .frame(minHeight: rowHeight)
+        .contentShape(.rect)
+        .accessibilityElement(children: .combine)
+    }
+
+    /// "35 Mbps · HEVC · DD+ 5.1 · cached".
+    private var playDetail: String? {
+        let details = entry.details
+        let parts = [details.bitrateLabel, details.codec, details.audio.isEmpty ? nil : details.audio.joined(separator: " "),
+                     details.isCached == true ? "cached" : nil]
+        return parts.compactMap { $0 }.joined(separator: " · ").nilIfEmpty
+    }
+    #else
+    @ViewBuilder
+    private var row: some View {
         let details = entry.details
         let isCold = details.isCached == false
         HStack(spacing: 12) {
@@ -114,6 +176,7 @@ struct StreamRow: View {
         .contentShape(.rect)
         .accessibilityElement(children: .combine)
     }
+    #endif
 
     /// "Recommended for your 32 Mbps connection", "Last played", or a warning that the file
     /// isn't cached; shortened when it's both, to stay on one line. The warning stays on the
@@ -159,9 +222,6 @@ struct StreamRow: View {
     /// A minimum only: rows with nothing under the title stay one line tall.
     private let rowHeight: CGFloat = 32
     #else
-    private let titleFont = Font.callout.weight(.semibold)
-    private let summaryFont = Font.footnote
-    private let sizeFont = Font.subheadline
     /// The touch target; rows with nothing under the title stay one line tall.
     private let rowHeight: CGFloat = 44
     #endif
