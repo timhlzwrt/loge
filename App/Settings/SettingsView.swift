@@ -173,8 +173,8 @@ struct SettingsToggleStyle: ToggleStyle {
 }
 #endif
 
-/// A section heading. The TV's system headers are small and grey, hard to read as headings
-/// from across the room, so there they take the size of the app's other section titles.
+/// A section heading: a small grey label over its group, on iPhone, iPad and Apple TV alike;
+/// the Mac keeps its grouped form's own.
 struct SettingsHeader: View {
     let title: String
 
@@ -182,12 +182,7 @@ struct SettingsHeader: View {
 
     var body: some View {
         Text(title)
-            #if os(tvOS)
-            .font(.sectionTitle)
-            .foregroundStyle(.white)
-            .textCase(nil)
-            .padding(.top, 24)
-            #elseif os(iOS)
+            #if !os(macOS)
             .font(.footnote.weight(.semibold))
             .foregroundStyle(.white.opacity(0.45))
             .textCase(nil)

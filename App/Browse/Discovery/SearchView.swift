@@ -86,6 +86,9 @@ struct SearchView: View {
                         .padding(.vertical, 12)
                 } else {
                     LazyVStack(alignment: .leading, spacing: 32) {
+                        #if os(tvOS)
+                        PersonMatch(query: submittedQuery)
+                        #endif
                         ForEach(sources) { source in
                             CatalogRow(source: source, search: submittedQuery, onLoaded: { loaded(source.id, count: $0) })
                         }
@@ -444,3 +447,31 @@ private struct SearchResultList: View {
         }
     }
 }
+
+#if os(tvOS)
+/// Apple TV's results lead with someone whose name matches, as a portrait to open, when
+/// TMDB is connected.
+private struct PersonMatch: View {
+    let query: String
+    @Environment(TMDBAccount.self) private var tmdb
+    @State private var person: Person?
+
+    var body: some View {
+        Group {
+            if let person {
+                NavigationLink(value: PersonRoute(person: person)) {
+                    PersonTile(person: person)
+                }
+                .buttonStyle(PersonButtonStyle())
+                .padding(.vertical, 20)
+            }
+        }
+        // Not an error worth showing: the titles are what was searched for.
+        .task(id: "\(query)#\(tmdb.revision)") {
+            person = nil
+            guard tmdb.isConfigured else { return }
+            person = try? await tmdb.person(named: query)
+        }
+    }
+}
+#endif

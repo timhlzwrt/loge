@@ -293,18 +293,15 @@ struct MyListView: View {
                 // With nothing to focus, the remote can't reach the tab menu and Menu leaves the app.
                 .focusable()
                 #endif
-            } else if !Metrics.isTV {
-                ScrollView { pillLists(recent: recent) }
             } else {
+                #if os(tvOS)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 36) {
-                        #if os(tvOS)
                         // Lined up with the rows; the system's title is centred. The padding clears the tab menu.
                         Text("My Lists")
                             .font(.system(size: 57, weight: .bold))
                             .accessibilityAddTraits(.isHeader)
                             .padding(.top, 60)
-                        #endif
                         if !library.saved.isEmpty {
                             section(library.saved)
                         }
@@ -316,6 +313,9 @@ struct MyListView: View {
                     .padding(.bottom, 24)
                 }
                 .scrollClipDisabled()
+                #else
+                ScrollView { pillLists(recent: recent) }
+                #endif
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -325,6 +325,7 @@ struct MyListView: View {
         #endif
     }
 
+    #if !os(tvOS)
     /// The two lists as a pair of pills over one grid, with names and how long each takes.
     private func pillLists(recent: [WatchProgress]) -> some View {
         // Recently Watched when that's all there is.
@@ -369,6 +370,7 @@ struct MyListView: View {
         .padding(.top, 8)
         .padding(.bottom, 24)
     }
+    #endif
 
     /// "2 h 47 min" for a film whose runtime the catalog gave. A series' episode count would
     /// take its details, so it goes without.
@@ -377,6 +379,7 @@ struct MyListView: View {
         return minutes < 60 ? "\(minutes) min" : minutes % 60 == 0 ? "\(minutes / 60) h" : "\(minutes / 60) h \(minutes % 60) min"
     }
 
+    #if os(tvOS)
     private func section(_ titles: [MetaPreview]) -> some View {
         VStack(alignment: .leading, spacing: Metrics.headerSpacing) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
@@ -388,23 +391,26 @@ struct MyListView: View {
                     .accessibilityLabel("\(titles.count) \(titles.count == 1 ? "title" : "titles")")
             }
             .padding(.horizontal, Metrics.gutter)
-            LazyVGrid(columns: Metrics.posterGridColumns, spacing: Metrics.rowSpacing) {
-                ForEach(titles) { meta in
-                    NavigationLink(value: meta) {
-                        PosterTile(meta: meta, width: nil)
+            // Apple TV's My Lists: one row, each title with how long it takes.
+            HorizontalShelf("Watch Later") {
+                LazyHStack(alignment: .top, spacing: Metrics.rowSpacing) {
+                    ForEach(titles) { meta in
+                        NavigationLink(value: meta) {
+                            PosterTile(meta: meta, caption: .line(Self.length(of: meta)))
+                        }
+                        .tileButtonStyle()
                     }
-                    .tileButtonStyle()
                 }
+                .padding(.horizontal, Metrics.gutter)
+                // Room for the focus lift, clear of the section's title.
+                .padding(.vertical, 20)
             }
-            .padding(.horizontal, Metrics.gutter)
-            #if os(tvOS)
-            // Room for the focus lift, clear of the section's title.
-            .padding(.top, 20)
+            .scrollClipDisabled()
             // Across the full width, so a short list isn't skipped moving down from the tabs.
             .focusSection()
-            #endif
         }
     }
+    #endif
 }
 
 /// The titles finished most recently, each opening its page. Removing one only hides it here.

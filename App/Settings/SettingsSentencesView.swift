@@ -143,7 +143,7 @@ struct SettingsSentencesView: View {
         #endif
     }
 
-    #if os(tvOS) || os(macOS)
+    #if os(macOS)
     private static let isTopAligned = false
     #else
     private static let isTopAligned = true
