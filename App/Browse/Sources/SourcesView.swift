@@ -113,7 +113,7 @@ struct SourcesView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background {
             // An iPhone or iPad sheet keeps the system's plain sheet behind its list.
-            if !isPhoneSheet { PageGlow() }
+            if !isPhoneSheet { Color.canvas.ignoresSafeArea() }
         }
         .hidingPhoneTabBar()
         #if !os(tvOS)

@@ -230,7 +230,9 @@ struct TitleLogo: View {
                         .resizable().scaledToFit()
                         .foregroundStyle(.white)
                         .saturation(isWhite ? 0 : 1)
-                        .brightness(isWhite && !trimmed.isDark ? 0.15 : 0)
+                        // A soft shade around the letters, so white reads on bright artwork too.
+                        .shadow(color: .black.opacity(isWhite ? 0.6 : 0), radius: 18)
+                        .shadow(color: .black.opacity(isWhite ? 0.45 : 0), radius: 4)
                         // No wider than the height allows: a tall logo given more width
                         // would sit centred in it, away from the text it leads.
                         .frame(maxWidth: maxHeight * CGFloat(trimmed.image.width) / CGFloat(max(trimmed.image.height, 1)),
