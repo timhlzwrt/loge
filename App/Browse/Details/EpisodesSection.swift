@@ -56,8 +56,7 @@ struct EpisodesSection: View {
                 HStack(spacing: 8) {
                     ForEach(Self.seasons(in: videos), id: \.self) { number in
                         Button(Self.seasonName(number)) { season = number }
-                            .buttonStyle(SeasonPillStyle(isSelected: number == season))
-                            .accessibilityAddTraits(number == season ? .isSelected : [])
+                            .buttonStyle(PillButtonStyle(isSelected: number == season))
                             // Long-pressing a season selects it and offers its marks.
                             .contextMenu {
                                 Button("Mark Season as Watched", systemImage: "checkmark.circle") {
@@ -254,24 +253,6 @@ struct SeasonMenuStyle: ButtonStyle {
     }
 }
 #endif
-
-/// A season to pick on a phone; the chosen one is white.
-private struct SeasonPillStyle: ButtonStyle {
-    let isSelected: Bool
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(isSelected ? AnyShapeStyle(.black) : AnyShapeStyle(.white.opacity(0.7)))
-            .padding(.horizontal, 14)
-            .frame(minHeight: 36)
-            .background(isSelected ? AnyShapeStyle(.white) : AnyShapeStyle(.white.opacity(0.08)), in: .capsule)
-            .opacity(configuration.isPressed ? 0.7 : 1)
-            // 44 pt to tap, without spacing the pills further apart.
-            .padding(.vertical, 4)
-            .contentShape(.rect)
-    }
-}
 
 /// An episode on a phone: its still on the left with the progress over it, the number and
 /// title, and how much is left; a check once it's watched.

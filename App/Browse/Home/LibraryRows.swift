@@ -245,7 +245,7 @@ struct MyListRow: View {
                     LazyHStack(spacing: Metrics.rowSpacing) {
                         ForEach(titles) { meta in
                             NavigationLink(value: meta) {
-                                PosterTile(meta: meta, isCaptioned: Metrics.isPhone)
+                                PosterTile(meta: meta, caption: Metrics.isPhone ? .year : .none)
                                     #if os(tvOS)
                                     .modifier(ReportsFocus { onFocus(meta) })
                                     #endif
@@ -268,6 +268,8 @@ struct MyListRow: View {
 struct MyListView: View {
     @Environment(LibraryStore.self) private var library
     @Environment(EpisodeSchedule.self) private var schedule
+    /// A phone shows one list at a time.
+    @State private var showsRecent = false
 
     var body: some View {
         let recent = library.recentlyWatched(excluding: Set(schedule.newEpisodes(in: library).map(\.item.metaID)))
@@ -288,6 +290,8 @@ struct MyListView: View {
                 // With nothing to focus, the remote can't reach the tab menu and Menu leaves the app.
                 .focusable()
                 #endif
+            } else if Metrics.isPhone {
+                ScrollView { phoneLists(recent: recent) }
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 36) {
@@ -312,10 +316,62 @@ struct MyListView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background { PageGlow() }
+        .background(Color.canvas.ignoresSafeArea())
         #if !os(tvOS)
         .navigationTitle("My Lists")
         #endif
+    }
+
+    /// The two lists as a pair of pills over one grid, with names and how long each takes.
+    private func phoneLists(recent: [WatchProgress]) -> some View {
+        // Recently Watched when that's all there is.
+        let showsRecent = showsRecent || library.saved.isEmpty
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Button("Watch Later") { self.showsRecent = false }
+                    .buttonStyle(PillButtonStyle(isSelected: !showsRecent))
+                    .disabled(library.saved.isEmpty)
+                Button("Recently Watched") { self.showsRecent = true }
+                    .buttonStyle(PillButtonStyle(isSelected: showsRecent))
+                    .disabled(recent.isEmpty)
+            }
+            .padding(.horizontal, Metrics.gutter)
+            LazyVGrid(columns: Metrics.posterGridColumns, spacing: 16) {
+                if showsRecent {
+                    ForEach(recent, id: \.item.metaID) { entry in
+                        let item = entry.item
+                        NavigationLink(value: MetaPreview(id: item.metaID, type: item.type, name: item.title,
+                                                          poster: item.poster, background: item.background)) {
+                            PosterTile(meta: MetaPreview(id: item.metaID, type: item.type, name: item.title, poster: item.poster),
+                                       width: nil, caption: .line(RecentlyWatchedRow.day(entry.updatedAt)), offersWatchLater: false)
+                        }
+                        .tileButtonStyle()
+                        .contextMenu {
+                            Button("Remove from Recently Watched", systemImage: "eye.slash") {
+                                library.hideFromRecentlyWatched(metaID: item.metaID)
+                            }
+                        }
+                    }
+                } else {
+                    ForEach(library.saved) { meta in
+                        NavigationLink(value: meta) {
+                            PosterTile(meta: meta, width: nil, caption: .line(Self.length(of: meta)))
+                        }
+                        .tileButtonStyle()
+                    }
+                }
+            }
+            .padding(.horizontal, Metrics.gutter)
+        }
+        .padding(.top, 8)
+        .padding(.bottom, 24)
+    }
+
+    /// "2 h 47 min" for a film whose runtime the catalog gave. A series' episode count would
+    /// take its details, so it goes without.
+    static func length(of meta: MetaPreview) -> String? {
+        guard meta.type == MediaType.movie, let minutes = Meta.minutes(inRuntime: meta.runtime).map(Int.init) else { return nil }
+        return minutes < 60 ? "\(minutes) min" : minutes % 60 == 0 ? "\(minutes / 60) h" : "\(minutes / 60) h \(minutes % 60) min"
     }
 
     private func section(_ titles: [MetaPreview]) -> some View {
@@ -399,7 +455,7 @@ private struct RecentlyWatchedRow: View {
     }
 
     /// "Today", "Yesterday", "Oct 24", or "Oct 24, 2025" before this year.
-    private static func day(_ date: Date) -> String {
+    static func day(_ date: Date) -> String {
         let calendar = Calendar.current
         if calendar.isDateInToday(date) { return "Today" }
         if calendar.isDateInYesterday(date) { return "Yesterday" }

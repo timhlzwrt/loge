@@ -160,7 +160,7 @@ struct CatalogRow: View {
 
     private func poster(_ meta: MetaPreview) -> some View {
         NavigationLink(value: meta) {
-            PosterTile(meta: meta, isCaptioned: Metrics.isPhone)
+            PosterTile(meta: meta, caption: Metrics.isPhone ? .year : .none)
                 #if os(tvOS)
                 .modifier(ReportsFocus { onFocus(meta) })
                 #endif
@@ -260,12 +260,25 @@ struct PosterTile: View {
     let meta: MetaPreview
     /// Nil fills the width offered, as in a grid, keeping the 2:3 shape.
     var width: CGFloat? = Metrics.posterWidth
-    /// The name and year under the poster, so a shelf can be scanned by name.
-    var isCaptioned = false
+    /// Under the poster on a phone, so shelves and grids can be scanned by name.
+    var caption = Caption.none
+    /// Off where the long press does something else, as in Recently Watched.
+    var offersWatchLater = true
     @Environment(LibraryStore.self) private var library
 
+    enum Caption {
+        case none
+        /// The name, then "2023 · 8.3": the year, and the IMDb rating where there is one.
+        case year
+        /// The name, then this line, or nothing under the name when it's nil.
+        case line(String?)
+    }
+
     var body: some View {
-        if isCaptioned {
+        if case .none = caption {
+            poster
+                .contextMenu { if offersWatchLater { WatchLaterToggle(title: meta) } }
+        } else {
             VStack(alignment: .leading, spacing: 2) {
                 poster
                     .padding(.bottom, 6)
@@ -283,15 +296,19 @@ struct PosterTile: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(meta.name)
             .accessibilityValue([detail, progressValue].compactMap { $0 }.joined(separator: ", "))
-            .contextMenu { WatchLaterToggle(title: meta) }
-        } else {
-            poster
-                .contextMenu { WatchLaterToggle(title: meta) }
+            .contextMenu { if offersWatchLater { WatchLaterToggle(title: meta) } }
         }
     }
 
-    /// "2023 · 8.3": the year, and the IMDb rating where there is one.
     private var detail: String? {
+        switch caption {
+        case .none: nil
+        case .line(let line): line
+        case .year: yearAndRating
+        }
+    }
+
+    private var yearAndRating: String? {
         let rating = meta.imdbRating.flatMap(Double.init).flatMap { $0 > 0 && $0 <= 10 ? meta.imdbRating : nil }
         return [meta.releaseInfo, rating].compactMap { $0?.nilIfEmpty }.joined(separator: " · ").nilIfEmpty
     }

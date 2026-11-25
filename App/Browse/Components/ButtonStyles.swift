@@ -103,6 +103,26 @@ struct RoundButtonStyle: ButtonStyle {
     }
 }
 
+/// One of a few choices side by side on a phone: seasons, genres, lists, roles. The chosen
+/// one is white.
+struct PillButtonStyle: ButtonStyle {
+    let isSelected: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(isSelected ? AnyShapeStyle(.black) : AnyShapeStyle(.white.opacity(0.7)))
+            .padding(.horizontal, 14)
+            .frame(minHeight: 36)
+            .background(isSelected ? AnyShapeStyle(.white) : AnyShapeStyle(.white.opacity(0.08)), in: .capsule)
+            .opacity(configuration.isPressed ? 0.7 : 1)
+            // 44 pt to tap, without spacing the pills further apart.
+            .padding(.vertical, 4)
+            .contentShape(.rect)
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
 /// Round, icon-only Liquid Glass buttons beside the primary one: Watch Later, More.
 /// Drawn rather than using the `.glass` button style, which pads the circle beyond the
 /// primary button's height. They follow `.controlSize(.small)` as that button does.
