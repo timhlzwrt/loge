@@ -16,7 +16,6 @@ struct MetaDetailView: View {
     @State private var collection: TMDBCollection?
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
     #endif
     #if !os(tvOS)
     /// The page's own shape rather than the screen's: window resizing narrows it.
@@ -68,6 +67,7 @@ struct MetaDetailView: View {
                             choose: { choosingSource = route(for: $0) },
                             staysInColumn: usesColumns
                         )
+                        .detailColumn(.side)
                     }
                     if case .failed = state {
                         HStack {
@@ -84,14 +84,14 @@ struct MetaDetailView: View {
                         PeopleRow(people: people, title: preview, staysInColumn: usesColumns)
                             .detailColumn(.side)
                     }
+                    // The facts stay under the summary; what can be opened goes on the right.
                     InformationSection(meta: meta, details: tmdbDetails, people: people)
-                        .detailColumn(.side)
                     if let collection {
                         CollectionRow(collection: collection, currentID: tmdbDetails?.tmdbID)
-                            .detailColumn(.full)
+                            .detailColumn(.side)
                     }
                     MoreLikeThisRow(titles: tmdbDetails?.recommendations ?? [])
-                        .detailColumn(.full)
+                        .detailColumn(.side)
                 } else if case .failed(let message) = state {
                     HStack {
                         Text(message)
@@ -258,7 +258,7 @@ struct MetaDetailView: View {
     private var pageLayout: AnyLayout {
         let spacing: CGFloat = 32
         return usesColumns
-            ? AnyLayout(DetailColumnsLayout(sideTop: heroHeight - 160, spacing: spacing))
+            ? AnyLayout(DetailColumnsLayout(sideTop: heroHeight - 170, spacing: spacing))
             : AnyLayout(VStackLayout(alignment: .leading, spacing: spacing))
     }
 
@@ -369,11 +369,20 @@ struct MetaDetailView: View {
     private func backdrop(url: String?) -> some View {
         Artwork(url: url)
             .overlay { BackdropFade(tone: tone) }
-            #if !os(iOS)
+            #if os(tvOS)
             .overlay {
                 LinearGradient(colors: [tone.opacity(0.8), tone.opacity(0)], startPoint: .leading, endPoint: .center)
                     .animation(.easeOut(duration: 0.6), value: tone)
             }
+            #else
+            // Beside two columns, the artwork takes the top right and fades out towards the
+            // summary on the left.
+            .mask {
+                LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: usesColumns ? 0.4 : 0)],
+                               startPoint: .leading, endPoint: .trailing)
+            }
+            .containerRelativeFrame(.horizontal) { width, _ in usesColumns ? width * 0.64 : width }
+            .frame(maxWidth: .infinity, alignment: .trailing)
             #endif
             #if os(tvOS)
             .ignoresSafeArea()
@@ -390,13 +399,11 @@ struct MetaDetailView: View {
             .accessibilityHidden(true)
     }
 
-    /// The title and Play lead. Wide screens follow with the description and the facts and
+    /// The title and Play lead. Apple TV follows with the description and the facts and
     /// scores one size down beneath it, then the buttons.
     @ViewBuilder
     private func hero(meta: Meta?, play: PlayAction?) -> some View {
-        if synopsisUnderButtons {
-            narrowHero(meta: meta, play: play)
-        } else {
+        #if os(tvOS)
             VStack(alignment: heroAlignment, spacing: 20) {
                 logo(meta: meta)
                 VStack(alignment: .leading, spacing: 10) {
@@ -415,38 +422,49 @@ struct MetaDetailView: View {
             .frame(maxWidth: .infinity, alignment: Alignment(horizontal: heroAlignment, vertical: .bottom))
             .frame(minHeight: heroHeight, alignment: .bottom)
             .padding(.horizontal, Metrics.gutter)
-        }
+        #else
+        column(meta: meta, play: play)
+        #endif
     }
 
     private func logo(meta: Meta?) -> some View {
         TitleLogo(logo: meta?.logo ?? preview.logo, name: preview.name, maxHeight: logoHeight, restsOnLettering: true,
-                  isWhite: synopsisUnderButtons)
+                  isWhite: !Metrics.isTV)
             // As tall as the logo is, not as tall as it may be: a wide, low one otherwise
             // floats in the middle of that room, far above the buttons.
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: logoWidth, alignment: Alignment(horizontal: heroAlignment, vertical: .center))
     }
 
-    /// A phone's column: the logo low on the backdrop, one line of facts, Play across the
-    /// width, the other actions as labelled circles, then the description.
-    private func narrowHero(meta: Meta?, play: PlayAction?) -> some View {
-        VStack(spacing: 0) {
+    /// The logo low on the backdrop, one line of facts, Play, the other actions with their
+    /// names, then the description: centred down a phone, the left column on iPad and Mac.
+    private func column(meta: Meta?, play: PlayAction?) -> some View {
+        VStack(alignment: heroAlignment, spacing: 0) {
             logo(meta: meta)
                 // The logo's foot stays in one place, so taller logos reach further up the backdrop.
-                .frame(minHeight: heroHeight - 175, alignment: .bottom)
+                .frame(minHeight: usesColumns ? 150 : heroHeight - 175, alignment: .bottom)
             facts(meta: meta)
-                .multilineTextAlignment(.center)
+                .multilineTextAlignment(heroAlignment == .center ? .center : .leading)
                 .padding(.top, 14)
+            #if os(macOS)
+            // With a pointer the actions fit beside Play, each with its name.
+            HStack(spacing: 10) {
+                playButton(play)
+                actions(meta: meta, play: play)
+            }
+            .padding(.top, 18)
+            #else
             playButton(play)
                 .padding(.top, 16)
             actions(meta: meta, play: play)
                 .padding(.top, 16)
+            #endif
             if let description = meta?.description ?? preview.description {
                 ExpandableText(text: description)
                     .padding(.top, 18)
             }
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: Alignment(horizontal: heroAlignment, vertical: .top))
         .padding(.horizontal, Metrics.gutter)
     }
 
@@ -461,13 +479,14 @@ struct MetaDetailView: View {
                 line
                 scores
             }
-            VStack(alignment: synopsisUnderButtons ? .center : .leading, spacing: 6) {
+            VStack(alignment: heroAlignment, spacing: 6) {
                 line
                 scores
             }
         }
     }
 
+    #if os(tvOS)
     /// Play with Watch Later and More, starting at the leading edge.
     private func buttons(meta: Meta?, play: PlayAction?) -> some View {
         let saved = savedPreview(meta)
@@ -485,8 +504,10 @@ struct MetaDetailView: View {
             }
         }
     }
+    #endif
 
-    /// Everything besides Play, each a circle with its name under it, in equal columns.
+    /// Everything besides Play, each with its name: circles in equal columns, or on the Mac
+    /// buttons in a row.
     private func actions(meta: Meta?, play: PlayAction?) -> some View {
         let isSaved = library.isSaved(preview.id)
         let saved = savedPreview(meta)
@@ -567,7 +588,11 @@ struct MetaDetailView: View {
         if let play {
             NavigationLink(value: play.route) {
                 Label(play.label, systemImage: "play.fill")
-                    .frame(maxWidth: synopsisUnderButtons ? .infinity : nil)
+                    #if os(iOS)
+                    .frame(maxWidth: .infinity)
+                    #elseif os(macOS)
+                    .frame(minWidth: 160)
+                    #endif
             }
             .buttonStyle(PrimaryButtonStyle())
             .contextMenu {
@@ -595,35 +620,24 @@ struct MetaDetailView: View {
     private let logoWidth: CGFloat = 560
     private let synopsisWidth: CGFloat = 900
     private let synopsisLines = 3
-    private let synopsisUnderButtons = false
     #elseif os(macOS)
     private let heroAlignment = HorizontalAlignment.leading
     private let heroHeight: CGFloat = 420
     private let logoHeight: CGFloat = 130
-    private let logoWidth: CGFloat = 480
-    private let synopsisWidth: CGFloat = 540
-    private let synopsisLines = 3
-    private let synopsisUnderButtons = false
+    private let logoWidth: CGFloat = 400
     #else
-    // A centred stack suits a portrait phone; wider screens read better left-aligned,
-    // and a short landscape screen needs a shorter hero.
-    private var isWide: Bool { horizontalSizeClass == .regular || verticalSizeClass == .compact }
+    // A centred stack suits the portrait phone; the landscape iPad reads better left-aligned.
+    // Browsing never turns sideways, on either.
+    private var isWide: Bool { horizontalSizeClass == .regular }
     private var heroAlignment: HorizontalAlignment { isWide ? .leading : .center }
-    private var heroHeight: CGFloat {
-        verticalSizeClass == .compact ? 300 : horizontalSizeClass == .regular ? 500 : 400
-    }
-    /// The title is the one large thing in the hero. A phone gives it the full text width; a
-    /// short landscape screen has no room for a tall one.
-    private var logoHeight: CGFloat { verticalSizeClass == .compact ? 100 : 130 }
-    private var logoWidth: CGFloat { isWide ? 480 : .infinity }
-    private let synopsisWidth: CGFloat = 620
-    /// iPad's larger text would otherwise show less of the synopsis, with no way to read the rest.
-    private let synopsisLines = 4
-    /// A phone's single column, with the buttons before the synopsis so it doesn't push them down.
-    private var synopsisUnderButtons: Bool { !isWide }
+    private var heroHeight: CGFloat { isWide ? 500 : 400 }
+    /// The title is the one large thing in the hero. A phone gives it the full text width.
+    private let logoHeight: CGFloat = 130
+    private var logoWidth: CGFloat { isWide ? 400 : .infinity }
     #endif
 }
 
+#if os(tvOS)
 private struct MyListButton: View {
     let isSaved: Bool
     let toggle: () -> Void
@@ -639,6 +653,7 @@ private struct MyListButton: View {
 
     private var title: String { isSaved ? "Remove from Watch Later" : "Add to Watch Later" }
 }
+#endif
 
 /// viewer left off: the unfinished episode, else the one after the last finished, else the first.
 @MainActor

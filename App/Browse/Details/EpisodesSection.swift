@@ -33,11 +33,11 @@ struct EpisodesSection: View {
 
     var body: some View {
         Group {
-            if Metrics.isPhone {
-                phoneList
-            } else {
-                shelf
-            }
+            #if os(tvOS)
+            shelf
+            #else
+            list
+            #endif
         }
         .confirmationDialog("Mark \(Self.seasonName(season)) as unwatched?", isPresented: $isConfirmingUnwatched,
                             titleVisibility: .visible) {
@@ -49,8 +49,9 @@ struct EpisodesSection: View {
         }
     }
 
-    /// Seasons as a row of pills over the season's episodes, one per row, as a phone lists them.
-    private var phoneList: some View {
+    #if !os(tvOS)
+    /// Seasons as a row of pills over the season's episodes, one per row.
+    private var list: some View {
         VStack(alignment: .leading, spacing: 8) {
             ScrollView(.horizontal) {
                 HStack(spacing: 8) {
@@ -86,17 +87,12 @@ struct EpisodesSection: View {
         }
     }
 
+    #else
+    /// Apple TV's: the season menu over a shelf of episode cards that focus moves along.
     private var shelf: some View {
         VStack(alignment: .leading, spacing: Metrics.headerSpacing) {
             seasonMenu
                 .padding(.horizontal, Metrics.gutter)
-            #if os(macOS)
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: Metrics.episodeWidth), spacing: 18, alignment: .top)],
-                      alignment: .leading, spacing: 28) {
-                ForEach(episodes) { episodeButton($0) }
-            }
-            .padding(.horizontal, Metrics.gutter)
-            #else
             ScrollViewReader { proxy in
                 ScrollView(.horizontal) {
                     LazyHStack(alignment: .top, spacing: Metrics.rowSpacing) {
@@ -119,7 +115,6 @@ struct EpisodesSection: View {
                     if let first = episodes.first { proxy.scrollTo(first.id, anchor: .leading) }
                 }
             }
-            #endif
         }
     }
 
@@ -129,12 +124,8 @@ struct EpisodesSection: View {
         } label: {
             EpisodeCard(video: video, backdrop: backdrop)
         }
-        #if os(tvOS)
         // Lifts just the still on focus, with the text below it, like the TV app.
         .buttonStyle(.borderless)
-        #else
-        .buttonStyle(.plain)
-        #endif
         .contextMenu { watchedActions(for: video) }
     }
 
@@ -167,16 +158,12 @@ struct EpisodesSection: View {
             }
             .titleTapTarget()
         }
-        #if os(tvOS)
         .buttonStyle(SeasonMenuStyle())
-        #else
-        .foregroundStyle(.white)
-        .buttonStyle(.plain)
-        #endif
         .fixedSize()
         .accessibilityLabel("Season")
         .accessibilityValue(Self.seasonName(season))
     }
+    #endif
 
     @ViewBuilder
     private func watchedActions(for video: Video) -> some View {
@@ -254,8 +241,9 @@ struct SeasonMenuStyle: ButtonStyle {
 }
 #endif
 
-/// An episode on a phone: its still on the left with the progress over it, the number and
-/// title, and how much is left; a check once it's watched.
+#if !os(tvOS)
+/// An episode: its still on the left with the progress over it, the number and title, and how
+/// much is left; a check once it's watched. Wider screens add the episode's summary.
 private struct EpisodeRow: View {
     let video: Video
     let backdrop: String?
@@ -270,14 +258,21 @@ private struct EpisodeRow: View {
                 .overlay {
                     if let progress, !isWatched { WatchProgressBar(progress: progress, inset: 7) }
                 }
-                .frame(width: 132, height: 74)
+                .frame(width: Self.stillWidth, height: Self.stillWidth * 9 / 16)
+                .modifier(PointerHighlight())
                 .clipShape(.rect(cornerRadius: 9))
                 .brightness(isWatched ? -0.25 : 0)
                 .opacity(video.isReleased() ? 1 : 0.5)
             VStack(alignment: .leading, spacing: 3) {
                 Text([video.episode.map { "\($0)." }, video.displayTitle ?? "Untitled"].compactMap { $0 }.joined(separator: " "))
-                    .font(.subheadline.weight(.semibold))
+                    .font(Metrics.isPhone ? .subheadline.weight(.semibold) : .headline)
                     .lineLimit(2)
+                if !Metrics.isPhone, let overview = video.overview, !overview.isEmpty {
+                    Text(overview)
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.6))
+                        .lineLimit(2)
+                }
                 if let detail = detail(progress) {
                     Text(detail)
                         .font(.footnote)
@@ -313,8 +308,12 @@ private struct EpisodeRow: View {
         }
         return runtime
     }
-}
 
+    private static let stillWidth: CGFloat = Metrics.isPhone ? 132 : 200
+}
+#endif
+
+#if os(tvOS)
 struct EpisodeCard: View {
     let video: Video
     /// Shown when the episode has no still: addons often leave whole seasons without them.
@@ -333,14 +332,9 @@ struct EpisodeCard: View {
                 .aspectRatio(16 / 9, contentMode: .fit)
                 .clipShape(.rect(cornerRadius: Metrics.cardRadius))
                 .opacity(video.isReleased() ? 1 : 0.5)
-                #if os(tvOS)
                 .hoverEffect(.highlight)
                 // Clear of the focus lift, as in Continue Watching.
                 .padding(.bottom, 18)
-                #else
-                .modifier(PointerHighlight())
-                .padding(.bottom, 9)
-                #endif
             if let caption = caption(progress) {
                 Text(caption)
                     .font(.episodeCaption)
@@ -351,14 +345,6 @@ struct EpisodeCard: View {
             Text(video.displayTitle ?? "Untitled")
                 .font(.episodeTitle)
                 .lineLimit(2)
-            #if !os(tvOS)
-            if let overview = video.overview, !overview.isEmpty {
-                Text(overview)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
-            #endif
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(.rect)
@@ -376,5 +362,6 @@ struct EpisodeCard: View {
         return kept.isEmpty ? nil : kept.joined(separator: " · ")
     }
 }
+#endif
 
 /// What Play does for a title. Movies play or resume themselves. Series continue where the

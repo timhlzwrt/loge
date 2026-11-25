@@ -18,7 +18,6 @@ struct FeaturedCarousel: View {
     #endif
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
     #endif
 
     var body: some View {
@@ -124,11 +123,9 @@ struct FeaturedCarousel: View {
     #endif
 
     #if os(iOS)
-    /// A portrait phone's column, without the description; the full layout where there's width to spare.
-    private var isNarrow: Bool { horizontalSizeClass == .compact && verticalSizeClass != .compact }
-    private var height: CGFloat {
-        verticalSizeClass == .compact ? 340 : isNarrow ? 500 : 560
-    }
+    /// A phone's column, without the description; the full layout where there's width to spare.
+    private var isNarrow: Bool { horizontalSizeClass == .compact }
+    private var height: CGFloat { isNarrow ? 500 : 560 }
     #else
     private let isNarrow = false
     private let height: CGFloat = 480

@@ -1,7 +1,8 @@
 import LogeCore
 import SwiftUI
 
-/// What a title offers besides Play and Watch Later, behind one button so the two stand
+#if os(tvOS)
+/// Apple TV: what a title offers besides Play and Watch Later, behind one button so the two stand
 /// alone: its trailer, the sources list and, for a movie, the watched mark.
 struct TitleMoreMenu: View {
     let trailer: URL?
@@ -29,14 +30,11 @@ struct TitleMoreMenu: View {
         .menuIndicator(.hidden)
         // The icon-only style leaves the menu without a name of its own.
         .accessibilityLabel("More")
-        #if os(tvOS)
         .buttonStyle(GlassIconButtonStyle(caption: "More"))
-        #else
-        .buttonStyle(GlassIconButtonStyle())
-        #endif
         .help("More")
     }
 }
+#endif
 
 /// Marks a movie watched without playing it, or takes the mark and its progress away.
 struct WatchedMarkButton: View {
