@@ -65,6 +65,16 @@ enum DiscoveryFixture {
             MyListView().environment(LibraryStore(defaults: UserDefaults(suiteName: "loge.discovery-empty-fixture")!))
         case "search":
             SearchView()
+        // Results for a name, with TMDB's person match first.
+        case "search-results":
+            SearchView(query: "nolan")
+        case "catalog":
+            CatalogGridView(source: DiscoveryCatalogs.home[0])
+        case "home-shelves":
+            HomeSettingsView()
+        // Inception saved and Interstellar finished, both with artwork.
+        case "my-lists-artwork":
+            MyListView().environment(recommendationLibrary)
         case "recommended":
             HomeView()
                 .environment(recommendationLibrary)
@@ -335,6 +345,11 @@ private final class DiscoveryFixtureProtocol: URLProtocol, @unchecked Sendable {
         let body: String
         var status = 200
         switch url.path {
+        case "/3/search/person":
+            let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "query" }?.value
+            body = query?.lowercased() == "nolan"
+                ? #"{"results":[{"id":525,"name":"Christopher Nolan","known_for_department":"Directing","profile_path":"/xuAIuYSmsUzKlUMBFGVZaWsY3DZ.jpg"}]}"#
+                : #"{"results":[]}"#
         case "/3/person/525":
             let directed: [(Int, String, String, String?)] = [
                 (157336, "Interstellar", "2014-11-05", "/yQvGrMoipbRoddT0ZR8tPoR7NfX.jpg"),

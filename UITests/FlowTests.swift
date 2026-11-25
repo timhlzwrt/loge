@@ -161,7 +161,7 @@ final class FlowTests: XCTestCase {
         // Only the successful query should be remembered.
         field.typeText("\n")
         field.buttons.firstMatch.tap()
-        XCTAssertTrue(app.staticTexts["Recent Searches"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Recent"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["batman"].exists)
         XCTAssertFalse(app.buttons["batmanzzqxjvw"].exists)
         screenshot("search-recent")
@@ -177,7 +177,7 @@ final class FlowTests: XCTestCase {
         screenshot("search-genre-chosen")
         genre.tap()
         app.buttons["Any genre"].tap()
-        XCTAssertTrue(app.staticTexts["Genres"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Browse by Genre"].waitForExistence(timeout: 5))
     }
 
     @MainActor
@@ -213,7 +213,9 @@ final class FlowTests: XCTestCase {
         app.buttons["Popular Movies"].firstMatch.tap()
         app.buttons["Sort"].firstMatch.tap()
         app.buttons["New"].firstMatch.tap()
-        XCTAssertTrue(app.buttons["Year"].waitForExistence(timeout: 5))
+        // A menu on wider screens, a row of year chips on a phone.
+        let years = app.buttons.matching(NSPredicate(format: "label MATCHES '(19|20)[0-9][0-9]'")).firstMatch
+        XCTAssertTrue(app.buttons["Year"].waitForExistence(timeout: 5) || years.exists)
         XCTAssertTrue(app.navigationBars.matching(NSPredicate(format: "identifier BEGINSWITH 'New Movies · '")).firstMatch
             .waitForExistence(timeout: 5))
         screenshot("grid-new-by-year")

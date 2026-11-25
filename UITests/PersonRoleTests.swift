@@ -32,6 +32,24 @@ final class PersonRoleTests: XCTestCase {
         XCTAssertTrue(app.buttons["All (2)"].waitForExistence(timeout: 5))
         XCTAssertTrue(roles.buttons["Directing"].isSelected)
         #else
+        if UIDevice.current.userInterfaceIdiom == .phone {
+            // A phone's roles are pills over the grid, newest first, with no type filter.
+            func title(_ name: String) -> XCUIElement {
+                app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", name)).firstMatch
+            }
+            let director = app.buttons["Director"]
+            XCTAssertTrue(director.waitForExistence(timeout: 15))
+            director.tap()
+            XCTAssertTrue(title("Directed series").exists)
+            XCTAssertTrue(title("Mixed credit").exists)
+            XCTAssertFalse(title("Acting movie").exists)
+            app.buttons["Crew"].tap()
+            XCTAssertTrue(title("Camera series").exists)
+            XCTAssertFalse(title("Directed series").exists)
+            app.buttons["All"].tap()
+            XCTAssertTrue(title("Acting movie").exists)
+            return
+        }
         let roles = app.buttons["person-role-filter"]
         XCTAssertTrue(roles.waitForExistence(timeout: 15))
         roles.tap()

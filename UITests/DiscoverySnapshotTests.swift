@@ -20,7 +20,7 @@ final class DiscoverySnapshotTests: XCTestCase {
             app.launchEnvironment["DISCOVERY_SCREEN"] = screen
             app.launch()
             if screen == "person" {
-                XCTAssertTrue(app.staticTexts["Filmography"].waitForExistence(timeout: 20))
+                XCTAssertTrue(app.descendants(matching: .any)["person-filmography"].waitForExistence(timeout: 20))
             }
             sleep(settle)
             for page in 0...scrolls {

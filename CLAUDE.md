@@ -7,11 +7,13 @@ The project, scheme, product and `LogeCore` package are all named loge; only the
 (`li.tjh.MediaApp`), Keychain service names and log subsystem keep the old working name, so
 saved data and sign-ins carry over. It browses catalogs from Stremio addons, shows details,
 lists streams and plays them with mpv. The look follows the Strand app: charcoal canvas,
-artwork-led, white accent, system font, no cards/badges. Pages without a title glow amber
-in a corner (`PageGlow`); a title's page, and Home's hero, sit in its room (`Room`): a deep
+artwork-led, white accent, system font, no cards/badges. Pages without a title sit on the
+plain charcoal; a title's page, and Home's hero, sit in its room (`Room`): a deep
 tone taken from the backdrop (`RoomTone`, cached per URL), which the backdrop fades into and
 which fades to the canvas lower down. Heroes show the title's logo in white and greys
-(`TitleLogo(isWhite:)`, desaturated, since flattening to one white loses solid panels). One white
+(`TitleLogo(isWhite:)`, desaturated with a soft dark shade, since flattening to one white loses
+solid panels). Choices side by side on a phone (seasons, genres, lists, roles) are white-when-chosen
+pills (`PillButtonStyle`); posters in a phone's grids carry their name and a line under. One white
 primary button per screen; the rest translucent white, every button with a word. No end
 times ("ends at"), only time left. Filters and settings read as sentences (`Sentence`): grey words, values white
 and underlined, each value the menu or link that changes it.
@@ -35,8 +37,10 @@ features, proposals, scope). History of individual changes is in git and the PRs
   menus, `PictureInPicture`, `NowPlaying`, next-episode countdown, tvOS remote swipe reader.
 - `App/Settings/` — by default one sentence under a large "loge" (which opens About), a line
   per setting, whose values are the controls (`SettingsSentencesView`: playback menus in place;
-  addons, Home's shelves, TMDB and Sync open their pages). No title or captions; on a phone the
-  name sits at the top and the sentence above the tab bar. "Settings read as sentences" switches
+  addons, Home's shelves, TMDB and Sync open their pages), with Share Setup and Import Setup
+  under it on iPhone/iPad. No title or captions; on a phone the name and the sentence sit at the
+  top. The pages it opens are translucent groups of 52 pt rows under small grey labels, with
+  white-track switches (`SettingsPage`, `SettingsToggleStyle`). "Settings read as sentences" switches
   this device to the plain list of the same. About (version, build commit, credits) and Data
   Sources, which holds all attribution rather than putting it under artwork.
 - `web/` — the project page for loge.tjh.li: static HTML/CSS in tjh.li's design, no scripts
@@ -102,7 +106,8 @@ logs; Instruments over the network to it drops after about a second.
 `details-busy`, `sources-folded|autoplay|sheet`
 (need `Tools/test-addon.py --port 8769 --many --delay 5`), `sources-empty(-sheet)`,
 `settings-review|failed|old-server`, `carousel-resume` (a series started: the phone's resume
-hero), `home-empty` (first launch: nothing watched, no addons). `details` and `series` take
+hero), `home-empty` (first launch: nothing watched, no addons), `search-results` (with a TMDB
+person), `catalog` (See All), `my-lists-artwork`, `home-shelves`, `addons`, `settings`, `person`. `details` and `series` take
 Cinemeta rather than the simulator's addons; `series` has S1 E1 watched and E2 started.
 `DiscoverySnapshotTests` captures them (`TEST_RUNNER_DISCOVERY_SCREENSHOT_DIR`, `_SCREENS`,
 `_SETTLE` seconds, `_SCROLLS`). The playback fixture also takes
@@ -155,7 +160,8 @@ MDBList, which added Letterboxd and Rotten Tomatoes scores, was removed the same
 (`RetiredMDBListKey` deletes its saved key at launch).
 Watch Later is the only list: custom lists were folded into it the same month (`LibraryStore`
 appends any stored lists' titles once when a profile loads, then deletes them). My Lists ends
-with Recently Watched, the last 12 titles finished and not in Continue Watching; removing one
+(on iPhone: a second pill beside Watch Later, both as poster grids, a film's runtime under its
+name) with Recently Watched, the last 12 titles finished and not in Continue Watching; removing one
 there only hides it on this device, and its watched marks stay. iPhone/iPad and Apple TV are equal main devices.
 Picture in Picture is required; downloads are out of scope; UI is English only for now.
 iPhone browsing is portrait-only (`AppDelegate`); the player turns. iPad has one window
@@ -180,7 +186,11 @@ the IMDb rating. It stands behind IMDb's white mark, the one place the app shows
 brand's logo. Rows on that page have a heading and no caption
 under it. Section headings share a smaller semibold style across the app (20 pt on iOS).
 More Like This and film collections show only the year below poster titles; filmography
-keeps Movie/Series labels because it can mix both.
+keeps Movie/Series labels because it can mix both, except on a phone, which shows the year and
+filters by role pills (All, Actor, Director, Crew), newest first.
+iPhone Search opens on recent searches and genre tiles; typing lists titles as rows across both
+catalogs, and with TMDB someone whose name matches comes first (`TMDBAccount.person(named:)`,
+TMDB's top match only). Its filter sentence shows once there's a query or genre.
 
 ## Things that aren't obvious from the code
 

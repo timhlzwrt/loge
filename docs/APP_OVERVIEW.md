@@ -57,7 +57,8 @@ navigation destinations.
   shown catalog shelf. An addon shelf is stored by manifest `id`, type and catalog `id`,
   never its URL, and is skipped, not deleted, on a device without that addon.
 - `CatalogRow.swift` and `CatalogGridView.swift`: poster rows (on iPhone with name and
-  year under each) and paginated grids, with genre filtering when the addon advertises it.
+  year under each) and paginated grids, with genre filtering when the addon advertises it
+  (on iPhone genre chips over a three-column grid with names and years).
 - `MetaDetailView.swift`: title details, seasons, episode cards, watched
   actions and next episode selection, in the title's room tone. On iPhone the hero is
   the logo, one line of facts, Play across the width and labelled circles for Watch
@@ -70,7 +71,8 @@ navigation destinations.
   or TMDB's when connected; not on Apple TV, which has no browser), and a
   movie in a TMDB collection lists that film series in release order.
 - `PersonView.swift`: person details and role-filtered TMDB filmographies when
-  connected. Without TMDB it says a filmography needs TMDB and shows the title the
+  connected; on iPhone a round portrait, a "Director · born 1970" line, the biography in
+  three lines and role pills over a three-column grid. Without TMDB it says a filmography needs TMDB and shows the title the
   person was opened from: Cinemeta's search no longer names cast or directors. That
   state is only left for a page still open when TMDB is disconnected.
 - `SourcesView.swift`: source selection, autoplay and fallback candidates. Resolution
@@ -79,7 +81,8 @@ navigation destinations.
   On iPhone/iPad it's one list, the source Play would start on top ("Play picks"), and
   the title page opens it as a sheet.
 - `SearchView.swift`: debounced search across built-in movie/series feeds and local
-  recent searches.
+  recent searches. On iPhone results are rows (poster, name, kind and year) with a
+  matching person from TMDB first, and the empty state is Recent and Browse by Genre.
 - `App/Settings`: addon installation/order/removal, Home's shelves, playback preferences,
   setup copies (Share Setup on iPhone, iPad and Mac; Import Setup everywhere), self-hosted
   sync, the TMDB connection and the Mac updater.
