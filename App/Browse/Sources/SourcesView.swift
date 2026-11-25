@@ -1,9 +1,10 @@
 import LogeCore
 import SwiftUI
 
-/// Every playable source from the user's stream addons, grouped by resolution.
+/// Every playable source from the user's stream addons, best first by resolution.
 /// Rows describe the file (release, codec, HDR, audio, bitrate, size) and never name the addon
-/// or the file, whose names can carry account details.
+/// or the file, whose names can carry account details; only the Mac's tooltip shows the
+/// release name, on hover.
 struct SourcesView: View {
     let route: SourcesRoute
     /// Shown over the details screen to pick a source, rather than pushed by Play as the
@@ -236,6 +237,12 @@ struct SourcesView: View {
     private func phoneSheet(_ groups: [SourceSelection.Group], providers: [StreamProvider]) -> some View {
         VStack(spacing: 0) {
             HStack(alignment: .firstTextBaseline) {
+                // A centred panel on iPad, which has no grabber to swipe.
+                if !Metrics.isPhone {
+                    Button("Close") { dismiss() }
+                        .foregroundStyle(.white.opacity(0.75))
+                        .padding(.trailing, 8)
+                }
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Sources")
                         .font(.title2.bold())
@@ -261,7 +268,9 @@ struct SourcesView: View {
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
     }
+    #endif
 
+    #if !os(tvOS)
     /// The addon and the filters, each a submenu showing its value.
     private func filterMenu(_ providers: [StreamProvider]) -> some View {
         let available = availableProviders
@@ -289,17 +298,23 @@ struct SourcesView: View {
 
     #if os(macOS)
     private func macSheet(_ groups: [SourceSelection.Group], providers: [StreamProvider]) -> some View {
-        let selected = selectedID ?? lastPlayedID(in: groups) ?? groups.first?.entries.first?.id
-        let entry = groups.lazy.flatMap(\.entries).first { $0.id == selected }
+        let pick = playPick(providers)
+        let selected = selectedID ?? pick?.id ?? lastPlayedID(in: groups) ?? groups.first?.entries.first?.id
+        let entry = pick?.id == selected ? pick : groups.lazy.flatMap(\.entries).first { $0.id == selected }
         return VStack(spacing: 14) {
-            VStack(spacing: 2) {
-                Text("Choose a Source")
-                    .font(.headline)
-                Text([route.title, countLabel(groups, providers: providers)].compactMap { $0 }.joined(separator: " · "))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Sources")
+                        .font(.title3.bold())
+                    Text([route.title, countLabel(groups, providers: providers)].compactMap { $0 }.joined(separator: " · "))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                filterMenu(providers)
+                    .fixedSize()
             }
-            .padding(.top, 20)
+            .padding([.horizontal, .top], 20)
             ScrollViewReader { proxy in
                 ScrollView {
                     list(groups, providers: providers, selectedID: selected)
@@ -335,7 +350,8 @@ struct SourcesView: View {
         .focused($isListFocused)
         .onAppear { isListFocused = true }
         .onMoveCommand { direction in
-            let ids = groups.flatMap(\.entries).map(\.id)
+            // In the order shown: Play's pick on top, left out of the list below.
+            let ids = [pick?.id].compactMap { $0 } + groups.flatMap(\.entries).map(\.id).filter { $0 != pick?.id }
             guard let index = selected.flatMap(ids.firstIndex(of:)) else { return }
             switch direction {
             case .up: selectedID = ids[max(index - 1, 0)]
@@ -360,7 +376,7 @@ struct SourcesView: View {
         let all = listedSources(providers)
         let hidden = all.count - groups.reduce(0) { $0 + $1.entries.count }
         ListContainer {
-            #if !os(iOS)
+            #if os(tvOS)
             let available = availableProviders
             filterSentence(all, available: available,
                            chosen: available.count > 1 && providers.count == 1 ? providers.first : nil)
@@ -374,10 +390,10 @@ struct SourcesView: View {
                 Text(status)
                     .foregroundStyle(.secondary)
             }
-            #if os(iOS)
+            #if !os(tvOS)
             // What Play starts by itself, then the rest best first, each row saying its resolution.
             let pick = playPick(providers)
-            if let pick { picked(pick) }
+            if let pick { picked(pick, isSelected: pick.id == selectedID) }
             VStack(alignment: .leading, spacing: 0) {
                 if pick != nil, !groups.isEmpty {
                     Text("Other sources")
@@ -390,7 +406,7 @@ struct SourcesView: View {
                     ForEach(shown.filter { $0.id != pick?.id }) { entry in
                         Divider()
                         row(entry, isLastPlayed: entry.id == lastPlayed, isRecommended: entry.id == recommended,
-                            isSelected: false)
+                            isSelected: entry.id == selectedID)
                     }
                     if isFoldable {
                         Divider()
@@ -523,7 +539,7 @@ struct SourcesView: View {
         ignoresCachedOnly = true
     }
 
-    #if !os(iOS)
+    #if os(tvOS)
     /// The addon and filters as a sentence whose values are the menus that change them.
     private func filterSentence(_ sources: [ListedSource], available: [StreamProvider], chosen: StreamProvider?) -> some View {
         let marked = Set(sources.flatMap(\.details.languages))
@@ -629,6 +645,8 @@ struct SourcesView: View {
                 .onTapGesture { selectedID = entry.id }
                 .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
                 .accessibilityAction { choose(entry) }
+                // The full release name, which the row sums up.
+                .help(entry.stream.behaviorHints?.filename ?? entry.stream.cleanName ?? "")
         } else {
             Button { choose(entry) } label: { label }
                 .buttonStyle(.plain)
@@ -744,18 +762,22 @@ struct SourcesView: View {
         return allowed.first { $0.stream.playbackURL == stream.playbackURL }
     }
 
-    #if os(iOS)
+    #if !os(tvOS)
     /// Play's choice, when its addon is among those listed.
     private func playPick(_ providers: [StreamProvider]) -> ListedSource? {
         continuingSource().flatMap { pick in providers.contains { $0.id == pick.provider.id } ? pick : nil }
     }
 
-    /// Play's choice on its own panel, with Play, so the usual source is one tap away.
-    private func picked(_ entry: ListedSource) -> some View {
+    /// Play's choice on its own panel, with Play, so the usual source is one tap away. The
+    /// Mac's sheet selects it like any row, for its own Play.
+    private func picked(_ entry: ListedSource, isSelected: Bool) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Play picks")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+            #if os(macOS)
+            row(entry, isLastPlayed: false, isRecommended: false, isSelected: isSelected)
+            #else
             StreamRow(entry: entry, isLastPlayed: false, connectionSpeed: nil)
             Button { choose(entry) } label: {
                 Label("Play", systemImage: "play.fill").frame(maxWidth: .infinity)
@@ -763,6 +785,7 @@ struct SourcesView: View {
             .buttonStyle(PrimaryButtonStyle())
             .controlSize(.small)
             .padding(.top, 4)
+            #endif
         }
         .padding(16)
         .background(.white.opacity(0.07), in: .rect(cornerRadius: 16))

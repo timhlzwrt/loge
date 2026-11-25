@@ -1,14 +1,13 @@
 import LogeCore
 import SwiftUI
 
-/// A resolution's heading and its rows: on a rounded panel on the Mac, and on tvOS as a
-/// section whose rows are focus targets of their own. iPhone and iPad list every row in one.
+#if os(tvOS)
+/// A resolution's heading and its rows, as a section whose rows are focus targets of their own.
 struct SourceGroupView<Content: View>: View {
     let title: String
     @ViewBuilder let content: Content
 
     var body: some View {
-        #if os(tvOS)
         Section {
             content
         } header: {
@@ -19,34 +18,9 @@ struct SourceGroupView<Content: View>: View {
                 // Room for the first row, which grows into the header when focused.
                 .padding(.bottom, 12)
         }
-        #else
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .padding(.leading, 16)
-            VStack(spacing: 0) {
-                Group(subviews: content) { rows in
-                    ForEach(rows.indices, id: \.self) { index in
-                        if index > 0 {
-                            Divider().padding(.leading, 16)
-                        }
-                        rows[index]
-                    }
-                }
-            }
-            .background(.white.opacity(0.07), in: .rect(cornerRadius: Self.radius))
-            .clipShape(.rect(cornerRadius: Self.radius))
-        }
-        #endif
     }
-
-    #if os(macOS)
-    private static var radius: CGFloat { 12 }
-    #else
-    private static var radius: CGFloat { 20 }
-    #endif
 }
+#endif
 
 /// One source: the release type with its best dynamic range, then codec and audio, with
 /// the size on the right and the bitrate under it. Files the debrid service doesn't hold
@@ -58,14 +32,14 @@ struct StreamRow: View {
     let connectionSpeed: Double?
 
     var body: some View {
-        #if os(iOS)
-        phoneRow
-        #else
+        #if os(tvOS)
         row
+        #else
+        phoneRow
         #endif
     }
 
-    #if os(iOS)
+    #if !os(tvOS)
     /// The resolution in a small outlined box, what the file is, how it plays, and its size.
     private var phoneRow: some View {
         let details = entry.details
@@ -168,11 +142,6 @@ struct StreamRow: View {
             }
         }
         .opacity(isCold ? 0.55 : 1)
-        #if !os(tvOS)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .frame(minHeight: rowHeight)
-        #endif
         .contentShape(.rect)
         .accessibilityElement(children: .combine)
     }
@@ -216,9 +185,6 @@ struct StreamRow: View {
     private let summaryFont = Font.caption
     private let sizeFont = Font.callout
     #elseif os(macOS)
-    private let titleFont = Font.body.weight(.semibold)
-    private let summaryFont = Font.subheadline
-    private let sizeFont = Font.body
     /// A minimum only: rows with nothing under the title stay one line tall.
     private let rowHeight: CGFloat = 32
     #else
