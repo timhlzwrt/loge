@@ -38,8 +38,11 @@ features, proposals, scope). History of individual changes is in git and the PRs
 - `App/Settings/` — by default one sentence under a large "loge" (which opens About), a line
   per setting, whose values are the controls (`SettingsSentencesView`: playback menus in place;
   addons, Home's shelves, TMDB and Sync open their pages), with Share Setup and Import Setup
-  under it on iPhone/iPad. No title or captions; on a phone the name and the sentence sit at the
-  top. The pages it opens are translucent groups of 52 pt rows under small grey labels, with
+  under it on iPhone/iPad. One paragraph (a single `Sentence`) whose values are the controls.
+  No title or captions; on iPhone and iPad it starts at the top. On a wide iPad a value's page
+  opens in a panel beside the sentence with the value marked (`TokenLabel(isMarked:)`); pages
+  pushed from there take the screen. The Mac keeps it in the standard Settings window (⌘,),
+  with Sparkle's switch, Check Now and the version under it, and has no Settings tab. The pages it opens are translucent groups of 52 pt rows under small grey labels, with
   white-track switches (`SettingsPage`, `SettingsToggleStyle`). "Settings read as sentences" switches
   this device to the plain list of the same. About (version, build commit, credits) and Data
   Sources, which holds all attribution rather than putting it under artwork.
@@ -164,7 +167,8 @@ appends any stored lists' titles once when a profile loads, then deletes them). 
 name) with Recently Watched, the last 12 titles finished and not in Continue Watching; removing one
 there only hides it on this device, and its watched marks stay. iPhone/iPad and Apple TV are equal main devices.
 Picture in Picture is required; downloads are out of scope; UI is English only for now.
-iPhone browsing is portrait-only (`AppDelegate`); the player turns. iPad has one window
+iPhone browsing is portrait-only (`AppDelegate`); the player turns. The iPad is landscape
+only, player included (project.yml and `AppDelegate`). iPad has one window
 (`UIApplicationSupportsMultipleScenes` NO): every window would share the one `PlaybackSession`
 and present its player; the Mac has no New Window either. Destructive settings and library
 actions (addon removal, TMDB token, Sync disconnect, device revoke,
@@ -179,9 +183,12 @@ title and Play. On iPhone: the logo centred, one line of genre, year, runtime an
 rating, Play ("Resume S2 E4") across the width, then four labelled circles (Watch Later,
 filled as "In Watch Later"; Trailer; Sources, a sheet; Watched, which for a series marks or
 clears every aired episode and asks before clearing), then the description in three lines.
-Episodes are rows under season pills; Information is a two-column table. Wider screens keep
-Play with Watch Later and a More menu (`TitleMoreMenu`: trailer except on Apple TV, sources,
-watched mark) beside it, and the description with, one size down, genre, year, runtime and
+Episodes are rows under season pills; Information is a two-column table. iPad and Mac use the
+same column on the left (left-aligned, Information under it) and put episodes (200 pt stills
+with their summaries), Cast & Crew, the collection and More Like This on the right, under the
+backdrop, which takes the top right and fades left into the room; the Mac sets the actions as
+named buttons beside Play. Apple TV keeps Play with Watch Later and a More menu
+(`TitleMoreMenu`) and the description with, one size down, genre, year, runtime and
 the IMDb rating. It stands behind IMDb's white mark, the one place the app shows another
 brand's logo. Rows on that page have a heading and no caption
 under it. Section headings share a smaller semibold style across the app (20 pt on iOS).
@@ -215,9 +222,13 @@ TMDB's top match only). Its filter sentence shows once there's a query or genre.
   layout are appended, and unknown shelf kinds are dropped on decode.
 - Home's artwork prefetch uses plain data tasks, not a task group (suspected Release crash).
   An optimizer bug once lost a task group's result in Release builds, so test Release too.
-- iPad details switch between `DetailColumnsLayout` and a `VStackLayout` under `AnyLayout`,
-  so rotating keeps the chosen season.
-- A phone's Home leads with what's being watched (`ResumeHero`: the latest of Continue
+- iPad and Mac details switch between `DetailColumnsLayout` and a `VStackLayout` under
+  `AnyLayout` when the window narrows below 880 pt, so the chosen season survives.
+- On the Mac, hovering artwork (`PointerHighlight`) dims it under a white Play button: a
+  Continue Watching card plays, anything else opens. The Mac's sources sheet has Play picks
+  selectable like any row, Cancel and Play, Return plays the selection, and a row's tooltip
+  shows the file's release name (the one place the list names the file).
+- Home leads with what's being watched (full width with Details beside Resume on iPad and Mac) (`ResumeHero`: the latest of Continue
   Watching, Resume going through Sources with autoplay as Continue Watching does, the rest a
   swipe away and in the row under it), unless Continue Watching is hidden in Home's layout;
   otherwise the featured carousel, with Play and Details. Without a stream addon a card under
@@ -245,7 +256,9 @@ TMDB's top match only). Its filter sentence shows once there's a query or genre.
   a stream fails with Try Again after 20 s.
 - Navigation is the four tabs (Home, My Lists, Search, Settings) with `.tabBarOnly`, no sidebar
   anywhere. Search has the search role except on iPhone, where the role would detach it from
-  the one pill; iPad and Mac draw it as the magnifier at the pill's trailing end.
+  the one pill; the iPad draws it as the magnifier at the pill's trailing end. The Mac has
+  Home and My Lists only: search is the toolbar field (⌘F), whose results cover the tab while
+  it has text (`SearchView(toolbarQuery:)`), and Settings is its own window.
 - A series is followed while it has progress in the library: of the 30 most recently watched,
   `EpisodeSchedule` looks up those whose last episode was finished, at most every six hours
   each. An episode aired since then shows in Continue Watching as "New episode".
@@ -262,7 +275,7 @@ TMDB's top match only). Its filter sentence shows once there's a query or genre.
   them in full once; `me()` runs once per launch or connect, and again after a 401.
 - Sources come from one stream addon at a time (the one last picked in the list's Addon menu,
   `[StreamProvider].chosenAddonKey`, this device only; else the first) unless Settings → Addons
-  combines them. On iPhone/iPad the list is one, best first, each row with its resolution
+  combines them. On iPhone, iPad (a centred panel with Close) and Mac the list is one, best first, each row with its resolution
   boxed; the filters are a Filter menu, and "Play picks" shows the source autoplay would
   start (`continuingSource()`, the same code), shown only when there's a remembered source. Play, autoplay, fallbacks and the title page's prefetch all go through
   `chosen(_:combined:)`; a remembered source from another addon doesn't autoplay.

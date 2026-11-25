@@ -8,7 +8,8 @@ final class DiscoverySnapshotTests: XCTestCase {
             throw XCTSkip("Set TEST_RUNNER_DISCOVERY_SCREENSHOT_DIR to capture comparison screens.")
         }
         continueAfterFailure = false
-        XCUIDevice.shared.orientation = .portrait
+        // The iPad is landscape only; the iPhone browses upright.
+        XCUIDevice.shared.orientation = UIDevice.current.userInterfaceIdiom == .pad ? .landscapeLeft : .portrait
         let environment = ProcessInfo.processInfo.environment
         let screens = environment["DISCOVERY_SCREENS"]?.split(separator: ",").map(String.init) ?? ["person"]
         // Seconds for artwork and addon responses to arrive, and how many screens further down to capture.
@@ -30,7 +31,8 @@ final class DiscoverySnapshotTests: XCTestCase {
                 }
                 let url = URL(fileURLWithPath: directory).appending(path: page == 0 ? "\(screen).png" : "\(screen)-\(page).png")
                 try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try app.screenshot().pngRepresentation.write(to: url)
+                // The screen's own capture: the app's came out turned and cropped in landscape.
+                try XCUIScreen.main.screenshot().pngRepresentation.write(to: url)
             }
             app.terminate()
         }
