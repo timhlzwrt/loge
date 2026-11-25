@@ -7,9 +7,13 @@ The project, scheme, product and `LogeCore` package are all named loge; only the
 (`li.tjh.MediaApp`), Keychain service names and log subsystem keep the old working name, so
 saved data and sign-ins carry over. It browses catalogs from Stremio addons, shows details,
 lists streams and plays them with mpv. The look follows the Strand app: charcoal canvas,
-artwork-led, white accent, system font, no cards/badges. One light falls on the canvas
-(`PageGlow`): amber in a corner of pages without artwork, the backdrop's own colour on a
-title's page. Filters and settings read as sentences (`Sentence`): grey words, values white
+artwork-led, white accent, system font, no cards/badges. Pages without a title glow amber
+in a corner (`PageGlow`); a title's page, and Home's hero, sit in its room (`Room`): a deep
+tone taken from the backdrop (`RoomTone`, cached per URL), which the backdrop fades into and
+which fades to the canvas lower down. Heroes show the title's logo in white and greys
+(`TitleLogo(isWhite:)`, desaturated, since flattening to one white loses solid panels). One white
+primary button per screen; the rest translucent white, every button with a word. No end
+times ("ends at"), only time left. Filters and settings read as sentences (`Sentence`): grey words, values white
 and underlined, each value the menu or link that changes it.
 
 What users get is described in README.md, docs/APP_OVERVIEW.md and ROADMAP.md (shipped
@@ -95,9 +99,13 @@ app with macOS `sample <pid>`. The Apple TV is paired with Xcode for `devicectl`
 logs; Instruments over the network to it drops after about a second.
 `--discovery-ui-test` with `-DISCOVERY_SCREEN <name>` opens a DEBUG fixture screen offline:
 `recommended`, `my-lists`, `details`, `details-collection`, `series`, `details-unmatched`,
-`details-busy`, `sources-folded|autoplay`
+`details-busy`, `sources-folded|autoplay|sheet`
 (need `Tools/test-addon.py --port 8769 --many --delay 5`), `sources-empty(-sheet)`,
-`settings-review|failed|old-server`, `carousel-resume`. The playback fixture also takes
+`settings-review|failed|old-server`, `carousel-resume` (a series started: the phone's resume
+hero), `home-empty` (first launch: nothing watched, no addons). `details` and `series` take
+Cinemeta rather than the simulator's addons; `series` has S1 E1 watched and E2 started.
+`DiscoverySnapshotTests` captures them (`TEST_RUNNER_DISCOVERY_SCREENSHOT_DIR`, `_SCREENS`,
+`_SETTLE` seconds, `_SCROLLS`). The playback fixture also takes
 `PLAYBACK_FIXTURE_NEXT=late`, `PLAYBACK_FIXTURE_SHORT_URL` and `?hang=`.
 
 ## Conventions
@@ -161,9 +169,13 @@ Person filmographies need TMDB: Cinemeta's search no longer names cast or direct
 without TMDB the page says so and shows the title it came from. TMDB is what makes the
 experience complete: without a token a title's page has no Cast & Crew at all, only the hint
 to connect it (trailers are the exception and work without). A title's page leads with the
-title and Play, with Watch Later and a More menu (trailer except on Apple TV, sources, watched mark)
-beside it. A phone centres the three, Play in the middle at a fixed 172 pt and a size down
-(`.controlSize(.small)`); wider screens start with Play. The description follows, and under it, one size down, genre, year, runtime and
+title and Play. On iPhone: the logo centred, one line of genre, year, runtime and the IMDb
+rating, Play ("Resume S2 E4") across the width, then four labelled circles (Watch Later,
+filled as "In Watch Later"; Trailer; Sources, a sheet; Watched, which for a series marks or
+clears every aired episode and asks before clearing), then the description in three lines.
+Episodes are rows under season pills; Information is a two-column table. Wider screens keep
+Play with Watch Later and a More menu (`TitleMoreMenu`: trailer except on Apple TV, sources,
+watched mark) beside it, and the description with, one size down, genre, year, runtime and
 the IMDb rating. It stands behind IMDb's white mark, the one place the app shows another
 brand's logo. Rows on that page have a heading and no caption
 under it. Section headings share a smaller semibold style across the app (20 pt on iOS).
@@ -195,8 +207,12 @@ keeps Movie/Series labels because it can mix both.
   An optimizer bug once lost a task group's result in Release builds, so test Release too.
 - iPad details switch between `DetailColumnsLayout` and a `VStackLayout` under `AnyLayout`,
   so rotating keeps the chosen season.
-- The phone hero shows the portrait poster: a title near the top of a poster reads twice with
-  the logo, and that can't be detected.
+- A phone's Home leads with what's being watched (`ResumeHero`: the latest of Continue
+  Watching, Resume going through Sources with autoplay as Continue Watching does, the rest a
+  swipe away and in the row under it), unless Continue Watching is hidden in Home's layout;
+  otherwise the featured carousel, with Play and Details. Without a stream addon a card under
+  the hero offers Add Addon and Import Setup. Hero backdrops are the landscape image.
+- Posters on a phone's shelves carry the name and "year · IMDb rating" (`isCaptioned`).
 - The title's logo is `fixedSize` vertically on the details page: `TitleLogo` otherwise takes
   all the height it is allowed and a wide, low logo floats far above Play. With
   `restsOnLettering` it also lets sparkle or glow under the letters hang into the gap below
@@ -236,7 +252,9 @@ keeps Movie/Series labels because it can mix both.
   them in full once; `me()` runs once per launch or connect, and again after a 401.
 - Sources come from one stream addon at a time (the one last picked in the list's Addon menu,
   `[StreamProvider].chosenAddonKey`, this device only; else the first) unless Settings → Addons
-  combines them. Play, autoplay, fallbacks and the title page's prefetch all go through
+  combines them. On iPhone/iPad the list is one, best first, each row with its resolution
+  boxed; the filters are a Filter menu, and "Play picks" shows the source autoplay would
+  start (`continuingSource()`, the same code), shown only when there's a remembered source. Play, autoplay, fallbacks and the title page's prefetch all go through
   `chosen(_:combined:)`; a remembered source from another addon doesn't autoplay.
 - Search's keyboard reappearing after going back is the system restoring a focused field;
   clearing focus on leaving doesn't stop it.
