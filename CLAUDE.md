@@ -227,7 +227,8 @@ TMDB's top match only). Its filter sentence shows once there's a query or genre.
 - On the Mac, hovering artwork (`PointerHighlight`) dims it under a white Play button: a
   Continue Watching card plays, anything else opens. The Mac's sources sheet has Play picks
   selectable like any row, Cancel and Play, Return plays the selection, and a row's tooltip
-  shows the file's release name (the one place the list names the file).
+  shows the file's release name. Release names carry no addon keys; only manifest and stream
+  URLs do, and those are never shown.
 - Home leads with what's being watched (full width with Details beside Resume on iPad and Mac) (`ResumeHero`: the latest of Continue
   Watching, Resume going through Sources with autoplay as Continue Watching does, the rest a
   swipe away and in the row under it), unless Continue Watching is hidden in Home's layout;
