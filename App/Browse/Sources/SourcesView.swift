@@ -2,9 +2,8 @@ import LogeCore
 import SwiftUI
 
 /// Every playable source from the user's stream addons, best first by resolution.
-/// Rows describe the file (release, codec, HDR, audio, bitrate, size) and never name the addon
-/// or the file, whose names can carry account details; only the Mac's tooltip shows the
-/// release name, on hover.
+/// Rows describe the file (release, codec, HDR, audio, bitrate, size); the Mac's tooltip adds
+/// the release name. Only the addon's host is ever shown, since its URLs carry keys.
 struct SourcesView: View {
     let route: SourcesRoute
     /// Shown over the details screen to pick a source, rather than pushed by Play as the
@@ -131,7 +130,8 @@ struct SourcesView: View {
             #if os(tvOS)
             if !hasPlacedFocus {
                 let groups = groups(providers)
-                if let id = lastPlayedID(in: groups) ?? recommendedID(in: groups) ?? groups.first?.entries.first?.id {
+                if let id = playPick(providers)?.id ?? lastPlayedID(in: groups) ?? recommendedID(in: groups)
+                    ?? groups.first?.entries.first?.id {
                     initialFocusID = id
                 }
             }
@@ -192,31 +192,32 @@ struct SourcesView: View {
     }
 
     #if os(tvOS)
-    /// The title over its dimmed backdrop on the left, the list on the right.
+    /// Over a blurred still: the title's logo, the episode and where the sources come from on
+    /// the left, the list on the right.
     private func tvLayout(_ groups: [SourceSelection.Group], providers: [StreamProvider]) -> some View {
-        ZStack(alignment: .bottomLeading) {
+        ZStack(alignment: .topLeading) {
             Artwork(url: route.item.background)
-                .overlay(Color.black.opacity(0.55))
-                .overlay {
-                    LinearGradient(
-                        stops: [.init(color: .canvas.opacity(0), location: 0.2), .init(color: .canvas, location: 0.6)],
-                        startPoint: .leading, endPoint: .trailing
-                    )
-                }
+                .blur(radius: 40)
+                .overlay(Color.black.opacity(0.6))
                 .ignoresSafeArea()
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 10) {
-                Text(route.item.title)
-                    .font(.system(size: 76, weight: .bold))
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.6)
+            VStack(alignment: .leading, spacing: 14) {
+                TitleLogo(logo: MetaPreview.cinemetaLogo(for: route.item.metaID), name: route.item.title,
+                          maxHeight: 130, isWhite: true)
+                    .frame(maxWidth: 520, alignment: .leading)
                 if let subtitle = [route.item.episodeCode, route.item.episodeTitle].compactMap({ $0 }).joined(separator: " · ").nilIfEmpty {
                     Text(subtitle)
                         .font(.metaLine)
+                }
+                if let count = countLabel(groups, providers: providers) {
+                    Text("\(count) from \(providers.map(\.name).formatted(.list(type: .and).locale(.interface))).")
+                        .font(.metaLine)
                         .foregroundStyle(.secondary)
+                        .padding(.top, 12)
                 }
             }
-            .frame(maxWidth: 760, alignment: .leading)
+            .frame(maxWidth: 620, alignment: .leading)
+            .padding(.top, 60)
             ScrollViewReader { proxy in
                 List {
                     list(groups, providers: providers)
@@ -225,7 +226,7 @@ struct SourcesView: View {
                     if let initialFocusID { proxy.scrollTo(initialFocusID) }
                 }
             }
-            .frame(width: 860)
+            .frame(width: 1000)
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
     }
@@ -416,17 +417,29 @@ struct SourcesView: View {
                 }
             }
             #else
-            ForEach(groups) { group in
-                let (shown, isFoldable, isExpanded) = folded(group, keeping: kept)
-                SourceGroupView(title: "\(group.title) · \(group.entries.count)") {
-                    ForEach(shown) { entry in
+            // List rows of their own, each a focus target; Play's pick first.
+            let pick = playPick(providers)
+            if let pick {
+                Section {
+                    row(pick, isLastPlayed: false, isRecommended: false, isSelected: false)
+                } header: {
+                    listHeader("Play picks")
+                }
+            }
+            Section {
+                ForEach(groups) { group in
+                    let (shown, isFoldable, isExpanded) = folded(group, keeping: kept)
+                    ForEach(shown.filter { $0.id != pick?.id }) { entry in
                         row(entry, isLastPlayed: entry.id == lastPlayed, isRecommended: entry.id == recommended,
-                            isSelected: entry.id == selectedID)
+                            isSelected: false)
                     }
                     if isFoldable {
-                        foldButton(group.id, label: isExpanded ? "Show fewer" : "Show \(group.entries.count - shown.count) more")
+                        foldButton(group.id, label: isExpanded ? "Show fewer \(group.title)"
+                                   : "Show \(group.entries.count - shown.count) more \(group.title)")
                     }
                 }
+            } header: {
+                if pick != nil, !groups.isEmpty { listHeader("Other sources") }
             }
             #endif
             if isLoading {
@@ -762,11 +775,21 @@ struct SourcesView: View {
         return allowed.first { $0.stream.playbackURL == stream.playbackURL }
     }
 
-    #if !os(tvOS)
     /// Play's choice, when its addon is among those listed.
     private func playPick(_ providers: [StreamProvider]) -> ListedSource? {
         continuingSource().flatMap { pick in providers.contains { $0.id == pick.provider.id } ? pick : nil }
     }
+
+    #if os(tvOS)
+    private func listHeader(_ title: String) -> some View {
+        // Not `.secondary`: a list header dims its text again, which left these unreadable.
+        Text(title)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.white.opacity(0.6))
+            // Room for the first row, which grows into the header when focused.
+            .padding(.bottom, 12)
+    }
+    #else
 
     /// Play's choice on its own panel, with Play, so the usual source is one tap away. The
     /// Mac's sheet selects it like any row, for its own Play.
