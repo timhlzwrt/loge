@@ -9,6 +9,7 @@ extension Color {
 @MainActor
 enum Metrics {
     #if os(tvOS)
+    static let isTV = true
     static let isPhone = false
     static let posterWidth: CGFloat = 210
     /// Continue Watching stills.
@@ -29,6 +30,7 @@ enum Metrics {
     /// Under portrait artwork that lifts on focus: at 8 the lifted image covered the name's first line.
     static let liftedCaptionSpacing: CGFloat = 16
     #elseif os(macOS)
+    static let isTV = false
     static let isPhone = false
     static let posterWidth: CGFloat = 132
     static let cardWidth: CGFloat = 232
@@ -45,12 +47,13 @@ enum Metrics {
     #else
     // The idiom never changes while running, so these can stay constants.
     private static let isPad = UIDevice.current.userInterfaceIdiom == .pad
+    static let isTV = false
     /// The device rather than the size class: a narrow iPad window is compact too, and keeps its tabs.
     static let isPhone = UIDevice.current.userInterfaceIdiom == .phone
     static let posterWidth: CGFloat = isPad ? 160 : 112
     static let cardWidth: CGFloat = isPad ? 320 : 270
     static let episodeWidth: CGFloat = isPad ? 320 : 240
-    static let gutter: CGFloat = isPad ? 32 : 20
+    static let gutter: CGFloat = isPad ? 40 : 20
     static let rowSpacing: CGFloat = 12
     static let headerSpacing: CGFloat = 12
     static let cardRadius: CGFloat = 14
@@ -62,12 +65,17 @@ enum Metrics {
     static let liftedCaptionSpacing: CGFloat = 8
     #endif
 
-    /// See All and My Lists. Three posters across any phone: columns of at least `posterWidth`
-    /// fit only two on a 393 pt one, each far larger than in the rows.
+    /// See All, My Lists, search results and filmographies. Three posters across any phone:
+    /// columns of at least `posterWidth` fit only two on a 393 pt one; seven across a
+    /// landscape iPad; as many as fit a Mac window.
     static var posterGridColumns: [GridItem] {
+        #if os(iOS)
         isPhone
-            ? Array(repeating: GridItem(.flexible(), spacing: rowSpacing), count: 3)
-            : [GridItem(.adaptive(minimum: posterWidth), spacing: rowSpacing)]
+            ? Array(repeating: GridItem(.flexible(), spacing: rowSpacing, alignment: .top), count: 3)
+            : [GridItem(.adaptive(minimum: 132), spacing: 18, alignment: .top)]
+        #else
+        [GridItem(.adaptive(minimum: posterWidth), spacing: rowSpacing, alignment: .top)]
+        #endif
     }
 }
 

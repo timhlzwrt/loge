@@ -1,9 +1,10 @@
 import LogeCore
 import SwiftUI
 
-#if os(iOS)
-/// The top of a phone's Home while something is being watched: the latest of Continue
-/// Watching over its backdrop with Resume, and the others a swipe away.
+#if !os(tvOS)
+/// The top of Home while something is being watched: the latest of Continue Watching over
+/// its backdrop with Resume, and the others a swipe away. Full width on iPad and Mac, with
+/// the text at the leading edge and Details beside Resume.
 struct ResumeHero: View {
     let entries: [ContinueWatchingRow.Entry]
     /// The room tone of the page showing, for Home's background.
@@ -24,13 +25,19 @@ struct ResumeHero: View {
         .scrollTargetBehavior(.paging)
         .scrollPosition(id: $currentID)
         .scrollIndicators(.hidden)
-        .frame(height: 480)
+        .frame(height: Self.height)
         .roomTone(of: current?.item.background, into: $tone)
         .task(id: entries.map(\.id)) {
             // Swiping never shows an empty backdrop or a logo arriving late.
             prefetch(entries.prefix(4).flatMap { [$0.item.background, MetaPreview.cinemetaLogo(for: $0.item.metaID)] })
         }
     }
+
+    #if os(macOS)
+    private static let height: CGFloat = 520
+    #else
+    private static let height: CGFloat = Metrics.isPhone ? 480 : 600
+    #endif
 }
 
 /// One title being watched: its backdrop and logo, which open its page, where it stands,
@@ -46,6 +53,12 @@ private struct ResumePage: View {
         ZStack(alignment: .bottomLeading) {
             NavigationLink(value: title) {
                 Artwork(url: item.background, fallbacks: [item.thumbnail].compactMap { $0 }, alignment: .top)
+                    .overlay {
+                        if !Metrics.isPhone {
+                            // Under the text at the leading edge.
+                            LinearGradient(colors: [.black.opacity(0.55), .clear], startPoint: .leading, endPoint: UnitPoint(x: 0.55, y: 0.5))
+                        }
+                    }
                     .overlay { fade }
                     .contentShape(.rect)
             }
@@ -54,9 +67,10 @@ private struct ResumePage: View {
             .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 0) {
                 NavigationLink(value: title) {
-                    TitleLogo(logo: MetaPreview.cinemetaLogo(for: item.metaID), name: item.title, maxHeight: 90, isWhite: true)
+                    TitleLogo(logo: MetaPreview.cinemetaLogo(for: item.metaID), name: item.title,
+                              maxHeight: Metrics.isPhone ? 90 : 120, isWhite: true)
                         .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: 250, alignment: .leading)
+                        .frame(maxWidth: Metrics.isPhone ? 250 : 380, alignment: .leading)
                 }
                 .buttonStyle(.plain)
                 VStack(alignment: .leading, spacing: 2) {
@@ -68,7 +82,7 @@ private struct ResumePage: View {
                     }
                     Text(entry.timeLeft ?? "New episode")
                 }
-                .font(.subheadline)
+                .font(Metrics.isPhone ? .subheadline : .body)
                 .foregroundStyle(.white.opacity(0.72))
                 .padding(.top, 14)
                 if let progress = entry.progress {
@@ -76,16 +90,24 @@ private struct ResumePage: View {
                         .frame(height: 4)
                         .padding(.top, 12)
                 }
-                NavigationLink(value: entry.route) {
-                    Label(entry.progress == nil ? "Play" : "Resume", systemImage: "play.fill")
-                        .frame(maxWidth: .infinity)
+                HStack(spacing: 12) {
+                    NavigationLink(value: entry.route) {
+                        Label(entry.progress == nil ? "Play" : "Resume", systemImage: "play.fill")
+                            .frame(maxWidth: Metrics.isPhone ? .infinity : 200)
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .accessibilityHint(item.accessibilityTitle)
+                    // A phone's hero is the backdrop and logo, which open the page already.
+                    if !Metrics.isPhone {
+                        NavigationLink(value: title) { Text("Details").frame(width: 110) }
+                            .buttonStyle(PrimaryButtonStyle(isTranslucent: true))
+                    }
                 }
-                .buttonStyle(PrimaryButtonStyle())
-                .accessibilityHint(item.accessibilityTitle)
                 .padding(.top, 16)
             }
-            .padding(.horizontal, Metrics.gutter)
-            .padding(.bottom, 8)
+            .frame(maxWidth: Metrics.isPhone ? .infinity : 420, alignment: .leading)
+            .padding(.horizontal, Metrics.isPhone ? Metrics.gutter : Metrics.gutter + 20)
+            .padding(.bottom, Metrics.isPhone ? 8 : 40)
         }
         .contextMenu { ContinueWatchingActions(item: item) }
     }
@@ -123,7 +145,7 @@ struct PlaybackAddonCard: View {
             .padding(.top, 10)
         }
         .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: Metrics.isPhone ? .infinity : 560, alignment: .leading)
         .background(.white.opacity(0.08), in: .rect(cornerRadius: 14))
         .padding(.horizontal, Metrics.gutter)
         .sheet(isPresented: $isAddingAddon) { closable(AddonsSettingsView(), isPresented: $isAddingAddon) }

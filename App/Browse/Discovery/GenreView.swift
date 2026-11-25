@@ -57,6 +57,7 @@ struct GenreTile: View {
             }
             .frame(width: width, height: width.map { $0 * 9 / 16 })
             .aspectRatio(16 / 9, contentMode: .fit)
+            .modifier(PointerHighlight())
             .clipShape(.rect(cornerRadius: Metrics.cardRadius))
             .accessibilityElement()
             .accessibilityLabel(genre.name)

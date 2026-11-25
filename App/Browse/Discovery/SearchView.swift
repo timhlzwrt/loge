@@ -3,7 +3,9 @@ import SwiftUI
 
 struct SearchView: View {
     @Environment(TMDBAccount.self) private var tmdb
-    @State private var query = ""
+    @State private var ownQuery = ""
+    /// The Mac's toolbar field, which lives above the tabs, in place of this page's own.
+    private var toolbarQuery: Binding<String>?
     @State private var submittedQuery = ""
     /// Results per catalog for the current query, filled in as each one answers.
     @State private var resultCounts: [CatalogSource.ID: Int] = [:]
@@ -20,16 +22,45 @@ struct SearchView: View {
     #endif
 
     init(query: String = "") {
-        _query = State(initialValue: query)
+        _ownQuery = State(initialValue: query)
     }
 
+    #if os(macOS)
+    init(toolbarQuery: Binding<String>) {
+        self.toolbarQuery = toolbarQuery
+    }
+    #endif
+
+    private var query: Binding<String> { toolbarQuery ?? $ownQuery }
+
     var body: some View {
+        if toolbarQuery != nil {
+            page
+        } else {
+            page
+                #if os(iOS)
+                .searchable(text: $ownQuery, placement: .navigationBarDrawer(displayMode: .always), prompt: prompt)
+                .navigationBarTitleDisplayMode(.large)
+                #else
+                .searchable(text: $ownQuery, prompt: prompt)
+                #endif
+                .onSubmit(of: .search) {
+                    // Return searches at once rather than after the typing pause.
+                    submit(trimmedQuery)
+                    returnedQuery = trimmedQuery
+                    remember(trimmedQuery)
+                }
+        }
+    }
+
+    @ViewBuilder
+    private var page: some View {
         let sources = DiscoveryCatalogs.search.filtered(type: type, genre: genre)
         // Spaces alone search nothing, so they show what an empty field does.
         let isEmpty = trimmedQuery.isEmpty
         ScrollView {
             // A phone opens on recent searches and genres; the filters come with something to narrow.
-            if !Metrics.isPhone || !isEmpty || genre != nil || type != nil {
+            if Metrics.isTV || !isEmpty || genre != nil || type != nil {
                 filters
             }
             if isEmpty && genre == nil {
@@ -50,7 +81,7 @@ struct SearchView: View {
                     ContentUnavailableView.search(text: submittedQuery)
                         .padding(.top, 80)
                 }
-                if Metrics.isPhone {
+                if !Metrics.isTV {
                     SearchResultList(sources: sources, query: submittedQuery, onLoaded: loaded)
                         .padding(.vertical, 12)
                 } else {
@@ -69,21 +100,9 @@ struct SearchView: View {
         // tvOS keeps a title fixed in place, over the content as it scrolls; the tab already says Search.
         .navigationTitle("Search")
         #endif
-        #if os(iOS)
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: prompt)
-        .navigationBarTitleDisplayMode(.large)
-        #else
-        .searchable(text: $query, prompt: prompt)
-        #endif
-        .onSubmit(of: .search) {
-            // Return searches at once rather than after the typing pause.
-            submit(trimmedQuery)
-            returnedQuery = trimmedQuery
-            remember(trimmedQuery)
-        }
         // Opening a result also leaves this screen, which is when a search proved useful.
         .onDisappear { remember(submittedQuery) }
-        .task(id: query) {
+        .task(id: query.wrappedValue) {
             // Wait for a pause in typing so each keystroke doesn't query every addon.
             do {
                 try await Task.sleep(for: .milliseconds(400))
@@ -102,7 +121,7 @@ struct SearchView: View {
 
     /// A phone finds people too, with TMDB.
     private var prompt: String {
-        Metrics.isPhone && tmdb.isConfigured ? "Movies, series and people" : "Movies and series"
+        !Metrics.isTV && tmdb.isConfigured ? "Movies, series and people" : "Movies and series"
     }
 
     private var takesFocus: Bool {
@@ -114,7 +133,7 @@ struct SearchView: View {
     }
 
     private var trimmedQuery: String {
-        query.trimmingCharacters(in: .whitespaces)
+        query.wrappedValue.trimmingCharacters(in: .whitespaces)
     }
 
     private func submit(_ term: String) {
@@ -225,7 +244,7 @@ struct SearchView: View {
                 VStack(alignment: .leading, spacing: Self.recentSpacing) {
                     ForEach(recents, id: \.self) { term in
                         Button {
-                            query = term
+                            query.wrappedValue = term
                         } label: {
                             Label(term, systemImage: "clock.arrow.circlepath")
                                 #if os(tvOS)
@@ -294,16 +313,30 @@ private struct SearchResultList: View {
                 }
                 .buttonStyle(.plain)
             }
-            ForEach(titles) { meta in
-                NavigationLink(value: meta) {
-                    row(name: meta.name, detail: detail(of: meta)) {
-                        Artwork(url: meta.poster)
-                            .frame(width: 54, height: 81)
-                            .clipShape(.rect(cornerRadius: 7))
+            if Metrics.isPhone {
+                ForEach(titles) { meta in
+                    NavigationLink(value: meta) {
+                        row(name: meta.name, detail: detail(of: meta)) {
+                            Artwork(url: meta.poster)
+                                .frame(width: 54, height: 81)
+                                .clipShape(.rect(cornerRadius: 7))
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .contextMenu { WatchLaterToggle(title: meta) }
+                }
+            } else {
+                // Wider screens have room for the posters themselves.
+                LazyVGrid(columns: Metrics.posterGridColumns, spacing: 22) {
+                    ForEach(titles) { meta in
+                        NavigationLink(value: meta) {
+                            PosterTile(meta: meta, width: nil, caption: .line(detail(of: meta)))
+                        }
+                        .tileButtonStyle()
                     }
                 }
-                .buttonStyle(.plain)
-                .contextMenu { WatchLaterToggle(title: meta) }
+                .padding(.horizontal, Metrics.gutter)
+                .padding(.top, 12)
             }
             let failed = sources.filter { if case .failure = results[$0.id] { true } else { false } }
             if !failed.isEmpty {

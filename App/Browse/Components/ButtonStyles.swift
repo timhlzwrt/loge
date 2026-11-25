@@ -65,8 +65,8 @@ struct PrimaryButtonStyle: ButtonStyle {
     }
 }
 
-/// A title's other actions on a phone: a circle with its name under it, filled white while
-/// it's on (saved to Watch Later, watched).
+/// A title's other actions: a circle with its name under it, filled white while it's on
+/// (saved to Watch Later, watched). On the Mac a translucent button with icon and name.
 struct RoundButtonStyle: ButtonStyle {
     var isOn = false
 
@@ -80,6 +80,10 @@ struct RoundButtonStyle: ButtonStyle {
         @Environment(\.isEnabled) private var isEnabled
 
         var body: some View {
+            #if os(macOS)
+            // With a pointer the actions sit in a row beside Play, as buttons with their names.
+            PrimaryButtonStyle(isTranslucent: true).makeBody(configuration: configuration)
+            #else
             VStack(spacing: 6) {
                 configuration.label
                     .labelStyle(.iconOnly)
@@ -99,6 +103,7 @@ struct RoundButtonStyle: ButtonStyle {
             .contentShape(.rect)
             .opacity(isEnabled ? (configuration.isPressed ? 0.6 : 1) : 0.4)
             .animation(.easeOut(duration: 0.15), value: isOn)
+            #endif
         }
     }
 }
@@ -199,13 +204,13 @@ struct GlassIconButtonStyle: ButtonStyle {
 }
 
 extension View {
-    /// Artwork tiles that open something: tvOS lifts them as focus cards, elsewhere they respond
-    /// to a pointer.
+    /// Artwork tiles that open something: tvOS lifts them as focus cards; elsewhere the artwork
+    /// itself carries `PointerHighlight`, so a caption under it stays clear.
     func tileButtonStyle() -> some View {
         #if os(tvOS)
         buttonStyle(.card)
         #else
-        buttonStyle(.plain).modifier(PointerHighlight())
+        buttonStyle(.plain)
         #endif
     }
 
@@ -221,7 +226,8 @@ extension View {
 }
 
 /// Pointer feedback on artwork that opens something, which otherwise gives no sign in dense
-/// rows of what can be clicked: the iPad pointer's highlight, a slight brightening on the Mac.
+/// rows of what can be clicked: the iPad pointer's highlight; on the Mac a white Play button
+/// over dimmed artwork, which plays a Continue Watching card and opens anything else.
 /// Apple TV has its focus effects instead.
 struct PointerHighlight: ViewModifier {
     #if os(macOS)
@@ -233,7 +239,21 @@ struct PointerHighlight: ViewModifier {
         content.hoverEffect(.highlight)
         #elseif os(macOS)
         content
-            .brightness(isHovered ? 0.08 : 0)
+            .overlay {
+                if isHovered {
+                    ZStack {
+                        Color.black.opacity(0.35)
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(.black)
+                            .offset(x: 2)
+                            .frame(width: 52, height: 52)
+                            .background(.white, in: .circle)
+                    }
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                }
+            }
             .animation(.easeOut(duration: 0.12), value: isHovered)
             .onHover { isHovered = $0 }
         #else

@@ -87,8 +87,8 @@ struct CatalogRow: View {
                     NavigationLink(value: source) {
                         HStack(alignment: .firstTextBaseline, spacing: 4) {
                             Text(source.title)
-                            // A phone says it in words at the far end, where the thumb is.
-                            if Metrics.isPhone {
+                            // Said in words at the far end, as the rest of the app labels its buttons.
+                            if !Metrics.isTV {
                                 Spacer()
                                 Text("See All")
                                     .font(.subheadline)
@@ -160,7 +160,7 @@ struct CatalogRow: View {
 
     private func poster(_ meta: MetaPreview) -> some View {
         NavigationLink(value: meta) {
-            PosterTile(meta: meta, caption: Metrics.isPhone ? .year : .none)
+            PosterTile(meta: meta, caption: Metrics.isTV ? .none : .year)
                 #if os(tvOS)
                 .modifier(ReportsFocus { onFocus(meta) })
                 #endif
@@ -346,6 +346,7 @@ struct PosterTile: View {
         }
         .frame(width: width, height: width.map { $0 * 1.5 })
         .aspectRatio(2 / 3, contentMode: .fit)
+        .modifier(PointerHighlight())
         .clipShape(.rect(cornerRadius: Metrics.posterRadius))
         .accessibilityElement()
         .accessibilityLabel(meta.name)

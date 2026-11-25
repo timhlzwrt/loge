@@ -66,7 +66,7 @@ struct CatalogGridView: View {
                     }
                 }
                 // A phone lists the genres as chips over the grid.
-                if hasGenres && !Metrics.isPhone {
+                if hasGenres && Metrics.isTV {
                     ToolbarItem {
                         genreMenu
                     }
@@ -116,10 +116,10 @@ struct CatalogGridView: View {
 
     private var grid: some View {
         ScrollView {
-            if hasGenres && Metrics.isPhone {
+            if hasGenres && !Metrics.isTV {
                 genreChips
             }
-            LazyVGrid(columns: Metrics.posterGridColumns, spacing: Metrics.isPhone ? 16 : Metrics.rowSpacing) {
+            LazyVGrid(columns: Metrics.posterGridColumns, spacing: Metrics.isTV ? Metrics.rowSpacing : 16) {
                 ForEach(items) { meta in
                     #if os(tvOS)
                     if meta.id == items.first?.id {
@@ -151,7 +151,7 @@ struct CatalogGridView: View {
 
     private func tile(_ meta: MetaPreview) -> some View {
         NavigationLink(value: meta) {
-            PosterTile(meta: meta, width: nil, caption: Metrics.isPhone ? .line(meta.releaseInfo) : .none)
+            PosterTile(meta: meta, width: nil, caption: Metrics.isTV ? .none : .line(meta.releaseInfo))
         }
         .tileButtonStyle()
         .onAppear {

@@ -47,7 +47,7 @@ struct ContinueWatchingRow: View {
                 HStack(alignment: .firstTextBaseline) {
                     Text("Continue Watching")
                         .font(.sectionTitle)
-                    if Metrics.isPhone {
+                    if !Metrics.isTV {
                         Spacer()
                         Text(all.count, format: .number.locale(.interface))
                             .font(.subheadline)
@@ -88,8 +88,8 @@ struct ContinueWatchingRow: View {
     private func card(_ entry: Entry) -> some View {
         NavigationLink(value: entry.route) {
             Group {
-                if Metrics.isPhone {
-                    PhoneWatchCard(entry: entry)
+                if !Metrics.isTV {
+                    LandscapeWatchCard(entry: entry)
                 } else {
                     ContinueWatchingCard(entry: entry)
                 }
@@ -137,9 +137,9 @@ private struct ContinueWatchingCard: View {
     }
 }
 
-/// A phone's Continue Watching card: the still with the progress over it, the title, and how
-/// much is left or that the episode is new.
-private struct PhoneWatchCard: View {
+/// A Continue Watching card on iPhone, iPad and Mac: the still with the progress over it, the
+/// title, and how much is left or that the episode is new.
+private struct LandscapeWatchCard: View {
     let entry: ContinueWatchingRow.Entry
 
     var body: some View {
@@ -148,7 +148,8 @@ private struct PhoneWatchCard: View {
             // Stills are often missing, so a still that fails falls back to the backdrop, then the poster.
             Artwork(url: item.thumbnail ?? item.background, fallbacks: [item.background, item.poster].compactMap { $0 })
                 .overlay { if let progress = entry.progress { WatchProgressBar(progress: progress, inset: 10) } }
-                .frame(width: 236, height: 133)
+                .frame(width: Self.width, height: Self.width * 9 / 16)
+                .modifier(PointerHighlight())
                 .clipShape(.rect(cornerRadius: 12))
                 .padding(.bottom, 6)
             Text(item.title)
@@ -165,12 +166,14 @@ private struct PhoneWatchCard: View {
             .foregroundStyle(.secondary)
             .lineLimit(1)
         }
-        .frame(width: 236, alignment: .leading)
+        .frame(width: Self.width, alignment: .leading)
         .contentShape(.rect)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(item.accessibilityTitle)
         .accessibilityValue(entry.timeLeft ?? "New episode")
     }
+
+    private static let width: CGFloat = Metrics.isPhone ? 236 : 300
 }
 
 extension WatchItem {
@@ -245,7 +248,7 @@ struct MyListRow: View {
                     LazyHStack(spacing: Metrics.rowSpacing) {
                         ForEach(titles) { meta in
                             NavigationLink(value: meta) {
-                                PosterTile(meta: meta, caption: Metrics.isPhone ? .year : .none)
+                                PosterTile(meta: meta, caption: Metrics.isTV ? .none : .year)
                                     #if os(tvOS)
                                     .modifier(ReportsFocus { onFocus(meta) })
                                     #endif
@@ -290,8 +293,8 @@ struct MyListView: View {
                 // With nothing to focus, the remote can't reach the tab menu and Menu leaves the app.
                 .focusable()
                 #endif
-            } else if Metrics.isPhone {
-                ScrollView { phoneLists(recent: recent) }
+            } else if !Metrics.isTV {
+                ScrollView { pillLists(recent: recent) }
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 36) {
@@ -323,7 +326,7 @@ struct MyListView: View {
     }
 
     /// The two lists as a pair of pills over one grid, with names and how long each takes.
-    private func phoneLists(recent: [WatchProgress]) -> some View {
+    private func pillLists(recent: [WatchProgress]) -> some View {
         // Recently Watched when that's all there is.
         let showsRecent = showsRecent || library.saved.isEmpty
         return VStack(alignment: .leading, spacing: 14) {

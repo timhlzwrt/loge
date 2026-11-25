@@ -59,7 +59,7 @@ struct PersonView: View {
                 .padding(.top, 80)
             case .filmography(let person):
                 VStack(alignment: .leading, spacing: 28) {
-                    if Metrics.isPhone {
+                    if !Metrics.isTV {
                         phoneProfile(person)
                     } else {
                         profile(person)
@@ -256,7 +256,7 @@ struct PersonView: View {
             filter == .all || (filter == .movies && $0.type == MediaType.movie) || (filter == .series && $0.type == MediaType.series)
         })
         return VStack(alignment: .leading, spacing: 20) {
-            if Metrics.isPhone {
+            if !Metrics.isTV {
                 rolePills(credits)
             } else {
                 filters(titles: titles, movies: movies, series: series)
@@ -264,10 +264,10 @@ struct PersonView: View {
             if visible.isEmpty {
                 Text("No credits in this category.").foregroundStyle(.secondary)
             } else {
-                LazyVGrid(columns: Metrics.isPhone
+                LazyVGrid(columns: !Metrics.isTV
                               ? Metrics.posterGridColumns
                               : [GridItem(.adaptive(minimum: Metrics.posterWidth), spacing: Metrics.rowSpacing, alignment: .top)],
-                          alignment: .leading, spacing: Metrics.isPhone ? 16 : Metrics.rowSpacing) {
+                          alignment: .leading, spacing: !Metrics.isTV ? 16 : Metrics.rowSpacing) {
                     ForEach(visible) { title in
                         // By value, as genre tiles: a view-built destination left
                         // the links inside the resolved details dead.

@@ -37,23 +37,17 @@ struct HomeView: View {
                 // From the first movie and series shelves, which by default are the popular ones.
                 let movies = sources.first { $0.catalog.type == MediaType.movie }
                 let series = sources.first { $0.catalog.type == MediaType.series }
-                #if os(iOS)
                 if !resuming.isEmpty {
                     ResumeHero(entries: resuming, tone: $tone)
                 } else if movies != nil || series != nil {
                     featured(movies: movies, series: series)
                 }
-                if Metrics.isPhone && !store.addons.hasStreamAddon {
+                if !store.addons.hasStreamAddon {
                     PlaybackAddonCard()
                 }
                 if !resuming.isEmpty {
                     ContinueWatchingRow(leavesFirstToHero: true)
                 }
-                #else
-                if movies != nil || series != nil {
-                    featured(movies: movies, series: series)
-                }
-                #endif
                 ForEach(rows) { row in
                     switch row {
                     case .catalog(let source): CatalogRow(source: source, page: sources)
@@ -116,9 +110,9 @@ struct HomeView: View {
             .id([movies?.id, series?.id])
     }
 
-    /// On a phone, what's being watched leads Home, unless Continue Watching is hidden.
+    /// What's being watched leads Home, unless Continue Watching is hidden.
     private func resumingEntries(_ rows: [HomeLayout.Row]) -> [ContinueWatchingRow.Entry] {
-        guard Metrics.isPhone, rows.contains(.continueWatching) else { return [] }
+        guard rows.contains(.continueWatching) else { return [] }
         return ContinueWatchingRow.entries(library: library, schedule: schedule)
     }
     #endif

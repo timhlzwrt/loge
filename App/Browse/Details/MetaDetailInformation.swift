@@ -20,8 +20,8 @@ struct InformationSection: View {
                 if let tagline = details?.tagline {
                     Text(tagline).font(.synopsis).italic().foregroundStyle(.secondary)
                 }
-                if Metrics.isPhone {
-                    // A plain table: the labels in one column, which a phone has room for.
+                if !Metrics.isTV {
+                    // A plain table: the labels in one column.
                     Grid(alignment: .topLeading, horizontalSpacing: 14, verticalSpacing: 10) {
                         ForEach(facts, id: \.label) { fact in
                             GridRow {

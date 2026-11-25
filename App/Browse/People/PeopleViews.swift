@@ -19,13 +19,14 @@ struct TMDBCreditTile: View {
                 }
             }
             .aspectRatio(2 / 3, contentMode: .fit)
+            .modifier(PointerHighlight())
             .clipShape(.rect(cornerRadius: Metrics.posterRadius))
             #if os(tvOS)
             // Only the poster lifts; a card around the text clipped its first letters.
             .hoverEffect(.highlight)
             #endif
-            if Metrics.isPhone {
-                // A phone's grids and shelves read as its posters do: the name, then the year.
+            if !Metrics.isTV {
+                // Grids and shelves read as the posters do: the name, then the year.
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title.name)
                         .font(.subheadline.weight(.semibold))
