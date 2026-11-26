@@ -4,7 +4,7 @@ import Libmpv
 import Observation
 import os
 
-private let log = Logger(subsystem: "li.tjh.MediaApp", category: "scrub-preview")
+private let log = Logger(subsystem: "li.tjh.loge", category: "scrub-preview")
 
 /// Frames for the timeline while scrubbing. AVFoundation can't open most of what mpv plays
 /// (MKV in particular), so a second mpv instance opens the same file paused, silent and

@@ -2,7 +2,7 @@ import LogeCore
 import SwiftUI
 import os
 
-private let log = Logger(subsystem: "li.tjh.MediaApp", category: "playback")
+private let log = Logger(subsystem: "li.tjh.loge", category: "playback")
 
 /// The playback in progress, if any. It outlives the player screen, so Picture in Picture
 /// can keep playing after the screen closes and bring it back later. The screen itself is

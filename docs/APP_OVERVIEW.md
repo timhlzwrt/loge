@@ -1,8 +1,7 @@
 # loge: implementation overview
 
 Updated 7 November 2026. loge is a SwiftUI streaming app for
-iPhone, iPad, Apple TV and Mac. `li.tjh.MediaApp` remains the bundle
-identifier so existing installations keep their data.
+iPhone, iPad, Apple TV and Mac, with the bundle identifier `li.tjh.loge`.
 
 ## Application and data flow
 

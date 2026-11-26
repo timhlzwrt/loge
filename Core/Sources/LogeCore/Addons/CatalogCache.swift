@@ -2,7 +2,7 @@ import CryptoKit
 import Foundation
 import os
 
-private let log = Logger(subsystem: "li.tjh.MediaApp", category: "catalogs")
+private let log = Logger(subsystem: "li.tjh.loge", category: "catalogs")
 
 /// Recent catalog pages, so Home paints from the last launch's results and screens that
 /// show the same catalog (the featured carousel and its row, See All)

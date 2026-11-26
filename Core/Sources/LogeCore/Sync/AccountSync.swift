@@ -954,7 +954,7 @@ public final class AccountSync {
     }
 
     private static var keychainStorage: Storage {
-        let service = "li.tjh.MediaApp.account-sync"
+        let service = "li.tjh.loge.account-sync"
         let account = "connection"
         return Storage(load: {
             do throws(KeychainError) { return try Keychain.read(service: service, account: account) }

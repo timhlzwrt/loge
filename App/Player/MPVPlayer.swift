@@ -4,7 +4,7 @@ import LogeCore
 import Observation
 import os
 
-private let log = Logger(subsystem: "li.tjh.MediaApp", category: "mpv")
+private let log = Logger(subsystem: "li.tjh.loge", category: "mpv")
 
 /// Owns one mpv instance and the system video layer it shows frames in.
 ///

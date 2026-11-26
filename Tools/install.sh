@@ -75,7 +75,7 @@ install_phone() {
         ".build/xcode/Build/Products/$configuration-iphoneos/loge.app" || return 1
     # Only on request: a locked phone refuses to launch, which would read as a failed install.
     (( $#launch )) || return 0
-    xcrun devicectl device process launch --device "$udid" $launch li.tjh.MediaApp
+    xcrun devicectl device process launch --device "$udid" $launch li.tjh.loge
 }
 
 atvloadly() {

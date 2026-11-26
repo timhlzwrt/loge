@@ -59,7 +59,7 @@ source = {
     "tintColor": TINT,
     "apps": [{
         "name": "loge",
-        "bundleIdentifier": "li.tjh.MediaApp",
+        "bundleIdentifier": "li.tjh.loge",
         "developerName": "Tim Holzwarth",
         "subtitle": "Stremio addons, played with mpv",
         "localizedDescription": (
