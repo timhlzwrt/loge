@@ -219,6 +219,35 @@ public struct TMDBClient: Sendable {
         return details
     }
 
+    /// The best-known person whose name contains `query`, for search to list first; nil when
+    /// TMDB's top match for the query isn't someone by that name.
+    public func person(named query: String) async throws -> Person? {
+        struct Response: Decodable {
+            struct Match: Decodable {
+                let id: Int?
+                let name: String?
+                let profile_path: String?
+                let known_for_department: String?
+            }
+            let results: [Match]?
+        }
+        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard query.count >= 3 else { return nil }
+        let response: Response = try await fetch("search/person", query: [
+            .init(name: "query", value: query), .init(name: "include_adult", value: "false"),
+        ])
+        guard let match = response.results?.first, let id = match.id, id > 0, let name = nonempty(match.name),
+              name.localizedStandardContains(query) else { return nil }
+        let role: Person.Role? = switch match.known_for_department {
+        case "Acting": .actor
+        case "Directing": .director
+        case "Writing": .writer
+        default: nil
+        }
+        return Person(name: name, roles: role.map { [$0] } ?? [], tmdbID: id,
+                      portraitURL: imageURL(match.profile_path, size: "w185"))
+    }
+
     public func imdbID(tmdbID: Int, type: String) async throws -> String? {
         guard tmdbID > 0, type == MediaType.movie || type == MediaType.series else { throw TMDBError.notFound }
         struct Response: Decodable {

@@ -396,17 +396,13 @@ final class DiscoveryTVTests: XCTestCase {
         waitForFocus(on: app.buttons["Play"])
         screenshot("tv-details-top")
         let remote = XCUIRemote.shared
-        for name in ["Add to Watch Later", "More"] {
+        // Worded buttons beside Play. The fixture has a trailer, but Apple TV has no browser to open it in.
+        for name in ["Add to Watch Later", "Sources", "Mark as Watched"] {
             remote.press(.right)
             screenshot("tv-details-\(name.replacingOccurrences(of: " ", with: "-"))")
             waitForFocus(on: app.buttons[name])
         }
-        // The fixture has a trailer, but Apple TV has no browser to open it in.
-        remote.press(.select)
-        XCTAssertTrue(app.buttons["Choose a Source"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["Watch Trailer"].exists)
-        remote.press(.menu)
-        waitForFocus(on: app.buttons["More"])
+        XCTAssertFalse(app.buttons["Trailer"].exists)
         let information = app.descendants(matching: .any)["detail-information"].firstMatch
         for _ in 0..<12 {
             if information.exists && containsFocus(information) { break }

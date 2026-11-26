@@ -9,11 +9,12 @@ extension Color {
 @MainActor
 enum Metrics {
     #if os(tvOS)
+    static let isTV = true
     static let isPhone = false
     static let posterWidth: CGFloat = 210
     /// Continue Watching stills.
     static let cardWidth: CGFloat = 354
-    static let episodeWidth: CGFloat = 375
+    static let episodeWidth: CGFloat = 390
     // tvOS already insets content by its own safe area margins.
     static let gutter: CGFloat = 0
     static let rowSpacing: CGFloat = 40
@@ -29,6 +30,7 @@ enum Metrics {
     /// Under portrait artwork that lifts on focus: at 8 the lifted image covered the name's first line.
     static let liftedCaptionSpacing: CGFloat = 16
     #elseif os(macOS)
+    static let isTV = false
     static let isPhone = false
     static let posterWidth: CGFloat = 132
     static let cardWidth: CGFloat = 232
@@ -45,12 +47,13 @@ enum Metrics {
     #else
     // The idiom never changes while running, so these can stay constants.
     private static let isPad = UIDevice.current.userInterfaceIdiom == .pad
+    static let isTV = false
     /// The device rather than the size class: a narrow iPad window is compact too, and keeps its tabs.
     static let isPhone = UIDevice.current.userInterfaceIdiom == .phone
     static let posterWidth: CGFloat = isPad ? 160 : 112
     static let cardWidth: CGFloat = isPad ? 320 : 270
     static let episodeWidth: CGFloat = isPad ? 320 : 240
-    static let gutter: CGFloat = isPad ? 32 : 20
+    static let gutter: CGFloat = isPad ? 40 : 20
     static let rowSpacing: CGFloat = 12
     static let headerSpacing: CGFloat = 12
     static let cardRadius: CGFloat = 14
@@ -62,12 +65,17 @@ enum Metrics {
     static let liftedCaptionSpacing: CGFloat = 8
     #endif
 
-    /// See All and My Lists. Three posters across any phone: columns of at least `posterWidth`
-    /// fit only two on a 393 pt one, each far larger than in the rows.
+    /// See All, My Lists, search results and filmographies. Three posters across any phone:
+    /// columns of at least `posterWidth` fit only two on a 393 pt one; seven across a
+    /// landscape iPad; as many as fit a Mac window.
     static var posterGridColumns: [GridItem] {
+        #if os(iOS)
         isPhone
-            ? Array(repeating: GridItem(.flexible(), spacing: rowSpacing), count: 3)
-            : [GridItem(.adaptive(minimum: posterWidth), spacing: rowSpacing)]
+            ? Array(repeating: GridItem(.flexible(), spacing: rowSpacing, alignment: .top), count: 3)
+            : [GridItem(.adaptive(minimum: 132), spacing: 18, alignment: .top)]
+        #else
+        [GridItem(.adaptive(minimum: posterWidth), spacing: rowSpacing, alignment: .top)]
+        #endif
     }
 }
 
@@ -148,6 +156,8 @@ extension Font {
 /// or a checkmark in the corner once it's finished.
 struct WatchProgressBar: View {
     let progress: WatchProgress
+    /// From the artwork's sides; smaller artwork sets it in less.
+    var inset = WatchProgressBar.inset
 
     var body: some View {
         if progress.isFinished {
@@ -155,7 +165,7 @@ struct WatchProgressBar: View {
                 .font(Self.checkmarkFont)
                 .symbolRenderingMode(.palette)
                 .foregroundStyle(.black, .tint)
-                .padding(Self.inset * 0.8)
+                .padding(inset * 0.8)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                 .accessibilityLabel("Watched")
         } else {
@@ -167,8 +177,8 @@ struct WatchProgressBar: View {
                     }
                 }
                 .frame(height: Self.height)
-                .padding(.horizontal, Self.inset)
-                .padding(.bottom, Self.inset * 0.75)
+                .padding(.horizontal, inset)
+                .padding(.bottom, inset * 0.75)
                 .frame(maxHeight: .infinity, alignment: .bottom)
                 .accessibilityLabel("\(Int(progress.fraction * 100)) percent watched")
         }
@@ -185,17 +195,21 @@ struct WatchProgressBar: View {
     #endif
 }
 
-/// Fades a backdrop into the canvas so text placed over its lower part stays legible.
+/// Fades a backdrop into the canvas, or a title's room tone, so text placed over its lower
+/// part stays legible.
 struct BackdropFade: View {
+    var tone = Color.canvas
+
     var body: some View {
         LinearGradient(
             stops: [
-                .init(color: .canvas.opacity(0), location: 0.25),
-                .init(color: .canvas.opacity(0.85), location: 0.6),
-                .init(color: .canvas, location: 0.85),
+                .init(color: tone.opacity(0), location: 0.25),
+                .init(color: tone.opacity(0.85), location: 0.6),
+                .init(color: tone, location: 0.85),
             ],
             startPoint: .top, endPoint: .bottom
         )
+        .animation(.easeOut(duration: 0.6), value: tone)
     }
 }
 
@@ -207,6 +221,10 @@ struct TitleLogo: View {
     /// Lets sparkle or glow under the lettering hang into the space below, so what follows
     /// keeps its distance from the letters rather than from the faintest pixel.
     var restsOnLettering = false
+    /// Drawn in white and greys whatever its own colours, as the redesigned heroes show every
+    /// title. Not flattened to one white: logos with solid panels or brush strokes lose their
+    /// lettering that way.
+    var isWhite = false
     @State private var height: CGFloat = 0
     @State private var prepared: (url: String, trimmed: LogoTrim.Trimmed)?
 
@@ -219,6 +237,10 @@ struct TitleLogo: View {
                         .renderingMode(trimmed.isDark ? .template : .original)
                         .resizable().scaledToFit()
                         .foregroundStyle(.white)
+                        .saturation(isWhite ? 0 : 1)
+                        // A soft shade around the letters, so white reads on bright artwork too.
+                        .shadow(color: .black.opacity(isWhite ? 0.6 : 0), radius: 18)
+                        .shadow(color: .black.opacity(isWhite ? 0.45 : 0), radius: 4)
                         // No wider than the height allows: a tall logo given more width
                         // would sit centred in it, away from the text it leads.
                         .frame(maxWidth: maxHeight * CGFloat(trimmed.image.width) / CGFloat(max(trimmed.image.height, 1)),

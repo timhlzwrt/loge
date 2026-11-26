@@ -7,9 +7,17 @@ The project, scheme, product and `LogeCore` package are all named loge; only the
 (`li.tjh.MediaApp`), Keychain service names and log subsystem keep the old working name, so
 saved data and sign-ins carry over. It browses catalogs from Stremio addons, shows details,
 lists streams and plays them with mpv. The look follows the Strand app: charcoal canvas,
-artwork-led, white accent, system font, no cards/badges. One light falls on the canvas
-(`PageGlow`): amber in a corner of pages without artwork, the backdrop's own colour on a
-title's page. Filters and settings read as sentences (`Sentence`): grey words, values white
+artwork-led, white accent, system font, no cards/badges. Pages without a title sit on the
+plain charcoal; a title's page, and Home's hero, sit in its room (`Room`): a deep
+tone taken from the backdrop (`RoomTone`, cached per URL), which the backdrop fades into and
+which fades to the canvas lower down. Heroes show the title's logo in white and greys
+(`TitleLogo(isWhite:)`, desaturated with a soft dark shade, since flattening to one white loses
+solid panels). Choices side by side (seasons, genres, lists, roles) are white-when-chosen pills
+(`PillButtonStyle`; on Apple TV white when focused); posters in grids carry their name and a line
+under. Apple TV shows focus by white fills and lift, never outlines: tiles lift 1.12 with a shadow
+and the others dim (`LiftButtonStyle`), buttons and sentence values turn white. One white
+primary button per screen; the rest translucent white, every button with a word. No end
+times ("ends at"), only time left. Filters and settings read as sentences (`Sentence`): grey words, values white
 and underlined, each value the menu or link that changes it.
 
 What users get is described in README.md, docs/APP_OVERVIEW.md and ROADMAP.md (shipped
@@ -31,8 +39,13 @@ features, proposals, scope). History of individual changes is in git and the PRs
   menus, `PictureInPicture`, `NowPlaying`, next-episode countdown, tvOS remote swipe reader.
 - `App/Settings/` — by default one sentence under a large "loge" (which opens About), a line
   per setting, whose values are the controls (`SettingsSentencesView`: playback menus in place;
-  addons, Home's shelves, TMDB and Sync open their pages). No title or captions; on a phone the
-  name sits at the top and the sentence above the tab bar. "Settings read as sentences" switches
+  addons, Home's shelves, TMDB and Sync open their pages), with Share Setup and Import Setup
+  under it on iPhone/iPad. One paragraph (a single `Sentence`) whose values are the controls.
+  No title or captions; on iPhone and iPad it starts at the top. On a wide iPad a value's page
+  opens in a panel beside the sentence with the value marked (`TokenLabel(isMarked:)`); pages
+  pushed from there take the screen. The Mac keeps it in the standard Settings window (⌘,),
+  with Sparkle's switch, Check Now and the version under it, and has no Settings tab. The pages it opens are translucent groups of 52 pt rows under small grey labels, with
+  white-track switches (`SettingsPage`, `SettingsToggleStyle`). "Settings read as sentences" switches
   this device to the plain list of the same. About (version, build commit, credits) and Data
   Sources, which holds all attribution rather than putting it under artwork.
 - `web/` — the project page for loge.tjh.li: static HTML/CSS in tjh.li's design, no scripts
@@ -95,9 +108,14 @@ app with macOS `sample <pid>`. The Apple TV is paired with Xcode for `devicectl`
 logs; Instruments over the network to it drops after about a second.
 `--discovery-ui-test` with `-DISCOVERY_SCREEN <name>` opens a DEBUG fixture screen offline:
 `recommended`, `my-lists`, `details`, `details-collection`, `series`, `details-unmatched`,
-`details-busy`, `sources-folded|autoplay`
+`details-busy`, `sources-folded|autoplay|sheet`
 (need `Tools/test-addon.py --port 8769 --many --delay 5`), `sources-empty(-sheet)`,
-`settings-review|failed|old-server`, `carousel-resume`. The playback fixture also takes
+`settings-review|failed|old-server`, `carousel-resume` (a series started: the phone's resume
+hero), `home-empty` (first launch: nothing watched, no addons), `search-results` (with a TMDB
+person), `catalog` (See All), `my-lists-artwork`, `home-shelves`, `addons`, `settings`, `person`. `details` and `series` take
+Cinemeta rather than the simulator's addons; `series` has S1 E1 watched and E2 started.
+`DiscoverySnapshotTests` captures them on iPhone, iPad and Apple TV (`TEST_RUNNER_DISCOVERY_SCREENSHOT_DIR`, `_SCREENS`,
+`_SETTLE` seconds, `_SCROLLS`). The playback fixture also takes
 `PLAYBACK_FIXTURE_NEXT=late`, `PLAYBACK_FIXTURE_SHORT_URL` and `?hang=`.
 
 ## Conventions
@@ -147,10 +165,12 @@ MDBList, which added Letterboxd and Rotten Tomatoes scores, was removed the same
 (`RetiredMDBListKey` deletes its saved key at launch).
 Watch Later is the only list: custom lists were folded into it the same month (`LibraryStore`
 appends any stored lists' titles once when a profile loads, then deletes them). My Lists ends
-with Recently Watched, the last 12 titles finished and not in Continue Watching; removing one
+(on iPhone: a second pill beside Watch Later, both as poster grids, a film's runtime under its
+name) with Recently Watched, the last 12 titles finished and not in Continue Watching; removing one
 there only hides it on this device, and its watched marks stay. iPhone/iPad and Apple TV are equal main devices.
 Picture in Picture is required; downloads are out of scope; UI is English only for now.
-iPhone browsing is portrait-only (`AppDelegate`); the player turns. iPad has one window
+iPhone browsing is portrait-only (`AppDelegate`); the player turns. The iPad is landscape
+only, player included (project.yml and `AppDelegate`). iPad has one window
 (`UIApplicationSupportsMultipleScenes` NO): every window would share the one `PlaybackSession`
 and present its player; the Mac has no New Window either. Destructive settings and library
 actions (addon removal, TMDB token, Sync disconnect, device revoke,
@@ -161,14 +181,28 @@ Person filmographies need TMDB: Cinemeta's search no longer names cast or direct
 without TMDB the page says so and shows the title it came from. TMDB is what makes the
 experience complete: without a token a title's page has no Cast & Crew at all, only the hint
 to connect it (trailers are the exception and work without). A title's page leads with the
-title and Play, with Watch Later and a More menu (trailer except on Apple TV, sources, watched mark)
-beside it. A phone centres the three, Play in the middle at a fixed 172 pt and a size down
-(`.controlSize(.small)`); wider screens start with Play. The description follows, and under it, one size down, genre, year, runtime and
+title and Play. On iPhone: the logo centred, one line of genre, year, runtime and the IMDb
+rating, Play ("Resume S2 E4") across the width, then four labelled circles (Watch Later,
+filled as "In Watch Later"; Trailer; Sources, a sheet; Watched, which for a series marks or
+clears every aired episode and asks before clearing), then the description in three lines.
+Episodes are rows under season pills; Information is a two-column table. iPad and Mac use the
+same column on the left (left-aligned, Information under it) and put episodes (200 pt stills
+with their summaries), Cast & Crew, the collection and More Like This on the right, under the
+backdrop, which takes the top right and fades left into the room; the Mac sets the actions as
+named buttons beside Play. Apple TV leads with the logo, facts and two lines of description,
+then worded buttons (Play focused, Watch Later, Sources, Watched; no Trailer), "31 min left"
+under them, season pills over 390 pt episode cards (the pills take focus only after an
+episode has, so one press down from Play reaches the episodes) and More Like This first
+below. The facts line shows genre, year, runtime and
 the IMDb rating. It stands behind IMDb's white mark, the one place the app shows another
 brand's logo. Rows on that page have a heading and no caption
 under it. Section headings share a smaller semibold style across the app (20 pt on iOS).
 More Like This and film collections show only the year below poster titles; filmography
-keeps Movie/Series labels because it can mix both.
+keeps Movie/Series labels because it can mix both, except on a phone, which shows the year and
+filters by role pills (All, Actor, Director, Crew), newest first.
+iPhone Search opens on recent searches and genre tiles; typing lists titles as rows across both
+catalogs, and with TMDB someone whose name matches comes first (`TMDBAccount.person(named:)`,
+TMDB's top match only). Its filter sentence shows once there's a query or genre.
 
 ## Things that aren't obvious from the code
 
@@ -193,10 +227,19 @@ keeps Movie/Series labels because it can mix both.
   layout are appended, and unknown shelf kinds are dropped on decode.
 - Home's artwork prefetch uses plain data tasks, not a task group (suspected Release crash).
   An optimizer bug once lost a task group's result in Release builds, so test Release too.
-- iPad details switch between `DetailColumnsLayout` and a `VStackLayout` under `AnyLayout`,
-  so rotating keeps the chosen season.
-- The phone hero shows the portrait poster: a title near the top of a poster reads twice with
-  the logo, and that can't be detected.
+- iPad and Mac details switch between `DetailColumnsLayout` and a `VStackLayout` under
+  `AnyLayout` when the window narrows below 880 pt, so the chosen season survives.
+- On the Mac, hovering artwork (`PointerHighlight`) dims it under a white Play button: a
+  Continue Watching card plays, anything else opens. The Mac's sources sheet has Play picks
+  selectable like any row, Cancel and Play, Return plays the selection, and a row's tooltip
+  shows the file's release name. Release names carry no addon keys; only manifest and stream
+  URLs do, and those are never shown.
+- Home leads with what's being watched (full width with Details beside Resume on iPad and Mac) (`ResumeHero`: the latest of Continue
+  Watching, Resume going through Sources with autoplay as Continue Watching does, the rest a
+  swipe away and in the row under it), unless Continue Watching is hidden in Home's layout;
+  otherwise the featured carousel, with Play and Details. Without a stream addon a card under
+  the hero offers Add Addon and Import Setup. Hero backdrops are the landscape image.
+- Posters on a phone's shelves carry the name and "year · IMDb rating" (`isCaptioned`).
 - The title's logo is `fixedSize` vertically on the details page: `TitleLogo` otherwise takes
   all the height it is allowed and a wide, low logo floats far above Play. With
   `restsOnLettering` it also lets sparkle or glow under the letters hang into the gap below
@@ -219,7 +262,9 @@ keeps Movie/Series labels because it can mix both.
   a stream fails with Try Again after 20 s.
 - Navigation is the four tabs (Home, My Lists, Search, Settings) with `.tabBarOnly`, no sidebar
   anywhere. Search has the search role except on iPhone, where the role would detach it from
-  the one pill; iPad and Mac draw it as the magnifier at the pill's trailing end.
+  the one pill; the iPad draws it as the magnifier at the pill's trailing end. The Mac has
+  Home and My Lists only: search is the toolbar field (⌘F), whose results cover the tab while
+  it has text (`SearchView(toolbarQuery:)`), and Settings is its own window.
 - A series is followed while it has progress in the library: of the 30 most recently watched,
   `EpisodeSchedule` looks up those whose last episode was finished, at most every six hours
   each. An episode aired since then shows in Continue Watching as "New episode".
@@ -236,7 +281,9 @@ keeps Movie/Series labels because it can mix both.
   them in full once; `me()` runs once per launch or connect, and again after a 401.
 - Sources come from one stream addon at a time (the one last picked in the list's Addon menu,
   `[StreamProvider].chosenAddonKey`, this device only; else the first) unless Settings → Addons
-  combines them. Play, autoplay, fallbacks and the title page's prefetch all go through
+  combines them. On iPhone, iPad (a centred panel with Close) and Mac the list is one, best first, each row with its resolution
+  boxed; the filters are a Filter menu, and "Play picks" shows the source autoplay would
+  start (`continuingSource()`, the same code), shown only when there's a remembered source. Play, autoplay, fallbacks and the title page's prefetch all go through
   `chosen(_:combined:)`; a remembered source from another addon doesn't autoplay.
 - Search's keyboard reappearing after going back is the system restoring a focused field;
   clearing focus on leaving doesn't stop it.
@@ -267,7 +314,11 @@ keeps Movie/Series labels because it can mix both.
 - tvOS Home performance is measured in the simulator only (Release, Apple TV 4K, keys sent to
   the simulator rather than XCUIRemote): about 40 ms of main-thread work per move along a row
   and 140 ms between rows, down from 75 and 250 before the rows went lazy. Keep measurements
-  comparable.
+  comparable. Simulator.app has since gone from this machine, so the Rooms Home (focused
+  title's room tone, tone computed off the main thread) was compared with XCUIRemote presses
+  instead, which add their own stall: before and after, about 130 ms per move along a row
+  both, and 23–35 ms vs 33–35 ms between rows (`sample`, two runs each). Not comparable with
+  the numbers above.
 - Unverified: playback and Picture in Picture on tvOS and macOS, HDR output, tvOS display
   matching, swipe-to-scrub with the Siri Remote (the preview itself is checked in the
   simulators by setting a scrub position), physical phone-to-Apple-TV

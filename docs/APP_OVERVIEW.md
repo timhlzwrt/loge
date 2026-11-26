@@ -45,37 +45,51 @@ navigation destinations.
 
 ## Screens and platform behavior
 
-- `App/Browse/Home/HomeView.swift`: artwork carousel on iPhone/iPad/Mac; a
-  focus-driven backdrop and fixed title header on Apple TV. Shelves follow
+- `App/Browse/Home/HomeView.swift`: the last thing watched leads, with Resume (and
+  Details on iPad and Mac), and the rest of Continue Watching follow as landscape cards;
+  with nothing in progress, an artwork carousel. The page takes the hero's room tone.
+  Without a stream addon, Add Addon and Import Setup show under the hero. On Apple TV
+  the focused title sets the room: its backdrop upper right fading into its tone, its
+  logo, facts and summary above the rows, Continue Watching first. Shelves follow
   `HomeLayout` (Core): by default the library rows, the popular, IMDb-favourites and
   genre shelves as before; Settings → Home hides, reorders, adds installed addons'
   catalogs (those needing no search or other input) and resets. The carousel takes the
   first shown movie and series shelves; the Apple TV header and default focus the first
   shown catalog shelf. An addon shelf is stored by manifest `id`, type and catalog `id`,
   never its URL, and is skipped, not deleted, on a device without that addon.
-- `CatalogRow.swift` and `CatalogGridView.swift`: poster rows and paginated
-  grids, with genre filtering when the addon advertises it.
+- `CatalogRow.swift` and `CatalogGridView.swift`: poster rows (on iPhone with name and
+  year under each) and paginated grids, with genre filtering when the addon advertises it
+  (on iPhone genre chips over a three-column grid with names and years).
 - `MetaDetailView.swift`: title details, seasons, episode cards, watched
-  actions and next episode selection. The hero is the title and Play, with Watch Later
-  and a More menu (`TitleMoreMenu`: trailer, sources, watched mark) beside it,
-  centred on a phone with Play in the middle;
-  the description follows with genre, year, runtime and the scores one size down.
+  actions and next episode selection, in the title's room tone. On iPhone the hero is
+  the logo, one line of facts, Play across the width and labelled circles for Watch
+  Later, Trailer, Sources and Watched, then the description; seasons are pills over
+  episode rows. iPad and Mac set that column on the left and episodes, cast and related
+  titles on the right. Apple TV puts worded buttons beside Play (Watch Later, Sources,
+  Watched) under two lines of description, then season pills over episode cards.
   Cast & Crew shows only with TMDB connected; the addon's credits then stand in while
   TMDB's load or when it has none. Watch Trailer opens YouTube (the addon's trailer,
   or TMDB's when connected; not on Apple TV, which has no browser), and a
   movie in a TMDB collection lists that film series in release order.
 - `PersonView.swift`: person details and role-filtered TMDB filmographies when
-  connected. Without TMDB it says a filmography needs TMDB and shows the title the
+  connected; on iPhone a round portrait, a "Director · born 1970" line, the biography in
+  three lines and role pills over a three-column grid. Without TMDB it says a filmography needs TMDB and shows the title the
   person was opened from: Cinemeta's search no longer names cast or directors. That
   state is only left for a page still open when TMDB is disconnected.
 - `SourcesView.swift`: source selection, autoplay and fallback candidates. Resolution
   groups list cached sources first, otherwise in addon order; Filter narrows by audio
   language, HDR and the Maximum bitrate setting, and unknown metadata stays visible.
+  On iPhone, iPad and Mac it's one list, the source Play would start on top ("Play picks"),
+  and the title page opens it as a sheet (a centred panel on iPad; Cancel and Play on the Mac;
+  full screen over a blurred still on Apple TV, Play's pick focused).
 - `SearchView.swift`: debounced search across built-in movie/series feeds and local
-  recent searches.
+  recent searches. On iPhone results are rows (poster, name, kind and year), on iPad and
+  Mac a poster grid, with a matching person from TMDB first; the empty state is Recent and
+  Browse by Genre. The Mac searches from a toolbar field (⌘F) instead of a tab.
 - `App/Settings`: addon installation/order/removal, Home's shelves, playback preferences,
   setup copies (Share Setup on iPhone, iPad and Mac; Import Setup everywhere), self-hosted
-  sync, the TMDB connection and the Mac updater.
+  sync, the TMDB connection and the Mac updater. On a wide iPad a value's page opens beside
+  the sentence; the Mac keeps Settings in its own window (⌘,).
 
 The shared visual language lives in `App/Browse/Components`: charcoal canvas,
 white controls, artwork-led hierarchy, platform-specific `Metrics` and font

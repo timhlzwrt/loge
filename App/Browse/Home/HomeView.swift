@@ -15,6 +15,8 @@ struct HomeView: View {
     /// where navigation destinations aren't reliably found.
     @State private var playing: SourcesRoute?
     @State private var opening: MetaPreview?
+    /// The hero's room tone, which the page sits in.
+    @State private var tone = Color.canvas
     #endif
     #if os(macOS)
     /// The scroll view runs under the toolbar, so what it holds can't read this itself.
@@ -29,21 +31,29 @@ struct HomeView: View {
             // On every return to Home: a series started since then is followed from here on.
             .task { await schedule.refresh(for: library, addons: store) }
         #else
+        let resuming = resumingEntries(rows)
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 28) {
                 // From the first movie and series shelves, which by default are the popular ones.
                 let movies = sources.first { $0.catalog.type == MediaType.movie }
                 let series = sources.first { $0.catalog.type == MediaType.series }
-                if movies != nil || series != nil {
-                    FeaturedCarousel(movies: movies, series: series, playing: $playing, opening: $opening)
-                        // Loads its pages once, so other shelves start it over.
-                        .id([movies?.id, series?.id])
+                if !resuming.isEmpty {
+                    ResumeHero(entries: resuming, tone: $tone)
+                } else if movies != nil || series != nil {
+                    featured(movies: movies, series: series)
+                }
+                if !store.addons.hasStreamAddon {
+                    PlaybackAddonCard()
+                }
+                if !resuming.isEmpty {
+                    ContinueWatchingRow(leavesFirstToHero: true)
                 }
                 ForEach(rows) { row in
                     switch row {
                     case .catalog(let source): CatalogRow(source: source, page: sources)
                     case .genres: GenreRow()
-                    case .continueWatching: ContinueWatchingRow()
+                    // Already at the top when it leads a phone's Home.
+                    case .continueWatching: if resuming.isEmpty { ContinueWatchingRow() }
                     case .watchLater: MyListRow()
                     case .recommended: RecommendedRow()
                     }
@@ -81,7 +91,7 @@ struct HomeView: View {
         #endif
         // The hero starts at the top edge of the screen, under the status bar or toolbar.
         .ignoresSafeArea(edges: .top)
-        .background(Color.canvas)
+        .background { Room(tone: tone) }
         #if os(iOS)
         .toolbar(.hidden, for: .navigationBar)
         #elseif os(macOS)
@@ -92,6 +102,20 @@ struct HomeView: View {
         #endif
         #endif
     }
+
+    #if !os(tvOS)
+    private func featured(movies: CatalogSource?, series: CatalogSource?) -> some View {
+        FeaturedCarousel(movies: movies, series: series, playing: $playing, opening: $opening, tone: $tone)
+            // Loads its pages once, so other shelves start it over.
+            .id([movies?.id, series?.id])
+    }
+
+    /// What's being watched leads Home, unless Continue Watching is hidden.
+    private func resumingEntries(_ rows: [HomeLayout.Row]) -> [ContinueWatchingRow.Entry] {
+        guard rows.contains(.continueWatching) else { return [] }
+        return ContinueWatchingRow.entries(library: library, schedule: schedule)
+    }
+    #endif
 }
 
 /// Downloads artwork into the shared URL cache that `Artwork` and `TitleLogo` load from,

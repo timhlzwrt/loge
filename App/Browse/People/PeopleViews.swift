@@ -19,13 +19,26 @@ struct TMDBCreditTile: View {
                 }
             }
             .aspectRatio(2 / 3, contentMode: .fit)
+            .modifier(PointerHighlight())
             .clipShape(.rect(cornerRadius: Metrics.posterRadius))
             #if os(tvOS)
             // Only the poster lifts; a card around the text clipped its first letters.
             .hoverEffect(.highlight)
             #endif
-            Text(title.name).font(.cardTitle).lineLimit(2)
-            CreditMetaLines(title: title, showsMediaType: showsMediaType, roleLineLimit: 2)
+            if !Metrics.isTV {
+                // Grids and shelves read as the posters do: the name, then the year.
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title.name)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                    Text(title.releaseDate.map { String($0.prefix(4)) } ?? " ")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Text(title.name).font(.cardTitle).lineLimit(2)
+                CreditMetaLines(title: title, showsMediaType: showsMediaType, roleLineLimit: 2)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .contentShape(.rect)
@@ -151,19 +164,8 @@ struct PersonTile: View {
     var body: some View {
         VStack(spacing: 10) {
             if showsPortrait {
-                ZStack {
-                    Text(initials)
-                        .font(Self.initialsFont)
-                        .foregroundStyle(isFocused ? AnyShapeStyle(.black) : AnyShapeStyle(.secondary))
-                    // Through the decoded-image cache, so portraits don't flash initials again
-                    // when the shelf brings a tile back.
-                    if person.portraitURL != nil {
-                        Artwork(url: person.portraitURL)
-                    }
-                }
-                    .frame(width: Metrics.personSize, height: Metrics.personSize)
-                    .background(isFocused ? AnyShapeStyle(.tint) : AnyShapeStyle(.white.opacity(0.08)), in: .circle)
-                    .clipShape(.circle)
+                PersonAvatar(name: person.name, portraitURL: person.portraitURL, size: Metrics.personSize,
+                             isHighlighted: isFocused)
                     #if os(tvOS)
                     // The circle fills with the accent and lifts, as the glass buttons above it do.
                     .scaleEffect(isFocused ? 1.08 : 1)
@@ -227,14 +229,6 @@ struct PersonTile: View {
         }
     }
 
-    /// "MM" for Matthew McConaughey.
-    private var initials: String {
-        let words = person.name.split(separator: " ")
-        return [words.first, words.count > 1 ? words.last : nil]
-            .compactMap { $0?.first.map(String.init) }
-            .joined()
-    }
-
     /// "Director, Writer"
     private var roles: String? {
         let crew = person.roles.compactMap { role -> String? in
@@ -248,18 +242,49 @@ struct PersonTile: View {
     }
 
     #if os(tvOS)
-    private static let initialsFont = Font.system(size: 44, weight: .semibold)
     private static let nameFont = Font.system(size: 23, weight: .semibold)
     private static let roleFont = Font.system(size: 20)
     #elseif os(macOS)
-    private static let initialsFont = Font.system(size: 22, weight: .semibold)
     private static let nameFont = Font.system(size: 13, weight: .semibold)
     private static let roleFont = Font.system(size: 12)
     #else
-    private static let initialsFont = Font.title2.weight(.semibold)
     private static let nameFont = Font.footnote.weight(.semibold)
     private static let roleFont = Font.caption
     #endif
+}
+
+/// A person's portrait in a circle, or their initials where TMDB has no photo.
+struct PersonAvatar: View {
+    let name: String
+    let portraitURL: String?
+    let size: CGFloat
+    /// Filled with the accent, as a focused tile on Apple TV.
+    var isHighlighted = false
+
+    var body: some View {
+        ZStack {
+            Text(initials)
+                .font(.system(size: size * 0.32, weight: .semibold))
+                .foregroundStyle(isHighlighted ? AnyShapeStyle(.black) : AnyShapeStyle(.secondary))
+            // Through the decoded-image cache, so portraits don't flash initials again
+            // when a shelf brings a tile back.
+            if portraitURL != nil {
+                Artwork(url: portraitURL)
+            }
+        }
+        .frame(width: size, height: size)
+        .background(isHighlighted ? AnyShapeStyle(.tint) : AnyShapeStyle(.white.opacity(0.08)), in: .circle)
+        .clipShape(.circle)
+        .accessibilityHidden(true)
+    }
+
+    /// "MM" for Matthew McConaughey.
+    private var initials: String {
+        let words = name.split(separator: " ")
+        return [words.first, words.count > 1 ? words.last : nil]
+            .compactMap { $0?.first.map(String.init) }
+            .joined()
+    }
 }
 
 #if os(tvOS)

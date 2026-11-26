@@ -47,11 +47,9 @@ struct DiscoveryCatalogsTests {
         #expect(other.featuredBackground == other.background)
     }
 
-    @Test func featuredPosterUsesTheLargeCinemetaImage() {
-        let cinemeta = MetaPreview(id: "tt1", type: "movie", name: "A", poster: "https://images.metahub.space/poster/small/tt1/img")
-        #expect(cinemeta.featuredPoster == "https://images.metahub.space/poster/large/tt1/img")
-        let other = MetaPreview(id: "tt1", type: "movie", name: "A", poster: "https://image.tmdb.org/t/p/w500/x.jpg")
-        #expect(other.featuredPoster == other.poster)
+    @Test func cinemetaHasLogosForIMDbTitlesOnly() {
+        #expect(MetaPreview.cinemetaLogo(for: "tt1") == "https://images.metahub.space/logo/medium/tt1/img")
+        #expect(MetaPreview.cinemetaLogo(for: "kitsu:1") == nil)
     }
 
     @Test func laterRowsLeadWithTitlesTheRowsAboveDoNotShow() {

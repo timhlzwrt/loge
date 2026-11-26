@@ -52,7 +52,12 @@ struct Words: View {
             Text(word)
                 .layoutValue(key: FollowsWithoutSpace.self, value: word.first.map { ",.".contains($0) } ?? false)
         }
+        #if os(iOS)
+        // Dimmer than secondary text, so the white values carry the sentence.
+        .foregroundStyle(.white.opacity(0.45))
+        #else
         .foregroundStyle(.secondary)
+        #endif
         .accessibilityHidden(true)
     }
 }
@@ -108,16 +113,19 @@ struct TokenLabel: View {
     let text: String
     var isWarning = false
     var isUnderlined = true
+    /// The value whose page is open beside the sentence, on a wide iPad.
+    var isMarked = false
     #if os(tvOS)
     @Environment(\.isFocused) private var isFocused
     #else
     private let isFocused = false
     #endif
 
-    init(_ text: String, isWarning: Bool = false, isUnderlined: Bool = true) {
+    init(_ text: String, isWarning: Bool = false, isUnderlined: Bool = true, isMarked: Bool = false) {
         self.text = text
         self.isWarning = isWarning
         self.isUnderlined = isUnderlined
+        self.isMarked = isMarked
     }
 
     var body: some View {
@@ -125,7 +133,8 @@ struct TokenLabel: View {
             .foregroundStyle(isFocused ? Color.black : isWarning ? Color.orange : Color.white)
             .underline(isUnderlined && !isFocused, color: (isWarning ? Color.orange : Color.white).opacity(0.35))
             .padding(.horizontal, 8)
-            .background(isFocused ? Color.white : Color.clear, in: .rect(cornerRadius: 8))
+            .background(isFocused ? Color.white : isMarked ? Color.white.opacity(0.14) : Color.clear,
+                        in: .rect(cornerRadius: 8))
             .padding(.horizontal, -8)
             .multilineTextAlignment(.leading)
     }

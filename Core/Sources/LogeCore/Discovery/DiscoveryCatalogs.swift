@@ -171,19 +171,18 @@ extension MetaPreview {
         background?.replacingOccurrences(of: "images.metahub.space/background/medium/", with: "images.metahub.space/background/large/")
     }
 
-    /// The portrait hero's artwork: Cinemeta's 780-pixel poster rather than the 300-pixel one
-    /// its catalogs list, which is meant for a row.
-    public var featuredPoster: String? {
-        poster?.replacingOccurrences(of: "images.metahub.space/poster/small/", with: "images.metahub.space/poster/large/")
-    }
-
     /// Cinemeta's plain poster, and its title logo where the addon gives none, which the
     /// tvOS Home header shows for the focused title.
     var withCinemetaArtwork: MetaPreview {
         guard MediaType.isIMDbTitle(id) else { return self }
         var meta = self
         meta.poster = "https://images.metahub.space/poster/small/\(id)/img"
-        meta.logo = logo ?? "https://images.metahub.space/logo/medium/\(id)/img"
+        meta.logo = logo ?? Self.cinemetaLogo(for: id)
         return meta
+    }
+
+    /// Cinemeta's title logo for an IMDb title, for places that know only the title's ID.
+    public static func cinemetaLogo(for id: String) -> String? {
+        MediaType.isIMDbTitle(id) ? "https://images.metahub.space/logo/medium/\(id)/img" : nil
     }
 }

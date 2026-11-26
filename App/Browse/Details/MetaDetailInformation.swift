@@ -20,19 +20,36 @@ struct InformationSection: View {
                 if let tagline = details?.tagline {
                     Text(tagline).font(.synopsis).italic().foregroundStyle(.secondary)
                 }
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: Metrics.infoColumnWidth), spacing: 24, alignment: .topLeading)],
-                          alignment: .leading, spacing: 20) {
-                    ForEach(facts, id: \.label) { fact in
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(fact.label)
-                                .font(.metaLine)
-                                .foregroundStyle(.secondary)
-                            Text(fact.value)
-                                .font(.synopsis)
-                                .foregroundStyle(.white.opacity(0.88))
-                                .fixedSize(horizontal: false, vertical: true)
+                if !Metrics.isTV {
+                    // A plain table: the labels in one column.
+                    Grid(alignment: .topLeading, horizontalSpacing: 14, verticalSpacing: 10) {
+                        ForEach(facts, id: \.label) { fact in
+                            GridRow {
+                                Text(fact.label)
+                                    .foregroundStyle(.secondary)
+                                Text(fact.value)
+                                    .foregroundStyle(.white.opacity(0.88))
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .font(.subheadline)
+                            .accessibilityElement(children: .combine)
                         }
-                        .accessibilityElement(children: .combine)
+                    }
+                } else {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: Metrics.infoColumnWidth), spacing: 24, alignment: .topLeading)],
+                              alignment: .leading, spacing: 20) {
+                        ForEach(facts, id: \.label) { fact in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(fact.label)
+                                    .font(.metaLine)
+                                    .foregroundStyle(.secondary)
+                                Text(fact.value)
+                                    .font(.synopsis)
+                                    .foregroundStyle(.white.opacity(0.88))
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .accessibilityElement(children: .combine)
+                        }
                     }
                 }
             }
@@ -114,7 +131,7 @@ struct InformationSection: View {
     }
 }
 
-/// A description clamped to four lines, with "More" under it when it overflows.
+/// A description clamped to three lines, with "More" under it when it overflows.
 struct ExpandableText: View {
     let text: String
     @State private var isExpanded = false
@@ -130,13 +147,13 @@ struct ExpandableText: View {
                 Text(text)
                     .font(.synopsis)
                     .foregroundStyle(.white.opacity(0.88))
-                    .lineLimit(isExpanded ? nil : 4)
+                    .lineLimit(isExpanded ? nil : 3)
                     // Otherwise the hero's stack squeezes the expanded text back to a few lines.
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { shownHeight = $0 }
                     .background(alignment: .top) {
-                        // The unclamped text, measured to tell whether four lines cut it short.
+                        // The unclamped text, measured to tell whether the clamp cuts it short.
                         Text(text)
                             .font(.synopsis)
                             .fixedSize(horizontal: false, vertical: true)

@@ -85,16 +85,24 @@ struct CatalogRow: View {
                 #else
                 if search == nil {
                     NavigationLink(value: source) {
-                        HStack(spacing: 4) {
+                        HStack(alignment: .firstTextBaseline, spacing: 4) {
                             Text(source.title)
-                            Image(systemName: "chevron.right")
-                                .font(.body.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                                .accessibilityHidden(true)
+                            // Said in words at the far end, as the rest of the app labels its buttons.
+                            if !Metrics.isTV {
+                                Spacer()
+                                Text("See All")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Image(systemName: "chevron.right")
+                                    .font(.body.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                         .titleTapTarget()
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(source.title)
                     .accessibilityHint("Shows the whole catalog")
                 } else {
                     Text(source.title)
@@ -152,7 +160,7 @@ struct CatalogRow: View {
 
     private func poster(_ meta: MetaPreview) -> some View {
         NavigationLink(value: meta) {
-            PosterTile(meta: meta)
+            PosterTile(meta: meta, caption: Metrics.isTV ? .none : .year)
                 #if os(tvOS)
                 .modifier(ReportsFocus { onFocus(meta) })
                 #endif
@@ -252,9 +260,65 @@ struct PosterTile: View {
     let meta: MetaPreview
     /// Nil fills the width offered, as in a grid, keeping the 2:3 shape.
     var width: CGFloat? = Metrics.posterWidth
+    /// Under the poster on a phone, so shelves and grids can be scanned by name.
+    var caption = Caption.none
+    /// Off where the long press does something else, as in Recently Watched.
+    var offersWatchLater = true
     @Environment(LibraryStore.self) private var library
 
+    enum Caption {
+        case none
+        /// The name, then "2023 · 8.3": the year, and the IMDb rating where there is one.
+        case year
+        /// The name, then this line, or nothing under the name when it's nil.
+        case line(String?)
+    }
+
     var body: some View {
+        if case .none = caption {
+            poster
+                .contextMenu { if offersWatchLater { WatchLaterToggle(title: meta) } }
+        } else {
+            VStack(alignment: .leading, spacing: 2) {
+                poster
+                    .padding(.bottom, 6)
+                Text(meta.name)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                // Always a line, so the posters of a shelf stay level.
+                Text(detail ?? " ")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .frame(width: width, alignment: .leading)
+            // The poster already says the name; the year is its value.
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(meta.name)
+            .accessibilityValue([detail, progressValue].compactMap { $0 }.joined(separator: ", "))
+            .contextMenu { if offersWatchLater { WatchLaterToggle(title: meta) } }
+        }
+    }
+
+    private var detail: String? {
+        switch caption {
+        case .none: nil
+        case .line(let line): line
+        case .year: yearAndRating
+        }
+    }
+
+    private var yearAndRating: String? {
+        let rating = meta.imdbRating.flatMap(Double.init).flatMap { $0 > 0 && $0 <= 10 ? meta.imdbRating : nil }
+        return [meta.releaseInfo, rating].compactMap { $0?.nilIfEmpty }.joined(separator: " · ").nilIfEmpty
+    }
+
+    private var progressValue: String? {
+        library.progress[meta.id].map { $0.isFinished ? "Watched" : "\(Int($0.fraction * 100)) percent watched" }
+    }
+
+    @ViewBuilder
+    private var poster: some View {
         let progress = library.progress[meta.id]
         Color.white.opacity(0.06)
             .overlay {
@@ -282,11 +346,11 @@ struct PosterTile: View {
         }
         .frame(width: width, height: width.map { $0 * 1.5 })
         .aspectRatio(2 / 3, contentMode: .fit)
+        .modifier(PointerHighlight())
         .clipShape(.rect(cornerRadius: Metrics.posterRadius))
         .accessibilityElement()
         .accessibilityLabel(meta.name)
         // The element replaces the progress bar's own label.
-        .accessibilityValue(progress.map { $0.isFinished ? "Watched" : "\(Int($0.fraction * 100)) percent watched" } ?? "")
-        .contextMenu { WatchLaterToggle(title: meta) }
+        .accessibilityValue(progressValue ?? "")
     }
 }

@@ -103,7 +103,8 @@ extension AccountSync {
     }
 }
 
-/// One settings page: its sections on the app's canvas.
+/// One settings page: its sections on the app's canvas. iPhone and iPad draw them as
+/// translucent groups of tall rows under small grey labels.
 struct SettingsPage<Content: View>: View {
     let title: String
     @ViewBuilder let content: Content
@@ -128,19 +129,52 @@ struct SettingsPage<Content: View>: View {
                 content
             }
             #else
-            List { content }
+            List { content.listRowBackground(Color.white.opacity(0.07)) }
+                .listStyle(.insetGrouped)
+                .environment(\.defaultMinListRowHeight, 52)
+                .toggleStyle(SettingsToggleStyle())
             #endif
         }
             #if !os(tvOS)
             .scrollContentBackground(.hidden)
             .navigationTitle(title)
             #endif
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
             .background(Color.canvas)
     }
 }
 
-/// A section heading. The TV's system headers are small and grey, hard to read as headings
-/// from across the room, so there they take the size of the app's other section titles.
+#if os(iOS)
+/// A switch that reads with the white accent: the system's draws a white knob on a white track.
+/// On, the track is white and the knob dark; off, a translucent track and a white knob.
+struct SettingsToggleStyle: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Button { configuration.isOn.toggle() } label: {
+            HStack {
+                configuration.label
+                Spacer(minLength: 12)
+                Capsule()
+                    .fill(configuration.isOn ? AnyShapeStyle(.white) : AnyShapeStyle(.white.opacity(0.18)))
+                    .frame(width: 51, height: 31)
+                    .overlay(alignment: configuration.isOn ? .trailing : .leading) {
+                        Circle()
+                            .fill(configuration.isOn ? Color(white: 0.07) : .white)
+                            .padding(2)
+                    }
+                    .animation(.easeOut(duration: 0.15), value: configuration.isOn)
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityRepresentation { Toggle(isOn: configuration.$isOn) { configuration.label } }
+    }
+}
+#endif
+
+/// A section heading: a small grey label over its group, on iPhone, iPad and Apple TV alike;
+/// the Mac keeps its grouped form's own.
 struct SettingsHeader: View {
     let title: String
 
@@ -148,11 +182,10 @@ struct SettingsHeader: View {
 
     var body: some View {
         Text(title)
-            #if os(tvOS)
-            .font(.sectionTitle)
-            .foregroundStyle(.white)
+            #if !os(macOS)
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(.white.opacity(0.45))
             .textCase(nil)
-            .padding(.top, 24)
             #endif
     }
 }
@@ -173,10 +206,6 @@ struct AddonsSettingsView: View {
 
     var body: some View {
         SettingsPage("Addons") {
-            Section {
-                Text("Movies, series, search and IMDb ratings are built in. Add a playback addon to watch.")
-                    .foregroundStyle(.secondary)
-            }
             Section {
                 if store.addons.isEmpty {
                     #if os(tvOS)
@@ -225,12 +254,7 @@ struct AddonsSettingsView: View {
                 }
                 #endif
             } header: {
-                SettingsHeader("Your addons")
-            } footer: {
-                if store.addons.count > 1 {
-                    Text("Addons higher in the list are asked first.")
-                        .foregroundStyle(.secondary)
-                }
+                SettingsHeader("Playback, asked in this order")
             }
 
             // Only a choice with more than one addon to take sources from.
@@ -239,49 +263,43 @@ struct AddonsSettingsView: View {
                     Toggle("Combine sources from all addons", isOn: $combinesAddonSources)
                 } footer: {
                     Text(combinesAddonSources
-                         ? "The sources list shows every addon's sources together."
-                         : "The sources list shows one addon's sources at a time. Choose the addon at the top of the list.")
+                         ? "On: the sources list shows every addon's sources together."
+                         : "Off: sources come from one addon at a time, chosen in the sources list.")
                         .foregroundStyle(.secondary)
                 }
             }
 
             Section {
-                TextField("Manifest URL", text: $manifestURL)
-                    .autocorrectionDisabled()
-                    #if !os(macOS)
-                    .textInputAutocapitalization(.never)
-                    .keyboardType(.URL)
-                    #endif
-                    .onSubmit(install)
-                    .onChange(of: manifestURL) { installError = nil }
+                #if os(tvOS)
+                manifestField
                 // The keyboard's Done already installs on tvOS, where a disabled Install row reads as
                 // stray grey text; it shows once there's a URL to install.
-                #if os(tvOS)
-                let showsInstall = !isManifestURLEmpty || isInstalling
-                #else
-                let showsInstall = true
-                #endif
-                if showsInstall {
-                    Button(action: install) {
-                        if isInstalling {
-                            ProgressView()
-                        } else {
-                            Text("Install")
-                        }
-                    }
-                    .accessibilityLabel(isInstalling ? "Installing" : "Install")
-                    .disabled(isManifestURLEmpty || isInstalling)
+                if !isManifestURLEmpty || isInstalling {
+                    installButton
                 }
+                #else
+                HStack {
+                    manifestField
+                    installButton
+                        .fontWeight(.semibold)
+                }
+                #endif
                 if let installError {
                     Text(Self.message(for: installError))
                         .foregroundStyle(.red)
                 }
             } header: {
-                SettingsHeader("Add addon")
+                SettingsHeader("Add an addon")
             } footer: {
                 #if os(tvOS)
                 Text("Paste the URL with the Remote keyboard on your iPhone, or add the addon on a device connected to Sync.")
                 #endif
+            }
+
+            Section {
+                AddonLabel(name: "Cinemeta", detail: "Movies, series, search and IMDb ratings")
+            } header: {
+                SettingsHeader("Built in")
             }
 
             Section {
@@ -328,6 +346,29 @@ struct AddonsSettingsView: View {
             if !store.addons.isEmpty { EditButton() }
         }
         #endif
+    }
+
+    private var manifestField: some View {
+        TextField("Manifest URL", text: $manifestURL)
+            .autocorrectionDisabled()
+            #if !os(macOS)
+            .textInputAutocapitalization(.never)
+            .keyboardType(.URL)
+            #endif
+            .onSubmit(install)
+            .onChange(of: manifestURL) { installError = nil }
+    }
+
+    private var installButton: some View {
+        Button(action: install) {
+            if isInstalling {
+                ProgressView()
+            } else {
+                Text("Install")
+            }
+        }
+        .accessibilityLabel(isInstalling ? "Installing" : "Install")
+        .disabled(isManifestURLEmpty || isInstalling)
     }
 
     private var isManifestURLEmpty: Bool {
@@ -465,22 +506,7 @@ private struct AddonRow: View {
     #endif
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Text(addon.displayName)
-                    .font(.headline)
-                if let version = addon.manifest?.version {
-                    Text(version)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            if let description = addon.manifest?.description {
-                Text(description)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
+        AddonLabel(name: addon.displayName, detail: detail) {
             if isUnreachable {
                 Label(addon.manifest == nil
                       ? "Couldn't reach \(addon.host)."
@@ -492,28 +518,52 @@ private struct AddonRow: View {
                     #else
                     .foregroundStyle(.orange)
                     #endif
-            } else if addon.manifest == nil {
-                Text("Loading…")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                Text(caption)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
         }
-        // A tvOS button centres wrapped lines, which left a long description off the row's edge.
-        .multilineTextAlignment(.leading)
-        // Full-width rows, so focused rows on tvOS line up instead of hugging their text.
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// What the addon answers, then its host: "Streams · Subtitles · example.com".
-    private var caption: String {
+    /// Its host, then what it answers: "example.com · Streams · Subtitles".
+    private var detail: String {
+        guard addon.manifest != nil else { return "\(addon.host) · Loading…" }
         let resources = Set(addon.manifest?.resources.map(\.name) ?? [])
         let provides = [(AddonResource.stream, "Streams"), (.subtitles, "Subtitles"), (.catalog, "Catalogs"), (.meta, "Details")]
             .filter { resources.contains($0.0.rawValue) }
             .map(\.1)
-        return (provides + [addon.host]).joined(separator: " · ")
+        return ([addon.host] + provides).joined(separator: " · ")
+    }
+}
+
+/// An addon as the list shows it: its initial on a tile, its name, and a line about it.
+private struct AddonLabel<Note: View>: View {
+    let name: String
+    let detail: String
+    @ViewBuilder var note: Note
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(name.first.map(String.init) ?? "")
+                .font(.subheadline.weight(.bold))
+                .frame(width: 34, height: 34)
+                .background(.white.opacity(0.14), in: .rect(cornerRadius: 9))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(name)
+                Text(detail)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                note
+            }
+        }
+        // A tvOS button centres wrapped lines, which left a long line off the row's edge.
+        .multilineTextAlignment(.leading)
+        // Full-width rows, so focused rows on tvOS line up instead of hugging their text.
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+extension AddonLabel where Note == EmptyView {
+    init(name: String, detail: String) {
+        self.init(name: name, detail: detail) { EmptyView() }
     }
 }

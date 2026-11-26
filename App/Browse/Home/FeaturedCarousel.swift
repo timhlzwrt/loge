@@ -9,6 +9,8 @@ struct FeaturedCarousel: View {
     let series: CatalogSource?
     @Binding var playing: SourcesRoute?
     @Binding var opening: MetaPreview?
+    /// The room tone of the page showing, for Home's background.
+    @Binding var tone: Color
     @State private var items: [MetaPreview] = []
     @State private var currentID: MetaPreview.ID?
     #if os(macOS)
@@ -16,14 +18,13 @@ struct FeaturedCarousel: View {
     #endif
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
     #endif
 
     var body: some View {
         ScrollView(.horizontal) {
             LazyHStack(spacing: 0) {
                 ForEach(items) { meta in
-                    FeaturedPage(meta: meta, isCentred: isCentred, bottomInset: items.count > 1 ? 38 : 18,
+                    FeaturedPage(meta: meta, isNarrow: isNarrow, bottomInset: items.count > 1 ? 38 : 18, tone: tone,
                                  playing: $playing, opening: $opening)
                         .containerRelativeFrame(.horizontal)
                 }
@@ -40,13 +41,14 @@ struct FeaturedCarousel: View {
         .frame(height: height)
         // Landscape safe areas must not expose the neighboring page's content.
         .clipped()
-        .overlay(alignment: isCentred ? .bottom : .bottomLeading) {
+        .overlay(alignment: .bottomLeading) {
             if items.count > 1 {
                 pageDots
-                    .padding(.leading, isCentred ? 0 : Metrics.gutter - dotInset)
+                    .padding(.leading, Metrics.gutter - dotInset)
                     .padding(.bottom, 16 - dotInset)
             }
         }
+        .roomTone(of: (items.first { $0.id == currentID } ?? items.first)?.featuredBackground, into: $tone)
         .task {
             // Returning to Home runs this again; the pages and the one showing stay.
             guard items.isEmpty else { return }
@@ -80,7 +82,7 @@ struct FeaturedCarousel: View {
     private func prefetchPages(after id: MetaPreview.ID?) {
         let index = items.firstIndex { $0.id == id } ?? 0
         let upcoming = items.dropFirst(index + 1).prefix(2)
-        prefetch(upcoming.flatMap { [isCentred ? $0.featuredPoster : $0.featuredBackground, $0.logo] })
+        prefetch(upcoming.flatMap { [$0.featuredBackground, $0.logo] })
     }
 
     private var pageDots: some View {
@@ -121,13 +123,11 @@ struct FeaturedCarousel: View {
     #endif
 
     #if os(iOS)
-    /// Centred on a portrait phone; left-aligned where there's width to spare.
-    private var isCentred: Bool { horizontalSizeClass == .compact && verticalSizeClass != .compact }
-    private var height: CGFloat {
-        verticalSizeClass == .compact ? 340 : 560
-    }
+    /// A phone's column, without the description; the full layout where there's width to spare.
+    private var isNarrow: Bool { horizontalSizeClass == .compact }
+    private var height: CGFloat { isNarrow ? 500 : 560 }
     #else
-    private let isCentred = false
+    private let isNarrow = false
     private let height: CGFloat = 480
     #endif
 }
@@ -135,9 +135,11 @@ struct FeaturedCarousel: View {
 /// One title in the carousel: its backdrop, logo, meta line and buttons.
 struct FeaturedPage: View {
     let meta: MetaPreview
-    let isCentred: Bool
+    let isNarrow: Bool
     /// Room for the page dots.
     let bottomInset: CGFloat
+    /// What the backdrop fades into.
+    let tone: Color
     /// Set once a series' episodes are known, which opens its sources.
     @Binding var playing: SourcesRoute?
     /// Set when a series' episodes couldn't be loaded; its details say why.
@@ -151,7 +153,7 @@ struct FeaturedPage: View {
     @State private var isPreparingPlay = false
 
     var body: some View {
-        ZStack(alignment: isCentred ? .bottom : .bottomLeading) {
+        ZStack(alignment: .bottomLeading) {
             NavigationLink(value: meta) {
                 artwork
                     .overlay { scrims }
@@ -161,14 +163,13 @@ struct FeaturedPage: View {
             // The title link below opens the same page; one stop per page is enough.
             .accessibilityHidden(true)
 
-            VStack(alignment: isCentred ? .center : .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 12) {
                 NavigationLink(value: meta) {
-                    VStack(alignment: isCentred ? .center : .leading, spacing: 12) {
-                        TitleLogo(logo: meta.logo, name: meta.name, maxHeight: isCentred ? 72 : 96)
-                            .frame(maxWidth: isCentred ? 280 : 360, alignment: isCentred ? .center : .leading)
+                    VStack(alignment: .leading, spacing: 12) {
+                        TitleLogo(logo: meta.logo, name: meta.name, maxHeight: isNarrow ? 90 : 96, isWhite: isNarrow)
+                            .frame(maxWidth: isNarrow ? 260 : 360, alignment: .leading)
                         meta.infoLine
-                            .multilineTextAlignment(isCentred ? .center : .leading)
-                        if !isCentred, let description = meta.description {
+                        if !isNarrow, let description = meta.description {
                             Text(description)
                                 .font(.synopsis)
                                 .foregroundStyle(.white.opacity(0.88))
@@ -178,8 +179,11 @@ struct FeaturedPage: View {
                     }
                 }
                 .buttonStyle(.plain)
-                buttons
-                    .padding(.top, 4)
+                // Without an addon to play from, the card under the hero says how to get one.
+                if store.addons.hasStreamAddon || !isNarrow {
+                    buttons
+                        .padding(.top, 4)
+                }
             }
             .padding(.horizontal, Metrics.gutter)
             .padding(.bottom, bottomInset)
@@ -198,59 +202,70 @@ struct FeaturedPage: View {
         .onDisappear { isPreparingPlay = false }
     }
 
-    /// A backdrop cropped to a phone's portrait hero can lose its subject, so that takes the
-    /// poster. On wide windows the crop takes the top and bottom; faces sit in the upper part.
-    @ViewBuilder
+    /// Cropped from the sides on a phone and from the top and bottom on wide windows, where
+    /// faces sit in the upper part.
     private var artwork: some View {
-        if isCentred {
-            Artwork(url: meta.featuredPoster, fallbacks: [meta.poster, meta.featuredBackground].compactMap { $0 }, alignment: .top)
-        } else {
-            Artwork(url: meta.featuredBackground, alignment: .top)
-        }
+        Artwork(url: meta.featuredBackground, alignment: .top)
     }
 
     private var scrims: some View {
         ZStack {
-            BackdropFade()
-            if !isCentred {
-                LinearGradient(colors: [.canvas.opacity(0.8), .canvas.opacity(0)], startPoint: .leading, endPoint: .center)
+            BackdropFade(tone: tone)
+            if !isNarrow {
+                LinearGradient(colors: [tone.opacity(0.8), tone.opacity(0)], startPoint: .leading, endPoint: .center)
+                    .animation(.easeOut(duration: 0.6), value: tone)
             }
         }
     }
 
+    @ViewBuilder
     private var buttons: some View {
-        HStack(spacing: 12) {
-            Button {
-                isPreparingPlay = true
-            } label: {
-                Label {
-                    Text(playLabel)
-                } icon: {
-                    if isPreparingPlay {
-                        ProgressView()
-                            .controlSize(.small)
-                            .tint(.black)
-                    } else {
-                        Image(systemName: "play.fill")
-                    }
+        if isNarrow {
+            // Play and the title's page, side by side across the width.
+            HStack(spacing: 10) {
+                playButton
+                NavigationLink(value: meta) { Text("Details").frame(maxWidth: .infinity) }
+                    .buttonStyle(PrimaryButtonStyle(isTranslucent: true))
+            }
+        } else {
+            HStack(spacing: 12) {
+                playButton
+                Button(library.isSaved(meta.id) ? "Remove from Watch Later" : "Add to Watch Later",
+                       systemImage: library.isSaved(meta.id) ? "checkmark" : "plus") {
+                    library.toggleSaved(meta)
+                }
+                .buttonStyle(GlassIconButtonStyle())
+                .contentTransition(.symbolEffect(.replace))
+            }
+        }
+    }
+
+    private var playButton: some View {
+        Button {
+            isPreparingPlay = true
+        } label: {
+            Label {
+                Text(playLabel)
+            } icon: {
+                if isPreparingPlay {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(.black)
+                } else {
+                    Image(systemName: "play.fill")
                 }
             }
-            .buttonStyle(PrimaryButtonStyle())
-            .disabled(isPreparingPlay)
-            Button(library.isSaved(meta.id) ? "Remove from Watch Later" : "Add to Watch Later",
-                   systemImage: library.isSaved(meta.id) ? "checkmark" : "plus") {
-                library.toggleSaved(meta)
-            }
-            .buttonStyle(GlassIconButtonStyle())
-            .contentTransition(.symbolEffect(.replace))
+            .frame(maxWidth: isNarrow ? .infinity : nil)
         }
+        .buttonStyle(PrimaryButtonStyle())
+        .disabled(isPreparingPlay)
     }
 
     private var isStarted: Bool {
         library.isInProgress(metaID: meta.id)
     }
 
-    /// "Resume S2, E3" once a series' episodes are known, as on its details page.
+    /// "Resume S2 E3" once a series' episodes are known, as on its details page.
     private var playLabel: String {
         if let details, let action = PlayAction(preview: meta, meta: details, library: library) {
             return action.label

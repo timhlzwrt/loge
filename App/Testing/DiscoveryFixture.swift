@@ -65,14 +65,34 @@ enum DiscoveryFixture {
             MyListView().environment(LibraryStore(defaults: UserDefaults(suiteName: "loge.discovery-empty-fixture")!))
         case "search":
             SearchView()
+        // Results for a name, with TMDB's person match first.
+        case "search-results":
+            SearchView(query: "nolan")
+        case "catalog":
+            CatalogGridView(source: DiscoveryCatalogs.home[0])
+        case "home-shelves":
+            HomeSettingsView()
+        // Inception saved and Interstellar finished, both with artwork.
+        case "my-lists-artwork":
+            MyListView().environment(recommendationLibrary)
         case "recommended":
             HomeView()
                 .environment(recommendationLibrary)
+        // A first launch: nothing watched and no addon to play from.
+        case "home-empty":
+            HomeView()
+                .environment(sourceStore)
+                .environment(LibraryStore(defaults: UserDefaults(suiteName: "loge.discovery-empty-fixture")!))
+        // Details from Cinemeta rather than any addon the simulator has installed.
         case "details":
             MetaDetailView(preview: title)
+                .environment(sourceStore)
                 .environment(sourceLibrary)
+        // The first episode watched and the second started, for the episode rows' states.
         case "series":
             MetaDetailView(preview: MetaPreview(id: "tt0903747", type: "series", name: "Breaking Bad"))
+                .environment(sourceStore)
+                .environment(seriesLibrary)
         // The middle film of a trilogy.
         case "details-collection":
             MetaDetailView(preview: MetaPreview(id: "tt0468569", type: "movie", name: "The Dark Knight"))
@@ -84,8 +104,9 @@ enum DiscoveryFixture {
         case "person":
             PersonView(route: PersonRoute(person: Person(name: "Christopher Nolan", roles: [.director], tmdbID: 525)))
         // Sources from `Tools/test-addon.py --port 8769 --many --delay 5`: twelve 1080p rows that
-        // fold, and while they're awaited, autoplay waiting for a remembered source they don't list.
-        case "sources-folded", "sources-autoplay", "sources-empty", "sources-empty-sheet":
+        // fold, and while they're awaited, autoplay waiting for a remembered source they don't list;
+        // as the title page's sheet, with the remembered one they do list as Play's pick.
+        case "sources-folded", "sources-autoplay", "sources-sheet", "sources-empty", "sources-empty-sheet":
             SourcesFixture(screen: screenName ?? "")
         // States that need a sync server, in stores kept apart from the app's.
         case "settings-review", "settings-failed":
@@ -115,6 +136,20 @@ enum DiscoveryFixture {
     }()
 
     private static let sourceLibrary = LibraryStore(defaults: sourceDefaults)
+
+    private static let seriesLibrary: LibraryStore = {
+        let suite = "loge.discovery-series-fixture"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        let library = LibraryStore(defaults: defaults)
+        let episode = { (number: Int) in
+            WatchItem(id: "tt0903747:1:\(number)", type: "series", metaID: "tt0903747", title: "Breaking Bad",
+                      season: 1, episode: number)
+        }
+        library.markWatched([episode(1)])
+        library.record(episode(2), position: 1_200, duration: 2_880)
+        return library
+    }()
 
     /// Interstellar watched, Arrival started and Inception saved: all three are recommended,
     /// but only titles the viewer doesn't know yet may appear.
@@ -213,9 +248,15 @@ private struct SourcesFixture: View {
         Group {
             if let addons, let library {
                 let route = SourcesRoute(item: item, title: "Interstellar", autoplay: screen == "sources-autoplay")
-                if screen == "sources-empty-sheet" {
+                if screen.hasSuffix("-sheet") {
+                    #if os(tvOS)
+                    // How a title page presents it there.
+                    Color.canvas.fullScreenCover(isPresented: .constant(true)) { SourcesView(route: route, isChoosing: true) }
+                        .environment(addons).environment(library)
+                    #else
                     Color.canvas.sheet(isPresented: .constant(true)) { SourcesView(route: route, isChoosing: true) }
                         .environment(addons).environment(library)
+                    #endif
                 } else {
                     SourcesView(route: route).environment(addons).environment(library)
                 }
@@ -237,6 +278,12 @@ private struct SourcesFixture: View {
             if screen == "sources-autoplay", let url = URL(string: "http://127.0.0.1:8769/gone.mkv") {
                 library.rememberSource(RememberedSource(itemID: item.id, providerURL: Self.addon, url: url,
                                                         headers: [:], bingeGroup: "gone"), metaID: item.metaID)
+            }
+            // The file every copy the addon lists points at, so the first copy is Play's pick.
+            if screen == "sources-sheet",
+               let url = URL(string: "https://test-videos.co.uk/vids/bigbuckbunny/mkv/1080/Big_Buck_Bunny_1080_10s_30MB.mkv") {
+                library.rememberSource(RememberedSource(itemID: item.id, providerURL: Self.addon, url: url,
+                                                        headers: [:], bingeGroup: nil), metaID: item.metaID)
             }
             self.addons = addons
             self.library = library
@@ -260,7 +307,8 @@ private struct CarouselResumeFixture: View {
             if let movies = try? await catalogs[0].items(), let series = try? await catalogs[1].items(),
                let first = DiscoveryCatalogs.featured(movies: movies, series: series).first(where: { $0.type == "series" }) {
                 library.record(WatchItem(id: "\(first.id):2:3", type: "series", metaID: first.id, title: first.name,
-                                         season: 2, episode: 3), position: 600, duration: 2400)
+                                         season: 2, episode: 3, poster: first.poster, background: first.background),
+                               position: 600, duration: 2400)
             }
             self.library = library
         }
@@ -303,6 +351,11 @@ private final class DiscoveryFixtureProtocol: URLProtocol, @unchecked Sendable {
         let body: String
         var status = 200
         switch url.path {
+        case "/3/search/person":
+            let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "query" }?.value
+            body = query?.lowercased() == "nolan"
+                ? #"{"results":[{"id":525,"name":"Christopher Nolan","known_for_department":"Directing","profile_path":"/xuAIuYSmsUzKlUMBFGVZaWsY3DZ.jpg"}]}"#
+                : #"{"results":[]}"#
         case "/3/person/525":
             let directed: [(Int, String, String, String?)] = [
                 (157336, "Interstellar", "2014-11-05", "/yQvGrMoipbRoddT0ZR8tPoR7NfX.jpg"),

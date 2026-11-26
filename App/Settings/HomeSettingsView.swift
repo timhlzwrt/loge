@@ -12,7 +12,7 @@ struct HomeSettingsView: View {
 
     var body: some View {
         let layout = layout
-        SettingsPage("Home") {
+        SettingsPage("Home Shelves") {
             Section {
                 ForEach(layout.entries) { entry in
                     let label = ShelfLabel(name: name(of: entry.shelf), origin: origin(of: entry.shelf))
@@ -45,25 +45,37 @@ struct HomeSettingsView: View {
                 }
                 #endif
             } header: {
-                SettingsHeader("Shelves")
+                SettingsHeader("Shown, in this order")
             } footer: {
                 Text("Shelves from an addon that isn't installed on this device stay in the list for your other devices.")
             }
 
             Section {
-                NavigationLink("Add Shelf") { AddShelfView() }
-                Button("Reset to Default", role: .destructive) { confirmsReset = true }
-                    .disabled(layout == .default)
-                    .confirmationDialog("Reset Home?", isPresented: $confirmsReset, titleVisibility: .visible) {
-                        Button("Reset", role: .destructive) { storedLayout = HomeLayout.default.storedData }
-                    } message: {
-                        Text("Every built-in shelf is shown in its original order, and addon shelves are removed.")
-                    }
+                NavigationLink("Add Shelf from an Addon") { AddShelfView() }
+                #if os(tvOS)
+                // Apple TV pages have no bar to put it in.
+                resetButton("Reset to Default")
+                #endif
             }
         }
-        #if os(iOS)
-        .toolbar { EditButton() }
+        #if !os(tvOS)
+        .toolbar {
+            #if os(iOS)
+            EditButton()
+            #endif
+            resetButton("Reset")
+        }
         #endif
+    }
+
+    private func resetButton(_ title: String) -> some View {
+        Button(title, role: .destructive) { confirmsReset = true }
+            .disabled(layout == .default)
+            .confirmationDialog("Reset Home?", isPresented: $confirmsReset, titleVisibility: .visible) {
+                Button("Reset", role: .destructive) { storedLayout = HomeLayout.default.storedData }
+            } message: {
+                Text("Every built-in shelf is shown in its original order, and addon shelves are removed.")
+            }
     }
 
     #if !os(iOS)

@@ -9,6 +9,17 @@ struct TMDBClientTests {
         return TMDBClient(readAccessToken: " fixture-\(scenario) \n", session: URLSession(configuration: configuration))
     }
 
+    @Test func personSearchKeepsOnlyATopMatchByThatName() async throws {
+        let person = try #require(try await client().person(named: "villeneuve"))
+        #expect(person.name == "Denis Villeneuve")
+        #expect(person.tmdbID == 137427)
+        #expect(person.roles == [.director])
+        #expect(person.portraitURL == "https://image.tmdb.org/t/p/w185/denis.jpg")
+        // Only the top match counts: a name lower down is a weaker guess than the titles.
+        #expect(try await client().person(named: "dune") == nil)
+        #expect(try await client().person(named: "du") == nil)
+    }
+
     @Test func validatesUsingBearerHeaderWithoutPuttingTokenInURL() async throws {
         // The protocol rejects missing headers, a leaked token, the wrong language, or a long timeout.
         try await client().validate()
@@ -340,6 +351,11 @@ private final class TMDBProtocol: StubURLProtocol, @unchecked Sendable {
             } else {
                 body = components.path == "/3/movie/42" ? Self.movie : Self.series
             }
+        case "/3/search/person":
+            let query = components.queryItems?.first { $0.name == "query" }?.value
+            body = query == "villeneuve"
+                ? #"{"results":[{"id":137427,"name":"Denis Villeneuve","profile_path":"/denis.jpg","known_for_department":"Directing"}]}"#
+                : #"{"results":[{"id":6,"name":"Someone Else"},{"id":5,"name":"Dune Actor"}]}"#
         case "/3/collection/9":
             switch scenario {
             case "collectionWrongID": body = #"{"id":8,"name":"Other","parts":[]}"#

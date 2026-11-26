@@ -38,6 +38,7 @@ public final class TMDBAccount {
         let people = ResponseCache<Int, TMDBPersonDetails>(capacity: 32, lifetime: .seconds(3_600))
         let identities = ResponseCache<TMDBIdentityKey, String?>(capacity: 256, lifetime: .seconds(3_600))
         let collections = ResponseCache<Int, TMDBCollection>(capacity: 32, lifetime: .seconds(3_600))
+        let searches = ResponseCache<String, Person?>(capacity: 32, lifetime: .seconds(600))
     }
 
     var client: TMDBClient? {
@@ -57,6 +58,10 @@ public final class TMDBAccount {
 
     public func collection(id: Int) async throws -> TMDBCollection {
         try await cached(in: caches.collections, id) { try await $0.collection(id: id) }
+    }
+
+    public func person(named query: String) async throws -> Person? {
+        try await cached(in: caches.searches, query.lowercased()) { try await $0.person(named: query) }
     }
 
     public func imdbID(tmdbID: Int, type: String) async throws -> String? {

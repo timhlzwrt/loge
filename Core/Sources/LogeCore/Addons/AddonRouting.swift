@@ -146,6 +146,11 @@ extension [InstalledAddon] {
         }
     }
 
+    /// Whether any addon serves streams at all; without one nothing can be played.
+    public var hasStreamAddon: Bool {
+        contains { $0.manifest?.resources.contains { $0.name == AddonResource.stream.rawValue } == true }
+    }
+
     /// Addons that serve subtitles for this item, in the user's order.
     public func subtitleProviders(type: String, id: String) -> [SubtitleProvider] {
         compactMap { addon in

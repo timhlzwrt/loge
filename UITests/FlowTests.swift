@@ -161,7 +161,7 @@ final class FlowTests: XCTestCase {
         // Only the successful query should be remembered.
         field.typeText("\n")
         field.buttons.firstMatch.tap()
-        XCTAssertTrue(app.staticTexts["Recent Searches"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Recent"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["batman"].exists)
         XCTAssertFalse(app.buttons["batmanzzqxjvw"].exists)
         screenshot("search-recent")
@@ -177,7 +177,7 @@ final class FlowTests: XCTestCase {
         screenshot("search-genre-chosen")
         genre.tap()
         app.buttons["Any genre"].tap()
-        XCTAssertTrue(app.staticTexts["Genres"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Browse by Genre"].waitForExistence(timeout: 5))
     }
 
     @MainActor
@@ -213,7 +213,9 @@ final class FlowTests: XCTestCase {
         app.buttons["Popular Movies"].firstMatch.tap()
         app.buttons["Sort"].firstMatch.tap()
         app.buttons["New"].firstMatch.tap()
-        XCTAssertTrue(app.buttons["Year"].waitForExistence(timeout: 5))
+        // A menu on wider screens, a row of year chips on a phone.
+        let years = app.buttons.matching(NSPredicate(format: "label MATCHES '(19|20)[0-9][0-9]'")).firstMatch
+        XCTAssertTrue(app.buttons["Year"].waitForExistence(timeout: 5) || years.exists)
         XCTAssertTrue(app.navigationBars.matching(NSPredicate(format: "identifier BEGINSWITH 'New Movies · '")).firstMatch
             .waitForExistence(timeout: 5))
         screenshot("grid-new-by-year")
@@ -253,7 +255,7 @@ final class FlowTests: XCTestCase {
         let close = app.buttons["Close"]
         XCTAssertTrue(close.waitForExistence(timeout: 20), "Player didn't open")
         close.tap()
-        XCTAssertTrue(app.buttons["Season"].waitForExistence(timeout: 5),
+        XCTAssertTrue(seasonPicker.waitForExistence(timeout: 5),
                       "Closing the player didn't return to the details screen")
         screenshot("after-close")
     }
@@ -273,7 +275,7 @@ final class FlowTests: XCTestCase {
         XCTAssertNotEqual(slider.value as? String, initial, "Timeline stayed frozen during playback")
         screenshot("advancing-timeline")
         app.buttons["Close"].tap()
-        XCTAssertTrue(app.buttons["Season"].waitForExistence(timeout: 5))
+        XCTAssertTrue(seasonPicker.waitForExistence(timeout: 5))
     }
 
     @MainActor
@@ -287,7 +289,7 @@ final class FlowTests: XCTestCase {
             }
             XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 20))
             app.buttons["Close"].tap()
-            XCTAssertTrue(app.buttons["Season"].waitForExistence(timeout: 5), "Closing playback lost the details screen")
+            XCTAssertTrue(seasonPicker.waitForExistence(timeout: 5), "Closing playback lost the details screen")
             XCTAssertEqual(app.state, .runningForeground)
         }
         screenshot("repeated-close")
@@ -339,7 +341,7 @@ final class FlowTests: XCTestCase {
         app.buttons["Pause"].tap()
         screenshot("source-replaced")
         app.buttons["Close"].tap()
-        XCTAssertTrue(app.buttons["Season"].waitForExistence(timeout: 5))
+        XCTAssertTrue(seasonPicker.waitForExistence(timeout: 5))
     }
 
     /// Waits for the window to take the shape the device turned to.
@@ -369,7 +371,7 @@ final class FlowTests: XCTestCase {
         XCTAssertEqual(isUpright(), isPhone)
         XCUIDevice.shared.orientation = .portrait
         openSeries("Lanterns")
-        XCTAssertTrue(app.buttons["Season"].waitForExistence(timeout: 15))
+        XCTAssertTrue(seasonPicker.waitForExistence(timeout: 15))
         XCUIDevice.shared.orientation = .landscapeLeft
         sleep(3)
         screenshot("rotated-details")
@@ -721,7 +723,7 @@ final class FlowTests: XCTestCase {
         screenshot("tour-home-rows")
 
         openSeries("Lanterns")
-        XCTAssertTrue(app.buttons["Season"].waitForExistence(timeout: 15))
+        XCTAssertTrue(seasonPicker.waitForExistence(timeout: 15))
         sleep(2)
         screenshot("tour-details")
         // The backdrop fades as the page scrolls past it.
@@ -729,7 +731,7 @@ final class FlowTests: XCTestCase {
         sleep(1)
         screenshot("tour-details-scrolled")
         app.swipeDown()
-        app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Choose a Source'")).firstMatch.tap()
+        app.buttons["Sources"].firstMatch.tap()
         let source = app.buttons.matching(NSPredicate(format: "label CONTAINS 'DTS 5.1'")).firstMatch
         XCTAssertTrue(source.waitForExistence(timeout: 15), "No test sources")
         screenshot("tour-sources")
@@ -775,6 +777,12 @@ final class FlowTests: XCTestCase {
             sleep(1)
         }
         XCTAssertTrue(pause.exists, "Playback didn't start")
+    }
+
+    /// The season menu on wider screens, or a phone's season pills: there once episodes have loaded.
+    @MainActor
+    private var seasonPicker: XCUIElement {
+        app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Season'")).firstMatch
     }
 
     /// The first episode card in view: the row starts at the one up next.

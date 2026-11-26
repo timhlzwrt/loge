@@ -91,7 +91,7 @@ struct RecommendedRow: View {
             LazyHStack(spacing: Metrics.rowSpacing) {
                 ForEach(metas) { meta in
                     NavigationLink(value: meta) {
-                        PosterTile(meta: meta)
+                        PosterTile(meta: meta, caption: Metrics.isTV ? .none : .year)
                             #if os(tvOS)
                             .modifier(ReportsFocus { onFocus(meta) })
                             #endif

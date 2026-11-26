@@ -1,9 +1,9 @@
 import LogeCore
 import SwiftUI
 
-/// Every playable source from the user's stream addons, grouped by resolution.
-/// Rows describe the file (release, codec, HDR, audio, bitrate, size) and never name the addon
-/// or the file, whose names can carry account details.
+/// Every playable source from the user's stream addons, best first by resolution.
+/// Rows describe the file (release, codec, HDR, audio, bitrate, size); the Mac's tooltip adds
+/// the release name. Only the addon's host is ever shown, since its URLs carry keys.
 struct SourcesView: View {
     let route: SourcesRoute
     /// Shown over the details screen to pick a source, rather than pushed by Play as the
@@ -111,7 +111,10 @@ struct SourcesView: View {
         }
         #endif
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background { PageGlow() }
+        .background {
+            // An iPhone or iPad sheet keeps the system's plain sheet behind its list.
+            if !isPhoneSheet { Color.canvas.ignoresSafeArea() }
+        }
         .hidingPhoneTabBar()
         #if !os(tvOS)
         .navigationTitle(route.title)
@@ -127,7 +130,8 @@ struct SourcesView: View {
             #if os(tvOS)
             if !hasPlacedFocus {
                 let groups = groups(providers)
-                if let id = lastPlayedID(in: groups) ?? recommendedID(in: groups) ?? groups.first?.entries.first?.id {
+                if let id = playPick(providers)?.id ?? lastPlayedID(in: groups) ?? recommendedID(in: groups)
+                    ?? groups.first?.entries.first?.id {
                     initialFocusID = id
                 }
             }
@@ -148,6 +152,14 @@ struct SourcesView: View {
 
     // MARK: Layouts
 
+    private var isPhoneSheet: Bool {
+        #if os(iOS)
+        isChoosing
+        #else
+        false
+        #endif
+    }
+
     @ViewBuilder
     private func content(_ providers: [StreamProvider]) -> some View {
         let groups = groups(providers)
@@ -163,46 +175,49 @@ struct SourcesView: View {
         if isChoosing {
             phoneSheet(groups, providers: providers)
         } else {
-            ScrollView { list(groups, providers: providers).padding(.horizontal, 16).padding(.vertical, 8) }
+            ScrollView { list(groups, providers: providers).padding(.horizontal, Metrics.gutter).padding(.vertical, 8) }
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) { filterMenu(providers) }
+                }
         }
         #endif
     }
 
-    /// "5 sources", or "5 of 47 sources" while filtered, once something has loaded.
+    /// "5 found", or "5 of 47 shown" while filtered, once something has loaded.
     private func countLabel(_ groups: [SourceSelection.Group], providers: [StreamProvider]) -> String? {
         let total = listedSources(providers).count
         let shown = groups.reduce(0) { $0 + $1.entries.count }
         guard total > 0 else { return nil }
-        let noun = total == 1 ? "source" : "sources"
-        return shown == total ? "\(total) \(noun)" : "\(shown) of \(total) \(noun)"
+        return shown == total ? "\(total) found" : "\(shown) of \(total) shown"
     }
 
     #if os(tvOS)
-    /// The title over its dimmed backdrop on the left, the list on the right.
+    /// Over a blurred still: the title's logo, the episode and where the sources come from on
+    /// the left, the list on the right.
     private func tvLayout(_ groups: [SourceSelection.Group], providers: [StreamProvider]) -> some View {
-        ZStack(alignment: .bottomLeading) {
+        ZStack(alignment: .topLeading) {
             Artwork(url: route.item.background)
-                .overlay(Color.black.opacity(0.55))
-                .overlay {
-                    LinearGradient(
-                        stops: [.init(color: .canvas.opacity(0), location: 0.2), .init(color: .canvas, location: 0.6)],
-                        startPoint: .leading, endPoint: .trailing
-                    )
-                }
+                .blur(radius: 40)
+                .overlay(Color.black.opacity(0.6))
                 .ignoresSafeArea()
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 10) {
-                Text(route.item.title)
-                    .font(.system(size: 76, weight: .bold))
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.6)
+            VStack(alignment: .leading, spacing: 14) {
+                TitleLogo(logo: MetaPreview.cinemetaLogo(for: route.item.metaID), name: route.item.title,
+                          maxHeight: 130, isWhite: true)
+                    .frame(maxWidth: 520, alignment: .leading)
                 if let subtitle = [route.item.episodeCode, route.item.episodeTitle].compactMap({ $0 }).joined(separator: " · ").nilIfEmpty {
                     Text(subtitle)
                         .font(.metaLine)
+                }
+                if let count = countLabel(groups, providers: providers) {
+                    Text("\(count) from \(providers.map(\.name).formatted(.list(type: .and).locale(.interface))).")
+                        .font(.metaLine)
                         .foregroundStyle(.secondary)
+                        .padding(.top, 12)
                 }
             }
-            .frame(maxWidth: 760, alignment: .leading)
+            .frame(maxWidth: 620, alignment: .leading)
+            .padding(.top, 60)
             ScrollViewReader { proxy in
                 List {
                     list(groups, providers: providers)
@@ -211,42 +226,43 @@ struct SourcesView: View {
                     if let initialFocusID { proxy.scrollTo(initialFocusID) }
                 }
             }
-            .frame(width: 860)
+            .frame(width: 1000)
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
     }
     #endif
 
     #if os(iOS)
+    /// "Sources" over what they're for and how many, with the filters at the other end.
+    /// Swiping down closes it, as its grabber shows.
     private func phoneSheet(_ groups: [SourceSelection.Group], providers: [StreamProvider]) -> some View {
         VStack(spacing: 0) {
-            ZStack(alignment: .trailing) {
-                // The episode code goes under the series, where truncating the long name can't cut it off.
-                VStack(spacing: 1) {
-                    Text(route.item.title)
-                        .font(.headline)
-                        .lineLimit(1)
-                    if let detail = [route.item.episodeCode, countLabel(groups, providers: providers)].compactMap({ $0 }).joined(separator: " · ").nilIfEmpty {
-                        Text(detail)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
+            HStack(alignment: .firstTextBaseline) {
+                // A centred panel on iPad, which has no grabber to swipe.
+                if !Metrics.isPhone {
+                    Button("Close") { dismiss() }
+                        .foregroundStyle(.white.opacity(0.75))
+                        .padding(.trailing, 8)
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 64)
-                Button("Close", systemImage: "xmark") { dismiss() }
-                    .labelStyle(.iconOnly)
-                    .font(.body.weight(.semibold))
-                    .frame(width: 44, height: 44)
-                    .buttonStyle(.glass)
-                    .buttonBorderShape(.circle)
-                    .padding(.trailing, 16)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Sources")
+                        .font(.title2.bold())
+                        .accessibilityAddTraits(.isHeader)
+                    Text([route.item.title, route.item.episodeCode, countLabel(groups, providers: providers)]
+                        .compactMap { $0 }.joined(separator: " · "))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer()
+                filterMenu(providers)
             }
-            .padding(.top, 20)
-            .padding(.bottom, 12)
+            .padding(.horizontal, Metrics.gutter)
+            .padding(.top, 24)
+            .padding(.bottom, 8)
             ScrollView {
                 list(groups, providers: providers)
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, Metrics.gutter)
                     .padding(.vertical, 8)
             }
         }
@@ -255,19 +271,51 @@ struct SourcesView: View {
     }
     #endif
 
+    #if !os(tvOS)
+    /// The addon and the filters, each a submenu showing its value.
+    private func filterMenu(_ providers: [StreamProvider]) -> some View {
+        let available = availableProviders
+        let marked = Set(listedSources(providers).flatMap(\.details.languages))
+        return Menu {
+            if available.count > 1, providers.count == 1, let chosen = providers.first {
+                addonPicker(available, chosen: chosen).pickerStyle(.menu)
+            }
+            Group {
+                audioPicker(PlaybackPreferences.languages.filter { marked.contains($0.code) })
+                picturePicker
+                bitratePicker
+                cachedPicker
+            }
+            .pickerStyle(.menu)
+        } label: {
+            Text("Filter")
+                .font(.body.weight(.medium))
+                .foregroundStyle(.white.opacity(0.75))
+                .frame(minHeight: 44)
+                .contentShape(.rect)
+        }
+    }
+    #endif
+
     #if os(macOS)
     private func macSheet(_ groups: [SourceSelection.Group], providers: [StreamProvider]) -> some View {
-        let selected = selectedID ?? lastPlayedID(in: groups) ?? groups.first?.entries.first?.id
-        let entry = groups.lazy.flatMap(\.entries).first { $0.id == selected }
+        let pick = playPick(providers)
+        let selected = selectedID ?? pick?.id ?? lastPlayedID(in: groups) ?? groups.first?.entries.first?.id
+        let entry = pick?.id == selected ? pick : groups.lazy.flatMap(\.entries).first { $0.id == selected }
         return VStack(spacing: 14) {
-            VStack(spacing: 2) {
-                Text("Choose a Source")
-                    .font(.headline)
-                Text([route.title, countLabel(groups, providers: providers)].compactMap { $0 }.joined(separator: " · "))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Sources")
+                        .font(.title3.bold())
+                    Text([route.title, countLabel(groups, providers: providers)].compactMap { $0 }.joined(separator: " · "))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                filterMenu(providers)
+                    .fixedSize()
             }
-            .padding(.top, 20)
+            .padding([.horizontal, .top], 20)
             ScrollViewReader { proxy in
                 ScrollView {
                     list(groups, providers: providers, selectedID: selected)
@@ -303,7 +351,8 @@ struct SourcesView: View {
         .focused($isListFocused)
         .onAppear { isListFocused = true }
         .onMoveCommand { direction in
-            let ids = groups.flatMap(\.entries).map(\.id)
+            // In the order shown: Play's pick on top, left out of the list below.
+            let ids = [pick?.id].compactMap { $0 } + groups.flatMap(\.entries).map(\.id).filter { $0 != pick?.id }
             guard let index = selected.flatMap(ids.firstIndex(of:)) else { return }
             switch direction {
             case .up: selectedID = ids[max(index - 1, 0)]
@@ -328,9 +377,11 @@ struct SourcesView: View {
         let all = listedSources(providers)
         let hidden = all.count - groups.reduce(0) { $0 + $1.entries.count }
         ListContainer {
+            #if os(tvOS)
             let available = availableProviders
             filterSentence(all, available: available,
                            chosen: available.count > 1 && providers.count == 1 ? providers.first : nil)
+            #endif
             if hidden > 0 && !groups.isEmpty {
                 messageRow("\(hidden) \(hidden == 1 ? "source" : "sources") hidden.", button: "Show all", action: showAll)
             }
@@ -340,22 +391,57 @@ struct SourcesView: View {
                 Text(status)
                     .foregroundStyle(.secondary)
             }
-            ForEach(groups) { group in
-                let isFoldable = group.entries.count > Self.foldedLength + 2
-                let isExpanded = !isFoldable || expandedGroups.contains(group.id)
-                let shown = isExpanded ? group.entries : group.entries.enumerated()
-                    .filter { $0.offset < Self.foldedLength || kept.contains($0.element.id) }
-                    .map(\.element)
-                SourceGroupView(title: "\(group.title) · \(group.entries.count)") {
-                    ForEach(shown) { entry in
+            #if !os(tvOS)
+            // What Play starts by itself, then the rest best first, each row saying its resolution.
+            let pick = playPick(providers)
+            if let pick { picked(pick, isSelected: pick.id == selectedID) }
+            VStack(alignment: .leading, spacing: 0) {
+                if pick != nil, !groups.isEmpty {
+                    Text("Other sources")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.bottom, 6)
+                }
+                ForEach(groups) { group in
+                    let (shown, isFoldable, isExpanded) = folded(group, keeping: kept)
+                    ForEach(shown.filter { $0.id != pick?.id }) { entry in
+                        Divider()
                         row(entry, isLastPlayed: entry.id == lastPlayed, isRecommended: entry.id == recommended,
                             isSelected: entry.id == selectedID)
                     }
                     if isFoldable {
-                        foldButton(group.id, hidden: group.entries.count - shown.count, isExpanded: isExpanded)
+                        Divider()
+                        foldButton(group.id, label: isExpanded ? "Show fewer \(group.title)"
+                                   : "Show \(group.entries.count - shown.count) more \(group.title)")
                     }
                 }
             }
+            #else
+            // List rows of their own, each a focus target; Play's pick first.
+            let pick = playPick(providers)
+            if let pick {
+                Section {
+                    row(pick, isLastPlayed: pick.id == lastPlayed, isRecommended: pick.id == recommended, isSelected: false)
+                } header: {
+                    listHeader("Play picks")
+                }
+            }
+            Section {
+                ForEach(groups) { group in
+                    let (shown, isFoldable, isExpanded) = folded(group, keeping: kept)
+                    ForEach(shown.filter { $0.id != pick?.id }) { entry in
+                        row(entry, isLastPlayed: entry.id == lastPlayed, isRecommended: entry.id == recommended,
+                            isSelected: false)
+                    }
+                    if isFoldable {
+                        foldButton(group.id, label: isExpanded ? "Show fewer \(group.title)"
+                                   : "Show \(group.entries.count - shown.count) more \(group.title)")
+                    }
+                }
+            } header: {
+                if pick != nil, !groups.isEmpty { listHeader("Other sources") }
+            }
+            #endif
             if isLoading {
                 ProgressView()
                     .frame(maxWidth: .infinity)
@@ -401,16 +487,29 @@ struct SourcesView: View {
     /// Rows per resolution before the rest fold away; the order already puts cached ones first.
     private static let foldedLength = 5
 
+    /// The rows a resolution shows: the first few unless unfolded, and always those `kept`.
+    private func folded(_ group: SourceSelection.Group, keeping kept: Set<ListedSource.ID>)
+        -> (shown: [ListedSource], isFoldable: Bool, isExpanded: Bool) {
+        let isFoldable = group.entries.count > Self.foldedLength + 2
+        let isExpanded = !isFoldable || expandedGroups.contains(group.id)
+        let shown = isExpanded ? group.entries : group.entries.enumerated()
+            .filter { $0.offset < Self.foldedLength || kept.contains($0.element.id) }
+            .map(\.element)
+        return (shown, isFoldable, isExpanded)
+    }
+
     /// Stays in place when pressed, so tvOS focus keeps a target while rows appear above it.
-    private func foldButton(_ id: SourceSelection.Group.ID, hidden: Int, isExpanded: Bool) -> some View {
+    private func foldButton(_ id: SourceSelection.Group.ID, label: String) -> some View {
         Button {
-            if isExpanded { expandedGroups.remove(id) } else { expandedGroups.insert(id) }
+            if expandedGroups.contains(id) { expandedGroups.remove(id) } else { expandedGroups.insert(id) }
         } label: {
-            Text(isExpanded ? "Show fewer" : "Show \(hidden) more")
+            Text(label)
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(.secondary)
-                #if !os(tvOS)
+                #if os(macOS)
                 .padding(.horizontal, 16)
+                #endif
+                #if !os(tvOS)
                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 .contentShape(.rect)
                 #endif
@@ -453,6 +552,7 @@ struct SourcesView: View {
         ignoresCachedOnly = true
     }
 
+    #if os(tvOS)
     /// The addon and filters as a sentence whose values are the menus that change them.
     private func filterSentence(_ sources: [ListedSource], available: [StreamProvider], chosen: StreamProvider?) -> some View {
         let marked = Set(sources.flatMap(\.details.languages))
@@ -463,61 +563,32 @@ struct SourcesView: View {
             Words("Sources")
             if let chosen {
                 Words("from")
-                Menu {
-                    Picker("Addon", selection: Binding(get: { chosen.id }, set: { chosenAddon = $0 })) {
-                        ForEach(available) { Text($0.name).tag($0.id) }
-                    }
-                } label: { TokenLabel(chosen.name) }
-                .accessibilityLabel("Addon")
-                .accessibilityValue(chosen.name)
+                Menu { addonPicker(available, chosen: chosen) } label: { TokenLabel(chosen.name) }
+                    .accessibilityLabel("Addon")
+                    .accessibilityValue(chosen.name)
             }
             if !languages.isEmpty {
                 Words("in")
-                Menu {
-                    Picker("Audio", selection: $audioLanguage) {
-                        Text("Any language").tag(String?.none)
-                        ForEach(languages, id: \.code) { Text($0.name).tag(Optional($0.code)) }
-                    }
-                } label: { TokenLabel(language ?? "any language") }
-                .accessibilityLabel("Audio")
-                .accessibilityValue(language ?? "Any language")
+                Menu { audioPicker(languages) } label: { TokenLabel(language ?? "any language") }
+                    .accessibilityLabel("Audio")
+                    .accessibilityValue(language ?? "Any language")
                 Words("and")
             } else {
                 Words("in")
             }
-            Menu {
-                Picker("Picture", selection: $picture) {
-                    Text("Any picture").tag(SourceSelection.Filter.Picture.any)
-                    Text("HDR or Dolby Vision").tag(SourceSelection.Filter.Picture.hdr)
-                    Text("SDR").tag(SourceSelection.Filter.Picture.sdr)
-                }
-            } label: {
+            Menu { picturePicker } label: {
                 TokenLabel(filter.picture == .hdr ? "HDR" : filter.picture == .sdr ? "SDR" : "any picture")
             }
             .accessibilityLabel("Picture")
             .accessibilityValue(filter.picture == .hdr ? "HDR or Dolby Vision" : filter.picture == .sdr ? "SDR" : "Any picture")
             Words(filter.maximumBitrate == 0 ? ", at" : ", up to")
-            Menu {
-                Picker("Bitrate", selection: Binding(get: { filter.maximumBitrate },
-                                                     set: { maximumBitrate = $0; ignoresBitrateLimit = false })) {
-                    Text("Any bitrate").tag(0)
-                    ForEach(SyncedSettings.maximumBitrateOptions.filter { $0 > 0 }, id: \.self) {
-                        Text("\($0) Mbps").tag($0)
-                    }
-                }
-            } label: {
+            Menu { bitratePicker } label: {
                 TokenLabel(filter.maximumBitrate == 0 ? "any bitrate" : "\(filter.maximumBitrate) Mbps")
             }
             .accessibilityLabel("Bitrate")
             .accessibilityValue(filter.maximumBitrate == 0 ? "Any bitrate" : "Up to \(filter.maximumBitrate) Mbps")
             Words(",")
-            Menu {
-                Picker("Cached", selection: Binding(get: { filter.cachedOnly },
-                                                    set: { cachedOnly = $0; ignoresCachedOnly = false })) {
-                    Text("Cached only").tag(true)
-                    Text("Cached or not").tag(false)
-                }
-            } label: {
+            Menu { cachedPicker } label: {
                 TokenLabel(filter.cachedOnly ? "cached only" : "cached or not")
             }
             .accessibilityLabel("Cached only")
@@ -527,6 +598,50 @@ struct SourcesView: View {
         .buttonStyle(TokenButtonStyle())
         .menuStyle(.button)
         .padding(.vertical, 8)
+    }
+    #endif
+
+    private func addonPicker(_ available: [StreamProvider], chosen: StreamProvider) -> some View {
+        Picker("Addon", selection: Binding(get: { chosen.id }, set: { chosenAddon = $0 })) {
+            ForEach(available) { Text($0.name).tag($0.id) }
+        }
+    }
+
+    /// Only the languages the sources mark; nothing when none do.
+    @ViewBuilder
+    private func audioPicker(_ languages: [(code: String, name: String)]) -> some View {
+        if !languages.isEmpty {
+            Picker("Audio", selection: $audioLanguage) {
+                Text("Any language").tag(String?.none)
+                ForEach(languages, id: \.code) { Text($0.name).tag(Optional($0.code)) }
+            }
+        }
+    }
+
+    private var picturePicker: some View {
+        Picker("Picture", selection: $picture) {
+            Text("Any picture").tag(SourceSelection.Filter.Picture.any)
+            Text("HDR or Dolby Vision").tag(SourceSelection.Filter.Picture.hdr)
+            Text("SDR").tag(SourceSelection.Filter.Picture.sdr)
+        }
+    }
+
+    private var bitratePicker: some View {
+        Picker("Bitrate", selection: Binding(get: { filter.maximumBitrate },
+                                             set: { maximumBitrate = $0; ignoresBitrateLimit = false })) {
+            Text("Any bitrate").tag(0)
+            ForEach(SyncedSettings.maximumBitrateOptions.filter { $0 > 0 }, id: \.self) {
+                Text("\($0) Mbps").tag($0)
+            }
+        }
+    }
+
+    private var cachedPicker: some View {
+        Picker("Cached", selection: Binding(get: { filter.cachedOnly },
+                                            set: { cachedOnly = $0; ignoresCachedOnly = false })) {
+            Text("Cached only").tag(true)
+            Text("Cached or not").tag(false)
+        }
     }
 
     @ViewBuilder
@@ -543,6 +658,8 @@ struct SourcesView: View {
                 .onTapGesture { selectedID = entry.id }
                 .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
                 .accessibilityAction { choose(entry) }
+                // The full release name, which the row sums up.
+                .help(entry.stream.behaviorHints?.filename ?? entry.stream.cleanName ?? "")
         } else {
             Button { choose(entry) } label: { label }
                 .buttonStyle(.plain)
@@ -640,18 +757,63 @@ struct SourcesView: View {
         }
     }
 
-    /// The remembered source as the addon lists it now: the same file or the same release.
-    /// Never its saved URL, since a stream host can refuse an old link.
     private func playContinuingSourceIfPossible() {
-        guard route.autoplay, !hasAutoplayed, let remembered = library.sources[route.item.metaID],
-              case .success(let entries) = results[remembered.providerURL],
-              let stream = SourceSelection.continuing(remembered, itemID: route.id, in: automatic(entries).map(\.stream)),
-              let provider = entries.first?.provider
-        else { return }
+        guard route.autoplay, !hasAutoplayed, let source = continuingSource() else { return }
         hasAutoplayed = true
         playedAutomatically = true
-        play(stream, from: provider)
+        play(source.stream, from: source.provider)
     }
+
+    /// What Play starts by itself: the remembered source as the addon lists it now, the same
+    /// file or the same release. Never its saved URL, since a stream host can refuse an old link.
+    private func continuingSource() -> ListedSource? {
+        guard let remembered = library.sources[route.item.metaID],
+              case .success(let entries) = results[remembered.providerURL] else { return nil }
+        let allowed = automatic(entries)
+        guard let stream = SourceSelection.continuing(remembered, itemID: route.id, in: allowed.map(\.stream))
+        else { return nil }
+        return allowed.first { $0.stream.playbackURL == stream.playbackURL }
+    }
+
+    /// Play's choice, when its addon is among those listed.
+    private func playPick(_ providers: [StreamProvider]) -> ListedSource? {
+        continuingSource().flatMap { pick in providers.contains { $0.id == pick.provider.id } ? pick : nil }
+    }
+
+    #if os(tvOS)
+    private func listHeader(_ title: String) -> some View {
+        // Not `.secondary`: a list header dims its text again, which left these unreadable.
+        Text(title)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.white.opacity(0.6))
+            // Room for the first row, which grows into the header when focused.
+            .padding(.bottom, 12)
+    }
+    #else
+
+    /// Play's choice on its own panel, with Play, so the usual source is one tap away. The
+    /// Mac's sheet selects it like any row, for its own Play.
+    private func picked(_ entry: ListedSource, isSelected: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Play picks")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            #if os(macOS)
+            row(entry, isLastPlayed: false, isRecommended: false, isSelected: isSelected)
+            #else
+            StreamRow(entry: entry, isLastPlayed: false, connectionSpeed: nil)
+            Button { choose(entry) } label: {
+                Label("Play", systemImage: "play.fill").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .controlSize(.small)
+            .padding(.top, 4)
+            #endif
+        }
+        .padding(16)
+        .background(.white.opacity(0.07), in: .rect(cornerRadius: 16))
+    }
+    #endif
 
     /// After the progress refresh, which waits at most a second, picks the resume position.
     private func play(_ stream: StreamSource, from provider: StreamProvider) {

@@ -2,7 +2,10 @@ import LogeCore
 import SwiftUI
 
 struct SearchView: View {
-    @State private var query = ""
+    @Environment(TMDBAccount.self) private var tmdb
+    @State private var ownQuery = ""
+    /// The Mac's toolbar field, which lives above the tabs, in place of this page's own.
+    private var toolbarQuery: Binding<String>?
     @State private var submittedQuery = ""
     /// Results per catalog for the current query, filled in as each one answers.
     @State private var resultCounts: [CatalogSource.ID: Int] = [:]
@@ -19,15 +22,47 @@ struct SearchView: View {
     #endif
 
     init(query: String = "") {
-        _query = State(initialValue: query)
+        _ownQuery = State(initialValue: query)
     }
 
+    #if os(macOS)
+    init(toolbarQuery: Binding<String>) {
+        self.toolbarQuery = toolbarQuery
+    }
+    #endif
+
+    private var query: Binding<String> { toolbarQuery ?? $ownQuery }
+
     var body: some View {
+        if toolbarQuery != nil {
+            page
+        } else {
+            page
+                #if os(iOS)
+                .searchable(text: $ownQuery, placement: .navigationBarDrawer(displayMode: .always), prompt: prompt)
+                .navigationBarTitleDisplayMode(.large)
+                #else
+                .searchable(text: $ownQuery, prompt: prompt)
+                #endif
+                .onSubmit(of: .search) {
+                    // Return searches at once rather than after the typing pause.
+                    submit(trimmedQuery)
+                    returnedQuery = trimmedQuery
+                    remember(trimmedQuery)
+                }
+        }
+    }
+
+    @ViewBuilder
+    private var page: some View {
         let sources = DiscoveryCatalogs.search.filtered(type: type, genre: genre)
         // Spaces alone search nothing, so they show what an empty field does.
         let isEmpty = trimmedQuery.isEmpty
         ScrollView {
-            filters
+            // A phone opens on recent searches and genres; the filters come with something to narrow.
+            if Metrics.isTV || !isEmpty || genre != nil || type != nil {
+                filters
+            }
             if isEmpty && genre == nil {
                 recent
                 genreList
@@ -46,37 +81,31 @@ struct SearchView: View {
                     ContentUnavailableView.search(text: submittedQuery)
                         .padding(.top, 80)
                 }
-                LazyVStack(alignment: .leading, spacing: 32) {
-                    ForEach(sources) { source in
-                        CatalogRow(source: source, search: submittedQuery, onLoaded: { count in
-                            resultCounts[source.id] = count
-                            if count > 0, returnedQuery == submittedQuery { remember(submittedQuery) }
-                        })
+                if !Metrics.isTV {
+                    SearchResultList(sources: sources, query: submittedQuery, onLoaded: loaded)
+                        .padding(.vertical, 12)
+                } else {
+                    LazyVStack(alignment: .leading, spacing: 32) {
+                        #if os(tvOS)
+                        PersonMatch(query: submittedQuery)
+                        #endif
+                        ForEach(sources) { source in
+                            CatalogRow(source: source, search: submittedQuery, onLoaded: { loaded(source.id, count: $0) })
+                        }
                     }
+                    .padding(.vertical, 24)
                 }
-                .padding(.vertical, 24)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background { PageGlow() }
+        .background(Color.canvas.ignoresSafeArea())
         #if !os(tvOS)
         // tvOS keeps a title fixed in place, over the content as it scrolls; the tab already says Search.
         .navigationTitle("Search")
         #endif
-        #if os(iOS)
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Movies and series")
-        #else
-        .searchable(text: $query, prompt: "Movies and series")
-        #endif
-        .onSubmit(of: .search) {
-            // Return searches at once rather than after the typing pause.
-            submit(trimmedQuery)
-            returnedQuery = trimmedQuery
-            remember(trimmedQuery)
-        }
         // Opening a result also leaves this screen, which is when a search proved useful.
         .onDisappear { remember(submittedQuery) }
-        .task(id: query) {
+        .task(id: query.wrappedValue) {
             // Wait for a pause in typing so each keystroke doesn't query every addon.
             do {
                 try await Task.sleep(for: .milliseconds(400))
@@ -85,6 +114,17 @@ struct SearchView: View {
             }
             submit(trimmedQuery)
         }
+    }
+
+    /// A catalog's number of results, or -1 when it failed.
+    private func loaded(_ id: CatalogSource.ID, count: Int) {
+        resultCounts[id] = count
+        if count > 0, returnedQuery == submittedQuery { remember(submittedQuery) }
+    }
+
+    /// A phone finds people too, with TMDB.
+    private var prompt: String {
+        !Metrics.isTV && tmdb.isConfigured ? "Movies, series and people" : "Movies and series"
     }
 
     private var takesFocus: Bool {
@@ -96,7 +136,7 @@ struct SearchView: View {
     }
 
     private var trimmedQuery: String {
-        query.trimmingCharacters(in: .whitespaces)
+        query.wrappedValue.trimmingCharacters(in: .whitespaces)
     }
 
     private func submit(_ term: String) {
@@ -153,8 +193,8 @@ struct SearchView: View {
 
     private var genreList: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Genres")
-                .font(.headline)
+            Text("Browse by Genre")
+                .font(.sectionTitle)
             LazyVGrid(columns: [GridItem(.adaptive(minimum: Metrics.posterWidth * 1.4), spacing: Metrics.rowSpacing)],
                       spacing: Metrics.rowSpacing) {
                 ForEach(genres.compactMap(DiscoveryCatalogs.genre(named:))) { genre in
@@ -187,8 +227,8 @@ struct SearchView: View {
         if !recents.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Text("Recent Searches")
-                        .font(.headline)
+                    Text("Recent")
+                        .font(.sectionTitle)
                     Spacer()
                     Button {
                         recentSearches = ""
@@ -207,7 +247,7 @@ struct SearchView: View {
                 VStack(alignment: .leading, spacing: Self.recentSpacing) {
                     ForEach(recents, id: \.self) { term in
                         Button {
-                            query = term
+                            query.wrappedValue = term
                         } label: {
                             Label(term, systemImage: "clock.arrow.circlepath")
                                 #if os(tvOS)
@@ -251,3 +291,189 @@ struct SearchView: View {
         recentSearches = ([term] + others).prefix(10).joined(separator: "\n")
     }
 }
+
+/// A phone's results: one list across the catalogs, alternating between them as they rank
+/// their own matches, each title a row with its kind and year. With TMDB, someone whose name
+/// matches comes first.
+private struct SearchResultList: View {
+    let sources: [CatalogSource]
+    let query: String
+    /// A catalog's number of results, or -1 when it failed.
+    let onLoaded: (CatalogSource.ID, _ count: Int) -> Void
+
+    @Environment(TMDBAccount.self) private var tmdb
+    @State private var results: [CatalogSource.ID: Result<[MetaPreview], Error>] = [:]
+    @State private var person: Person?
+    @State private var attempt = 0
+
+    var body: some View {
+        LazyVStack(alignment: .leading, spacing: 0) {
+            if let person {
+                NavigationLink(value: PersonRoute(person: person)) {
+                    row(name: person.name, detail: role(of: person)) {
+                        PersonAvatar(name: person.name, portraitURL: person.portraitURL, size: 54)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+            if Metrics.isPhone {
+                ForEach(titles) { meta in
+                    NavigationLink(value: meta) {
+                        row(name: meta.name, detail: detail(of: meta)) {
+                            Artwork(url: meta.poster)
+                                .frame(width: 54, height: 81)
+                                .clipShape(.rect(cornerRadius: 7))
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .contextMenu { WatchLaterToggle(title: meta) }
+                }
+            } else {
+                // Wider screens have room for the posters themselves.
+                LazyVGrid(columns: Metrics.posterGridColumns, spacing: 22) {
+                    ForEach(titles) { meta in
+                        NavigationLink(value: meta) {
+                            PosterTile(meta: meta, width: nil, caption: .line(detail(of: meta)))
+                        }
+                        .tileButtonStyle()
+                    }
+                }
+                .padding(.horizontal, Metrics.gutter)
+                .padding(.top, 12)
+            }
+            let failed = sources.filter { if case .failure = results[$0.id] { true } else { false } }
+            if !failed.isEmpty {
+                HStack {
+                    Text("Couldn't search \(failed.map(\.title).formatted(.list(type: .and).locale(.interface))).")
+                        .foregroundStyle(.secondary)
+                    Button("Retry") { attempt += 1 }
+                }
+                .padding(.horizontal, Metrics.gutter)
+                .padding(.vertical, 12)
+            }
+            if sources.contains(where: { results[$0.id] == nil }) {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 24)
+            }
+        }
+        .task(id: query) {
+            results = [:]
+            person = nil
+        }
+        .task(id: "\(query)#\(attempt)") { await load() }
+        // Not an error worth showing: the titles are what was searched for.
+        .task(id: "\(query)#\(tmdb.revision)") {
+            guard tmdb.isConfigured else { return }
+            person = try? await tmdb.person(named: query)
+        }
+    }
+
+    /// The catalogs' lists taken in turn, so neither kind waits below the other's whole list.
+    private var titles: [MetaPreview] {
+        let lists = sources.map { source -> [MetaPreview] in
+            if case .success(let metas) = results[source.id] { metas } else { [] }
+        }
+        var seen = Set<String>()
+        return (0..<(lists.map(\.count).max() ?? 0)).flatMap { index in
+            lists.compactMap { index < $0.count ? $0[index] : nil }
+        }
+        .filter { seen.insert($0.id).inserted }
+    }
+
+    private func load() async {
+        let query = query
+        await withTaskGroup(of: (CatalogSource.ID, Result<[MetaPreview], Error>).self) { group in
+            for source in sources where !isLoaded(source) {
+                results[source.id] = nil
+                group.addTask {
+                    do {
+                        // Awaited on its own line, as Release builds have lost a child task's result
+                        // when it was wrapped straight into another expression.
+                        let metas = try await source.items(search: query)
+                        return (source.id, .success(metas))
+                    } catch {
+                        return (source.id, .failure(error))
+                    }
+                }
+            }
+            for await (id, result) in group {
+                guard !Task.isCancelled else { return }
+                results[id] = result
+                if case .success(let metas) = result { onLoaded(id, metas.count) } else { onLoaded(id, -1) }
+            }
+        }
+    }
+
+    private func isLoaded(_ source: CatalogSource) -> Bool {
+        if case .success = results[source.id] { true } else { false }
+    }
+
+    private func row(name: String, detail: String?, @ViewBuilder image: () -> some View) -> some View {
+        HStack(spacing: 14) {
+            image()
+            VStack(alignment: .leading, spacing: 2) {
+                Text(name)
+                    .font(.callout.weight(.semibold))
+                    .lineLimit(2)
+                if let detail {
+                    Text(detail)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, Metrics.gutter)
+        .padding(.vertical, 8)
+        .contentShape(.rect)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(name)
+        .accessibilityValue(detail ?? "")
+    }
+
+    /// "Movie · 2021".
+    private func detail(of meta: MetaPreview) -> String? {
+        let kind = meta.type == MediaType.movie ? "Movie" : meta.type == MediaType.series ? "Series" : nil
+        return [kind, meta.releaseInfo?.nilIfEmpty].compactMap { $0 }.joined(separator: " · ").nilIfEmpty
+    }
+
+    private func role(of person: Person) -> String {
+        switch person.roles.first {
+        case .director: "Director"
+        case .writer: "Writer"
+        case .actor: "Actor"
+        case nil: "Person"
+        }
+    }
+}
+
+#if os(tvOS)
+/// Apple TV's results lead with someone whose name matches, as a portrait to open, when
+/// TMDB is connected.
+private struct PersonMatch: View {
+    let query: String
+    @Environment(TMDBAccount.self) private var tmdb
+    @State private var person: Person?
+
+    var body: some View {
+        // A view even without a match, so the lookup below has something to run on.
+        ZStack {
+            Color.clear.frame(width: 0, height: 0)
+            if let person {
+                NavigationLink(value: PersonRoute(person: person)) {
+                    PersonTile(person: person)
+                }
+                .buttonStyle(PersonButtonStyle())
+                .padding(.vertical, 20)
+            }
+        }
+        // Not an error worth showing: the titles are what was searched for.
+        .task(id: "\(query)#\(tmdb.revision)") {
+            person = nil
+            guard tmdb.isConfigured else { return }
+            person = try? await tmdb.person(named: query)
+        }
+    }
+}
+#endif

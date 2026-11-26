@@ -15,11 +15,12 @@ extension View {
     }
 }
 
-/// The details page on a wide page (iPad, Mac): the hero and what follows from it on the left,
-/// cast and information on the right, and full-width sections below both.
+/// The details page on a wide page (iPad, Mac): the title, its summary and facts on the left;
+/// episodes, cast and related titles on the right, below the artwork; and anything moved to
+/// full width below both.
 ///
-/// A layout rather than two sets of stacks: it swaps with a `VStackLayout` on rotation while the
-/// sections keep their identity, so the chosen season survives.
+/// A layout rather than two sets of stacks: it swaps with a `VStackLayout` when the window
+/// narrows while the sections keep their identity, so the chosen season survives.
 struct DetailColumnsLayout: Layout {
     /// Where the side column starts, low enough that the artwork above it stays clear.
     let sideTop: CGFloat
@@ -59,8 +60,8 @@ struct DetailColumnsLayout: Layout {
     /// Calls `place` for each subview and returns the total height.
     private func arrange(_ subviews: Subviews, width: CGFloat, widening widened: Int,
                          place: (LayoutSubview, CGPoint, CGFloat) -> Void) -> CGFloat {
-        // Enough on the left for Play and the three actions, even in a narrow window.
-        let mainWidth = min(max((width * 0.58).rounded(), 580), width)
+        // Enough on the left for Play and the four actions, even in a narrow window.
+        let mainWidth = min(max((width * 0.42).rounded(), 440), 560, width)
         let sideIndices = subviews.indices.filter { subviews[$0][DetailColumnKey.self] == .side }
         let moved = Set(sideIndices.suffix(widened))
 
