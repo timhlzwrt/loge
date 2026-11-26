@@ -50,7 +50,16 @@ struct LogeApp: App {
         let defaults: UserDefaults
         #if DEBUG
         let syncUITest = ProcessInfo.processInfo.arguments.contains("--sync-ui-test")
-        defaults = syncUITest ? UserDefaults(suiteName: "sync-ui-\(UUID())")! : .standard
+        // Fixture screens never reach this device's own library, addons or sync account, so
+        // they can run on a Mac that also has the real app set up.
+        let isolated = syncUITest || ProcessInfo.processInfo.arguments.contains("--discovery-ui-test")
+        if isolated {
+            // One name, cleared at launch, so runs don't pile up settings files on a Mac.
+            defaults = UserDefaults(suiteName: "loge.ui-test")!
+            defaults.removePersistentDomain(forName: "loge.ui-test")
+        } else {
+            defaults = .standard
+        }
         #else
         defaults = .standard
         #endif
@@ -60,7 +69,7 @@ struct LogeApp: App {
         let library = LibraryStore(defaults: defaults)
         _addonStore = State(initialValue: addonStore)
         #if DEBUG
-        let accountSync = AccountSync(addons: addonStore, library: library, defaults: defaults, temporaryConnection: syncUITest)
+        let accountSync = AccountSync(addons: addonStore, library: library, defaults: defaults, temporaryConnection: isolated)
         #else
         let accountSync = AccountSync(addons: addonStore, library: library, defaults: defaults)
         #endif
