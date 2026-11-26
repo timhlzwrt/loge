@@ -37,6 +37,7 @@ struct SourcesView: View {
     #if os(macOS)
     @State private var selectedID: ListedSource.ID?
     @FocusState private var isListFocused: Bool
+    @State private var macListHeight: CGFloat = 360
     #endif
     /// Chosen in the sheet, to play once it has closed.
     @State private var pendingPlay: ListedSource?
@@ -320,7 +321,10 @@ struct SourcesView: View {
                 ScrollView {
                     list(groups, providers: providers, selectedID: selected)
                         .padding(.horizontal, 20)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { macListHeight = $0 }
                 }
+                // As tall as the list, up to a screenful, so a short list leaves no empty sheet below it.
+                .frame(height: min(max(macListHeight, 120), 480))
                 .onChange(of: selectedID) { _, id in
                     if let id { proxy.scrollTo(id) }
                 }
@@ -343,7 +347,7 @@ struct SourcesView: View {
             .controlSize(.large)
             .padding([.horizontal, .bottom], 20)
         }
-        .frame(width: 520, height: 600)
+        .frame(width: 520)
         .background(Color.canvas)
         // The arrow keys move the selection, as in a Mac list, so Return can play any row.
         .focusable()

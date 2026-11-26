@@ -108,8 +108,8 @@ struct SettingsSentencesView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, splitsPages ? 0 : Metrics.gutter)
                 .padding(.vertical, Self.lineSpacing)
-                // A phone and an iPad read it from the top, like their other pages; the Mac and TV centre it.
-                .frame(minHeight: proxy.size.height, alignment: Self.isTopAligned ? .top : .center)
+                // Read from the top, like every other page.
+                .frame(minHeight: proxy.size.height, alignment: .top)
                 .buttonStyle(TokenButtonStyle())
                 .menuStyle(.button)
             }
@@ -142,12 +142,6 @@ struct SettingsSentencesView: View {
         false
         #endif
     }
-
-    #if os(macOS)
-    private static let isTopAligned = false
-    #else
-    private static let isTopAligned = true
-    #endif
 
     /// One paragraph, wrapping between its words and values like running text.
     private var settings: some View {

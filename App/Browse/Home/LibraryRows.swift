@@ -477,6 +477,24 @@ private struct RecentlyWatchedRow: View {
 }
 
 /// A poster's long press adds the title to Watch Later or takes it off.
+/// A poster's context menu (long press, or right-click on the Mac): Watch Later, and for a
+/// film its watched mark. A series' episodes aren't known from its poster.
+struct TitleActionsMenu: View {
+    let title: MetaPreview
+    @Environment(LibraryStore.self) private var library
+
+    var body: some View {
+        WatchLaterToggle(title: title)
+        if title.type != MediaType.series, let item = PlayAction(preview: title, meta: nil, library: library)?.route.item {
+            let isWatched = library.isWatched(item.id)
+            Button(isWatched ? "Mark as Unwatched" : "Mark as Watched",
+                   systemImage: isWatched ? "eye.slash" : "checkmark.circle") {
+                if isWatched { library.markUnwatched([item.id]) } else { library.markWatched([item]) }
+            }
+        }
+    }
+}
+
 struct WatchLaterToggle: View {
     let title: MetaPreview
     @Environment(LibraryStore.self) private var library

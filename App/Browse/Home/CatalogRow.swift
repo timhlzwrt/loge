@@ -277,7 +277,7 @@ struct PosterTile: View {
     var body: some View {
         if case .none = caption {
             poster
-                .contextMenu { if offersWatchLater { WatchLaterToggle(title: meta) } }
+                .contextMenu { if offersWatchLater { TitleActionsMenu(title: meta) } }
         } else {
             VStack(alignment: .leading, spacing: 2) {
                 poster
@@ -296,7 +296,7 @@ struct PosterTile: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(meta.name)
             .accessibilityValue([detail, progressValue].compactMap { $0 }.joined(separator: ", "))
-            .contextMenu { if offersWatchLater { WatchLaterToggle(title: meta) } }
+            .contextMenu { if offersWatchLater { TitleActionsMenu(title: meta) } }
         }
     }
 

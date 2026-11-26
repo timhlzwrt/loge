@@ -326,7 +326,7 @@ private struct SearchResultList: View {
                         }
                     }
                     .buttonStyle(.plain)
-                    .contextMenu { WatchLaterToggle(title: meta) }
+                    .contextMenu { TitleActionsMenu(title: meta) }
                 }
             } else {
                 // Wider screens have room for the posters themselves.
