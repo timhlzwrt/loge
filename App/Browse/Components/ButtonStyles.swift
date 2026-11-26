@@ -73,8 +73,8 @@ struct PrimaryButtonStyle: ButtonStyle {
 }
 
 /// A title's other actions: a circle with its name under it, filled white while it's on
-/// (saved to Watch Later, watched). On the Mac and Apple TV a button with icon and name in a
-/// row beside Play.
+/// (saved to Watch Later, watched). On Apple TV a button with icon and name in a row beside
+/// Play.
 struct RoundButtonStyle: ButtonStyle {
     var isOn = false
 
@@ -88,7 +88,7 @@ struct RoundButtonStyle: ButtonStyle {
         @Environment(\.isEnabled) private var isEnabled
 
         var body: some View {
-            #if os(macOS) || os(tvOS)
+            #if os(tvOS)
             PrimaryButtonStyle(isTranslucent: true).makeBody(configuration: configuration)
             #else
             VStack(spacing: 6) {

@@ -152,8 +152,6 @@ struct MetaDetailView: View {
         #elseif os(macOS)
         // Otherwise the window title falls back to the app's name.
         .navigationTitle(preview.name)
-        // The backdrop runs up under the toolbar, which keeps only the back button.
-        .ignoresSafeArea(edges: .top)
         #endif
         #if os(tvOS)
         .fullScreenCover(item: $choosingSource) { SourcesView(route: $0, isChoosing: true) }
@@ -451,13 +449,6 @@ struct MetaDetailView: View {
                     .foregroundStyle(.secondary)
                     .padding(.top, 20)
             }
-            #elseif os(macOS)
-            // With a pointer the actions fit beside Play, each with its name.
-            HStack(spacing: 10) {
-                playButton(play)
-                actions(meta: meta, play: play)
-            }
-            .padding(.top, 18)
             #else
             playButton(play)
                 .padding(.top, 16)
@@ -552,6 +543,8 @@ struct MetaDetailView: View {
                 Label("Watched", systemImage: "checkmark.circle")
             }
             .menuIndicator(.hidden)
+            // Without it the Mac draws a menu its own way and ignores the button style.
+            .menuStyle(.button)
             .buttonStyle(RoundButtonStyle(isOn: isWatched))
             .disabled(released.isEmpty)
         } else if let item = play?.route.item {
@@ -564,11 +557,9 @@ struct MetaDetailView: View {
         }
     }
 
-    /// Circles share the width in equal columns; the Mac's and TV's buttons sit apart.
+    /// Circles share the width in equal columns; the TV's buttons sit apart.
     #if os(tvOS)
     private static let actionSpacing: CGFloat = 24
-    #elseif os(macOS)
-    private static let actionSpacing: CGFloat = 10
     #else
     private static let actionSpacing: CGFloat = 0
     #endif
@@ -593,10 +584,8 @@ struct MetaDetailView: View {
         if let play {
             NavigationLink(value: play.route) {
                 Label(play.label, systemImage: "play.fill")
-                    #if os(iOS)
+                    #if !os(tvOS)
                     .frame(maxWidth: .infinity)
-                    #elseif os(macOS)
-                    .frame(minWidth: 160)
                     #else
                     .frame(minWidth: 260)
                     #endif
