@@ -40,10 +40,10 @@ for release in releases:
     })
 versions.sort(key=lambda v: int(v["buildVersion"]), reverse=True)
 
-# Sizes let SideStore lay out the landscape player before the images load.
+# Sizes let SideStore lay out the screenshots before the images load.
 SCREENSHOTS = [
-    ("iphone-player.jpg", 1800, 828),
-    ("iphone-sources.jpg", 640, 687),
+    (f"sidestore-{name}.jpg", 1290, 2796)
+    for name in ["1-home", "2-title", "3-sources", "4-series", "5-player", "6-settings"]
 ]
 
 # loge's accent: white on the charcoal canvas.
@@ -60,7 +60,7 @@ source = {
     ),
     "website": "https://loge.tjh.li",
     "iconURL": f"{pages_url}/icon.png",
-    "headerURL": f"{pages_url}/images/tv-player.jpg",
+    "headerURL": f"{pages_url}/images/loge-devices.jpg",
     "tintColor": TINT,
     "apps": [{
         "name": "loge",
