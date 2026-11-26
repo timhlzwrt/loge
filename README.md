@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  A native Stremio addon client for <strong>iPhone, iPad, Apple TV and Mac</strong>.<br>
+  A free, native Stremio addon client for <strong>iPhone, iPad, Apple TV and Mac</strong>.<br>
   Browse films and series, choose a source, and play it with mpv.
 </p>
 
@@ -100,7 +100,9 @@ xcodebuild build -project loge.xcodeproj -scheme loge -destination 'generic/plat
 
 ## Licence
 
-[PolyForm Noncommercial 1.0.0](LICENSE). Playback uses [mpv](https://mpv.io) and
+loge is free and source-available under [PolyForm Noncommercial 1.0.0](LICENSE): use it, change it
+and share it, but not commercially, so nobody may sell it or build a paid product from it.
+Playback uses [mpv](https://mpv.io) and
 [FFmpeg](https://ffmpeg.org) through the LGPL build of [MPVKit](https://github.com/mpvkit/MPVKit)
 ([patches](Vendor/MPVKit)); Mac updates use [Sparkle](https://sparkle-project.org)
 ([licence](App/ThirdParty/Sparkle-LICENSE.txt)). This product uses the TMDB API but is not endorsed
