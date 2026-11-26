@@ -584,7 +584,8 @@ final class FlowTests: XCTestCase {
         installTestAddonIfNeeded()
         openSeries("Lanterns")
         episodeCard().tap()
-        let recommended = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'recommended'")).firstMatch
+        // A row, or the Play picks box when the recommended source is also Play's pick.
+        let recommended = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS[c] 'recommended'")).firstMatch
         XCTAssertTrue(recommended.waitForExistence(timeout: 15), "No source recommended")
         XCTAssertFalse(app.buttons["Pause"].exists, "The recommended source started by itself")
         screenshot("source-recommended")
@@ -598,7 +599,7 @@ final class FlowTests: XCTestCase {
         let higherRate = app.buttons.matching(NSPredicate(format: "label MATCHES '.*25[,.]2 Mbps.*'")).firstMatch
         XCTAssertTrue(higherRate.waitForExistence(timeout: 15))
         screenshot("source-bitrates")
-        app.buttons["Bitrate"].tap()
+        openBitrateMenu()
         screenshot("source-bitrate-menu")
         app.buttons["25 Mbps"].tap()
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label ENDSWITH 'hidden.'")).firstMatch.exists)
@@ -608,8 +609,17 @@ final class FlowTests: XCTestCase {
         app.buttons["Show all"].tap()
         XCTAssertTrue(higherRate.exists)
         // The bitrate is the Maximum bitrate setting: back to its default for the other tests.
-        app.buttons["Bitrate"].tap()
+        openBitrateMenu()
         app.buttons["100 Mbps"].tap()
+    }
+
+    /// On a phone the filters sit in the Filter menu, the bitrate as one of its submenus.
+    @MainActor
+    private func openBitrateMenu() {
+        app.buttons["Filter"].firstMatch.tap()
+        let bitrate = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Bitrate'")).firstMatch
+        XCTAssertTrue(bitrate.waitForExistence(timeout: 5), "No Bitrate submenu")
+        bitrate.tap()
     }
 
     /// A source that doesn't open hands over to the next one instead of stopping.
@@ -744,7 +754,8 @@ final class FlowTests: XCTestCase {
         sleep(2)
         if !app.buttons["Close"].exists { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap() }
         screenshot("tour-player")
-        app.buttons["Sources"].tap()
+        // The title page under the player has a Sources button too.
+        app.buttons.matching(identifier: "Sources").allElementsBoundByIndex.last { $0.isHittable }?.tap()
         sleep(2)
         screenshot("tour-player-sources")
         // The sheet's Close is the later of the two.

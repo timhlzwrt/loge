@@ -99,6 +99,8 @@ struct RoundButtonStyle: ButtonStyle {
                     .frame(width: 46, height: 46)
                     .background(isOn ? AnyShapeStyle(.white) : AnyShapeStyle(.white.opacity(0.12)), in: .circle)
                     .contentTransition(.symbolEffect(.replace))
+                    // The label is drawn twice; VoiceOver should say the name once.
+                    .accessibilityHidden(true)
                 configuration.label
                     .labelStyle(.titleOnly)
                     .font(.caption.weight(.medium))
