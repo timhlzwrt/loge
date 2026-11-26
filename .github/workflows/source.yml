@@ -32,7 +32,7 @@ jobs:
       id-token: write
     environment:
       name: github-pages
-      url: ${{ steps.pages.outputs.page_url }}source.json
+      url: ${{ steps.pages.outputs.page_url || steps.pages-retry.outputs.page_url }}source.json
     steps:
       - uses: actions/checkout@v7
       - name: Write the site
@@ -51,5 +51,13 @@ jobs:
       - uses: actions/upload-pages-artifact@v5
         with:
           path: site
+      # Deploying sometimes can't see the artifact uploaded a second earlier ("Fetching artifact
+      # metadata failed"); a fresh attempt half a minute later finds it.
       - id: pages
+        continue-on-error: true
+        uses: actions/deploy-pages@v5
+      - if: steps.pages.outcome == 'failure'
+        run: sleep 30
+      - id: pages-retry
+        if: steps.pages.outcome == 'failure'
         uses: actions/deploy-pages@v5
