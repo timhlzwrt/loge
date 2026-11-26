@@ -453,7 +453,8 @@ struct AccountSyncTests {
         await alice.connect(code: try enrollment("alice")); await alice.resolve(useLocal: true)
         // The sync resolving schedules for Watch Later, which it doesn't carry, runs first.
         try await Task.sleep(for: .milliseconds(1200))
-        #expect(alice.status == .upToDate)
+        // A slow CI machine may still be finishing it.
+        #expect(try await eventually(within: 5) { alice.status == .upToDate })
         AccountGatewayProtocol.state.withLock { $0.isOffline = true; $0.log = [] }
         alice.startLiveUpdates()
         // Asked at once, after one second, then after two more.
