@@ -40,7 +40,7 @@ TOKEN = "secret-value, with comma"
 MKV = "https://test-videos.co.uk/vids/bigbuckbunny/mkv/1080/Big_Buck_Bunny_1080_10s_30MB.mkv"
 
 MANIFEST = {
-    "id": "local.mediaapp.test",
+    "id": "local.loge.test",
     "version": "1.0.0",
     "name": "Test Streams",
     "description": "Local test sources for loge",

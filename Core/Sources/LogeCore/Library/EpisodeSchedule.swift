@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import os
 
-private let log = Logger(subsystem: "li.tjh.MediaApp", category: "library")
+private let log = Logger(subsystem: "li.tjh.loge", category: "library")
 
 /// An episode with the day it aired, carrying its series' artwork.
 public struct ScheduledEpisode: Sendable, Equatable, Identifiable {

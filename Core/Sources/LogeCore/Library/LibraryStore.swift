@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import os
 
-private let log = Logger(subsystem: "li.tjh.MediaApp", category: "library")
+private let log = Logger(subsystem: "li.tjh.loge", category: "library")
 
 /// Watch progress and the user's saved titles, kept on this device.
 ///

@@ -3,9 +3,10 @@
 loge: a Stremio-addon client for iPhone/iPad, Apple TV and Mac, in native SwiftUI, public on
 GitHub under the PolyForm Noncommercial License 1.0.0 (source-available, no commercial use;
 GPL-3.0 until 10 November 2026) and installed by sideloading (SideStore source, no App Store).
-The project, scheme, product and `LogeCore` package are all named loge; only the bundle ID
-(`li.tjh.MediaApp`), Keychain service names and log subsystem keep the old working name, so
-saved data and sign-ins carry over. It browses catalogs from Stremio addons, shows details,
+The project, scheme, product, `LogeCore` package and bundle ID (`li.tjh.loge`, also the
+Keychain service names and log subsystem) are all named loge. Version 1.0 moved from the
+working name's `li.tjh.MediaApp`: each device installed it as a new app and signed in to sync
+and TMDB again; nothing reads the old app's data. It browses catalogs from Stremio addons, shows details,
 lists streams and plays them with mpv. The look follows the Strand app: charcoal canvas,
 artwork-led, white accent, system font, no cards/badges. Pages without a title sit on the
 plain charcoal; a title's page, and Home's hero, sit in its room (`Room`): a deep
@@ -168,8 +169,7 @@ the live shared setups between accounts were removed the same month for a one-ti
 iPhone/iPad/Mac, Import Setup everywhere). A device that was in a group drops its grants and
 keys at launch and keeps what it shows; `Baselines.formerlyShared` makes the next sync take its
 values for those categories over the account's older copy.
-MDBList, which added Letterboxd and Rotten Tomatoes scores, was removed the same month
-(`RetiredMDBListKey` deletes its saved key at launch).
+MDBList, which added Letterboxd and Rotten Tomatoes scores, was removed the same month.
 Watch Later is the only list: custom lists were folded into it the same month (`LibraryStore`
 appends any stored lists' titles once when a profile loads, then deletes them). My Lists ends
 (on iPhone: a second pill beside Watch Later, both as poster grids, a film's runtime under its
@@ -310,21 +310,21 @@ TMDB's top match only). Its filter sentence shows once there's a query or genre.
 - `FlowTests.testTrackSwitchingWhilePlaying` is flaky: menus sometimes don't open in time.
 - iPhone simulators lack Picture in Picture; use iPad for that path.
 - `Test Streams` surviving uninstall on the iPhone 18 Pro simulator is a stale
-  `data/Library/Preferences/li.tjh.MediaApp.plist` outside the app container.
+  `data/Library/Preferences/li.tjh.loge.plist` outside the app container.
 - Skipped without setup: PiP tests on iPhone simulators, the connected-account test without a
   code file, TMDB filmography tests without a token file.
 - Background-recovery tests check the picture's pixels; an older check couldn't see black video.
 
 ## Open
 
-- Removable once every device has launched a build from `claude/trim-features`: `RetiredMDBListKey`,
-  `LibraryStore.foldRetiredLists`, AccountSync's `RetiredGroups`/`formerlyShared`,
+- Removable once every device has launched a build from `claude/trim-features` (or 1.0, which
+  every device installs fresh): `LibraryStore.foldRetiredLists`, AccountSync's `RetiredGroups`/`formerlyShared`,
   `SyncedSettings.migrateSourceSizeLimit` and the decoding of `maximumSourceGigabytes`, and the
   gateway's retired `/v2/join` and `/v2/groups` routes and `groups: []`.
 - ROADMAP.md lists the remaining verification item (OS runtime smoke tests) and the proposed
   features; agree on scope before building any of them.
 - Top Shelf is on hold: atvloadly installs the extension and its App Group
-  (`group.li.tjh.MediaApp.<team ID>`, read from the embedded profile), but tvOS never launches
+  (`group.li.tjh.loge.<team ID>`, read from the embedded profile), but tvOS never launches
   it; the reason is only in the Apple TV's live log (branch `claude/top-shelf-test`).
 - tvOS Home performance is measured in the simulator only (Release, Apple TV 4K, keys sent to
   the simulator rather than XCUIRemote): about 40 ms of main-thread work per move along a row

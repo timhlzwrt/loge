@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-private let log = Logger(subsystem: "li.tjh.MediaApp", category: "addons")
+private let log = Logger(subsystem: "li.tjh.loge", category: "addons")
 
 /// Asks for the link Play is about to open before Play is pressed. Debrid addons such as
 /// Comet resolve their playback link on its first request, which takes most of the time to

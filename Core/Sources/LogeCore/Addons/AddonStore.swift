@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import os
 
-private let log = Logger(subsystem: "li.tjh.MediaApp", category: "addons")
+private let log = Logger(subsystem: "li.tjh.loge", category: "addons")
 
 public struct InstalledAddon: Codable, Sendable, Equatable, Identifiable {
     public let manifestURL: String

@@ -170,7 +170,7 @@ public final class TMDBAccount {
         caches = MetadataCaches()
     }
 
-    private static let service = "li.tjh.MediaApp.tmdb"
+    private static let service = "li.tjh.loge.tmdb"
     private static let account = "readAccessToken"
 
     private static func loadToken() throws(TMDBAccountError) -> String? {

@@ -35,7 +35,7 @@ targets:
         UIBackgroundModes: [audio]
         # loge://setup#<code> opens a setup someone shared (SetupCode) on iPhone, iPad and Mac.
         CFBundleURLTypes:
-          - CFBundleURLName: li.tjh.MediaApp.setup
+          - CFBundleURLName: li.tjh.loge.setup
             CFBundleURLSchemes: [loge]
         # Read by Sparkle on macOS; the other platforms do not link the updater.
         SUFeedURL: https://tjh.li/loge/appcast.xml
@@ -54,8 +54,7 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
-        # Bundle ID stays li.tjh.MediaApp so saved addons and library carry over.
-        PRODUCT_BUNDLE_IDENTIFIER: li.tjh.MediaApp
+        PRODUCT_BUNDLE_IDENTIFIER: li.tjh.loge
         PRODUCT_NAME: loge
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
