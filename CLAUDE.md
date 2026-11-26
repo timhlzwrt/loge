@@ -12,8 +12,10 @@ plain charcoal; a title's page, and Home's hero, sit in its room (`Room`): a dee
 tone taken from the backdrop (`RoomTone`, cached per URL), which the backdrop fades into and
 which fades to the canvas lower down. Heroes show the title's logo in white and greys
 (`TitleLogo(isWhite:)`, desaturated with a soft dark shade, since flattening to one white loses
-solid panels). Choices side by side on a phone (seasons, genres, lists, roles) are white-when-chosen
-pills (`PillButtonStyle`); posters in a phone's grids carry their name and a line under. One white
+solid panels). Choices side by side (seasons, genres, lists, roles) are white-when-chosen pills
+(`PillButtonStyle`; on Apple TV white when focused); posters in grids carry their name and a line
+under. Apple TV shows focus by white fills and lift, never outlines: tiles lift 1.12 with a shadow
+and the others dim (`LiftButtonStyle`), buttons and sentence values turn white. One white
 primary button per screen; the rest translucent white, every button with a word. No end
 times ("ends at"), only time left. Filters and settings read as sentences (`Sentence`): grey words, values white
 and underlined, each value the menu or link that changes it.
@@ -112,7 +114,7 @@ logs; Instruments over the network to it drops after about a second.
 hero), `home-empty` (first launch: nothing watched, no addons), `search-results` (with a TMDB
 person), `catalog` (See All), `my-lists-artwork`, `home-shelves`, `addons`, `settings`, `person`. `details` and `series` take
 Cinemeta rather than the simulator's addons; `series` has S1 E1 watched and E2 started.
-`DiscoverySnapshotTests` captures them (`TEST_RUNNER_DISCOVERY_SCREENSHOT_DIR`, `_SCREENS`,
+`DiscoverySnapshotTests` captures them on iPhone, iPad and Apple TV (`TEST_RUNNER_DISCOVERY_SCREENSHOT_DIR`, `_SCREENS`,
 `_SETTLE` seconds, `_SCROLLS`). The playback fixture also takes
 `PLAYBACK_FIXTURE_NEXT=late`, `PLAYBACK_FIXTURE_SHORT_URL` and `?hang=`.
 
@@ -187,8 +189,11 @@ Episodes are rows under season pills; Information is a two-column table. iPad an
 same column on the left (left-aligned, Information under it) and put episodes (200 pt stills
 with their summaries), Cast & Crew, the collection and More Like This on the right, under the
 backdrop, which takes the top right and fades left into the room; the Mac sets the actions as
-named buttons beside Play. Apple TV keeps Play with Watch Later and a More menu
-(`TitleMoreMenu`) and the description with, one size down, genre, year, runtime and
+named buttons beside Play. Apple TV leads with the logo, facts and two lines of description,
+then worded buttons (Play focused, Watch Later, Sources, Watched; no Trailer), "31 min left"
+under them, season pills over 390 pt episode cards (the pills take focus only after an
+episode has, so one press down from Play reaches the episodes) and More Like This first
+below. The facts line shows genre, year, runtime and
 the IMDb rating. It stands behind IMDb's white mark, the one place the app shows another
 brand's logo. Rows on that page have a heading and no caption
 under it. Section headings share a smaller semibold style across the app (20 pt on iOS).
@@ -309,7 +314,11 @@ TMDB's top match only). Its filter sentence shows once there's a query or genre.
 - tvOS Home performance is measured in the simulator only (Release, Apple TV 4K, keys sent to
   the simulator rather than XCUIRemote): about 40 ms of main-thread work per move along a row
   and 140 ms between rows, down from 75 and 250 before the rows went lazy. Keep measurements
-  comparable.
+  comparable. Simulator.app has since gone from this machine, so the Rooms Home (focused
+  title's room tone, tone computed off the main thread) was compared with XCUIRemote presses
+  instead, which add their own stall: before and after, about 130 ms per move along a row
+  both, and 23–35 ms vs 33–35 ms between rows (`sample`, two runs each). Not comparable with
+  the numbers above.
 - Unverified: playback and Picture in Picture on tvOS and macOS, HDR output, tvOS display
   matching, swipe-to-scrub with the Siri Remote (the preview itself is checked in the
   simulators by setting a scrub position), physical phone-to-Apple-TV

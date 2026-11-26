@@ -48,8 +48,9 @@ navigation destinations.
 - `App/Browse/Home/HomeView.swift`: the last thing watched leads, with Resume (and
   Details on iPad and Mac), and the rest of Continue Watching follow as landscape cards;
   with nothing in progress, an artwork carousel. The page takes the hero's room tone.
-  Without a stream addon, Add Addon and Import Setup show under the hero. A
-  focus-driven backdrop and fixed title header on Apple TV. Shelves follow
+  Without a stream addon, Add Addon and Import Setup show under the hero. On Apple TV
+  the focused title sets the room: its backdrop upper right fading into its tone, its
+  logo, facts and summary above the rows, Continue Watching first. Shelves follow
   `HomeLayout` (Core): by default the library rows, the popular, IMDb-favourites and
   genre shelves as before; Settings → Home hides, reorders, adds installed addons'
   catalogs (those needing no search or other input) and resets. The carousel takes the
@@ -64,8 +65,8 @@ navigation destinations.
   the logo, one line of facts, Play across the width and labelled circles for Watch
   Later, Trailer, Sources and Watched, then the description; seasons are pills over
   episode rows. iPad and Mac set that column on the left and episodes, cast and related
-  titles on the right. Apple TV keeps Play with Watch Later and a More menu
-  (`TitleMoreMenu`), and the description with genre, year, runtime and the scores one size down.
+  titles on the right. Apple TV puts worded buttons beside Play (Watch Later, Sources,
+  Watched) under two lines of description, then season pills over episode cards.
   Cast & Crew shows only with TMDB connected; the addon's credits then stand in while
   TMDB's load or when it has none. Watch Trailer opens YouTube (the addon's trailer,
   or TMDB's when connected; not on Apple TV, which has no browser), and a
@@ -79,7 +80,8 @@ navigation destinations.
   groups list cached sources first, otherwise in addon order; Filter narrows by audio
   language, HDR and the Maximum bitrate setting, and unknown metadata stays visible.
   On iPhone, iPad and Mac it's one list, the source Play would start on top ("Play picks"),
-  and the title page opens it as a sheet (a centred panel on iPad; Cancel and Play on the Mac).
+  and the title page opens it as a sheet (a centred panel on iPad; Cancel and Play on the Mac;
+  full screen over a blurred still on Apple TV, Play's pick focused).
 - `SearchView.swift`: debounced search across built-in movie/series feeds and local
   recent searches. On iPhone results are rows (poster, name, kind and year), on iPad and
   Mac a poster grid, with a matching person from TMDB first; the empty state is Recent and
