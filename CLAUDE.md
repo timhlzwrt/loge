@@ -115,7 +115,13 @@ hero), `home-empty` (first launch: nothing watched, no addons), `search-results`
 person), `catalog` (See All), `my-lists-artwork`, `home-shelves`, `addons`, `settings`, `person`. `details` and `series` take
 Cinemeta rather than the simulator's addons; `series` has S1 E1 watched and E2 started.
 `DiscoverySnapshotTests` captures them on iPhone, iPad and Apple TV (`TEST_RUNNER_DISCOVERY_SCREENSHOT_DIR`, `_SCREENS`,
-`_SETTLE` seconds, `_SCROLLS`). The playback fixture also takes
+`_SETTLE` seconds, `_SCROLLS`). Fixture screens run with throwaway settings and an offline sync
+account (`loge.ui-test`), never this device's own, so they also work on a Mac that has the real
+app set up: build Debug for macOS, then `open --env DISCOVERY_SCREEN=<name>
+.build/xcode/Build/Products/Debug/loge.app --args --discovery-ui-test` (not `open -n`, and no
+extra arguments, or no window opens; the screen must be unlocked) and capture it with
+`screencapture -l <window id>`. Launching it any other way runs against the real settings.
+The fixtures leave `loge.*-fixture` plists in `~/Library/Preferences`. The playback fixture also takes
 `PLAYBACK_FIXTURE_NEXT=late`, `PLAYBACK_FIXTURE_SHORT_URL` and `?hang=`.
 
 ## Conventions
@@ -126,7 +132,8 @@ Cinemeta rather than the simulator's addons; `series` has S1 E1 watched and E2 s
 - Real-device testing isn't planned (ROADMAP.md): verify in simulators and automated tests,
   don't ask for or schedule hardware checks, and name what a simulator can't establish (HDR,
   display matching, remote swipes, screen lock, physical cross-device handoff) as a limit.
-  macOS has no simulator; report Mac runtime behaviour as unverified unless checked.
+  macOS has no simulator: check Mac screens with the fixtures as described under Commands,
+  and report what they don't reach (toolbar tabs and search, hover, the player) as unverified.
 - Reuse the existing tests and fixtures (`LibraryStoreTests`, `EpisodeScheduleTests`, `FlowTests`,
   `PlaybackRegressionTests`, `RemoteDriverTests`, `Tools/test-addon.py`, the playback
   fixtures) rather than creating another harness.
