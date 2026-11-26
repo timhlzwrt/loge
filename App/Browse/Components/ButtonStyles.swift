@@ -251,10 +251,11 @@ extension View {
 }
 
 /// Pointer feedback on artwork that opens something, which otherwise gives no sign in dense
-/// rows of what can be clicked: the iPad pointer's highlight; on the Mac a white Play button
-/// over dimmed artwork, which plays a Continue Watching card and opens anything else.
-/// Apple TV has its focus effects instead.
+/// rows of what can be clicked: the iPad pointer's highlight; on the Mac dimmed artwork, with
+/// a white Play button only where clicking plays (an episode on the title page). Apple TV has
+/// its focus effects instead.
 struct PointerHighlight: ViewModifier {
+    var plays = false
     #if os(macOS)
     @State private var isHovered = false
     #endif
@@ -268,12 +269,14 @@ struct PointerHighlight: ViewModifier {
                 if isHovered {
                     ZStack {
                         Color.black.opacity(0.35)
-                        Image(systemName: "play.fill")
-                            .font(.system(size: 18, weight: .bold))
-                            .foregroundStyle(.black)
-                            .offset(x: 2)
-                            .frame(width: 52, height: 52)
-                            .background(.white, in: .circle)
+                        if plays {
+                            Image(systemName: "play.fill")
+                                .font(.system(size: 18, weight: .bold))
+                                .foregroundStyle(.black)
+                                .offset(x: 2)
+                                .frame(width: 52, height: 52)
+                                .background(.white, in: .circle)
+                        }
                     }
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)

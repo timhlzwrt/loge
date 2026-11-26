@@ -219,7 +219,7 @@ private struct EpisodeRow: View {
                     if let progress, !isWatched { WatchProgressBar(progress: progress, inset: 7) }
                 }
                 .frame(width: Self.stillWidth, height: Self.stillWidth * 9 / 16)
-                .modifier(PointerHighlight())
+                .modifier(PointerHighlight(plays: true))
                 .clipShape(.rect(cornerRadius: 9))
                 .brightness(isWatched ? -0.25 : 0)
                 .opacity(video.isReleased() ? 1 : 0.5)

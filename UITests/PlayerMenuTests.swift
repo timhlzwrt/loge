@@ -17,9 +17,13 @@ final class PlayerMenuTests: XCTestCase {
         app.launch()
 
         // The card's label is the title; the time left is its value.
-        let card = app.buttons.matching(NSPredicate(format: "value CONTAINS 'minutes left'")).firstMatch
+        let card = app.buttons.matching(NSPredicate(format: "value CONTAINS 'min left'")).firstMatch
         XCTAssertTrue(card.waitForExistence(timeout: 15), "Nothing in Continue Watching")
         card.tap()
+        // The card opens the title; its Resume plays.
+        let resume = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Resume'")).firstMatch
+        XCTAssertTrue(resume.waitForExistence(timeout: 15), "The card didn't open the title")
+        resume.tap()
 
         // The controls show while the stream loads, so the menu is reachable straight away.
         let options = app.buttons["More"]
