@@ -77,7 +77,7 @@ and no downloads.
 
 ## Install
 
-loge is pre-1.0 and not in the App Store. It needs iOS, iPadOS, tvOS or macOS 26.
+loge is still in heavy development and not in the App Store. It needs iOS, iPadOS, tvOS or macOS 26.
 
 - **iPhone / iPad:** sideload `loge-iOS.ipa`, or add the SideStore source.
 - **Apple TV:** sideload `loge-tvOS.ipa` with atvloadly or Sideloadly.
