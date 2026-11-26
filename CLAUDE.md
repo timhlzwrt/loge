@@ -229,13 +229,15 @@ TMDB's top match only). Its filter sentence shows once there's a query or genre.
   An optimizer bug once lost a task group's result in Release builds, so test Release too.
 - iPad and Mac details switch between `DetailColumnsLayout` and a `VStackLayout` under
   `AnyLayout` when the window narrows below 880 pt, so the chosen season survives.
-- On the Mac, hovering artwork (`PointerHighlight`) dims it under a white Play button: a
-  Continue Watching card plays, anything else opens. The Mac's sources sheet has Play picks
+- Posters and cards, Continue Watching's included, always open the title's page, never its
+  sources; playing is that page's Play (or the Home hero's Resume). On the Mac hovering
+  artwork (`PointerHighlight`) dims it, with a white Play button only on a title page's
+  episode stills, which open their sources. The Mac's sources sheet has Play picks
   selectable like any row, Cancel and Play, Return plays the selection, and a row's tooltip
   shows the file's release name. Release names carry no addon keys; only manifest and stream
   URLs do, and those are never shown.
 - Home leads with what's being watched (full width with Details beside Resume on iPad and Mac) (`ResumeHero`: the latest of Continue
-  Watching, Resume going through Sources with autoplay as Continue Watching does, the rest a
+  Watching, Resume going through Sources with autoplay, the rest a
   swipe away and in the row under it), unless Continue Watching is hidden in Home's layout;
   otherwise the featured carousel, with Play and Details. Without a stream addon a card under
   the hero offers Add Addon and Import Setup. Hero backdrops are the landscape image.

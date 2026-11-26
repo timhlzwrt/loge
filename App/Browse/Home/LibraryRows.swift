@@ -22,7 +22,7 @@ struct ContinueWatchingRow: View {
 
         var id: String { item.id }
 
-        /// Opens its sources, which start the source last used straight away.
+        /// What the hero's Resume opens: its sources, which start the source last used straight away.
         var route: SourcesRoute {
             SourcesRoute(item: item, title: item.episodeCode.map { "\(item.title) · \($0)" } ?? item.title, autoplay: true)
         }
@@ -85,8 +85,11 @@ struct ContinueWatchingRow: View {
         }
     }
 
+    /// Opens the title, never its sources: playing is the title page's Play.
     private func card(_ entry: Entry) -> some View {
-        NavigationLink(value: entry.route) {
+        let item = entry.item
+        return NavigationLink(value: MetaPreview(id: item.metaID, type: item.type, name: item.title,
+                                                 poster: item.poster, background: item.background)) {
             Group {
                 if !Metrics.isTV {
                     LandscapeWatchCard(entry: entry)
