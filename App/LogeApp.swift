@@ -178,6 +178,13 @@ struct LogeApp: App {
         .defaultSize(width: 1280, height: 820)
         .commands {
             PlaybackCommands(playback: playback)
+            TitleCommands()
+            CommandMenu("Go") {
+                Button("Home") { selectedTab = .home }
+                    .keyboardShortcut("1")
+                Button("My Lists") { selectedTab = .myLists }
+                    .keyboardShortcut("2")
+            }
             CommandGroup(after: .appInfo) {
                 Button("Check for Updates…", action: appUpdater.checkForUpdates)
                     .disabled(!appUpdater.canCheckForUpdates)

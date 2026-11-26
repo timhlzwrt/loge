@@ -195,8 +195,12 @@ clears every aired episode and asks before clearing), then the description in th
 Episodes are rows under season pills; Information is a two-column table. iPad and Mac use the
 same column on the left (left-aligned, Information under it) and put episodes (200 pt stills
 with their summaries), Cast & Crew, the collection and More Like This on the right, under the
-backdrop, which takes the top right and fades left into the room. The Mac's column is the
-iPad's, circles included: worded buttons beside Play didn't fit it. Apple TV leads with the logo, facts and two lines of description,
+backdrop, which takes the top right and fades left into the room. The Mac's left column is a
+fixed 460 pt (a wider window gives the room to the right side), with Play across it and the
+actions as small worded capsules (no icons) under it, wrapping to two rows when they don't fit; the
+menu bar's Title menu has the same actions (Play ⌘↩, Watch Later ⌘L, Sources ⌘⇧S, Watched)
+for the title in the key window (`TitleCommands`, a focused scene value), and Go has Home ⌘1
+and My Lists ⌘2. Apple TV leads with the logo, facts and two lines of description,
 then worded buttons (Play focused, Watch Later, Sources, Watched; no Trailer), "31 min left"
 under them, season pills over 390 pt episode cards (the pills take focus only after an
 episode has, so one press down from Play reaches the episodes) and More Like This first
@@ -237,7 +241,9 @@ TMDB's top match only). Its filter sentence shows once there's a query or genre.
 - iPad and Mac details switch between `DetailColumnsLayout` and a `VStackLayout` under
   `AnyLayout` when the window narrows below 880 pt, so the chosen season survives.
 - Posters and cards, Continue Watching's included, always open the title's page, never its
-  sources; playing is that page's Play (or the Home hero's Resume). On the Mac hovering
+  sources; their context menu (long press, or right-click on the Mac) has Watch Later and, for
+  a film, its watched mark (`TitleActionsMenu`). On the Mac a shelf reached with Tab pages with
+  ← and →; playing is that page's Play (or the Home hero's Resume). On the Mac hovering
   artwork (`PointerHighlight`) dims it, with a white Play button only on a title page's
   episode stills, which open their sources. The Mac's sources sheet has Play picks
   selectable like any row, Cancel and Play, Return plays the selection, and a row's tooltip

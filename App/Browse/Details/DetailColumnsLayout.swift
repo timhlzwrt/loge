@@ -60,8 +60,13 @@ struct DetailColumnsLayout: Layout {
     /// Calls `place` for each subview and returns the total height.
     private func arrange(_ subviews: Subviews, width: CGFloat, widening widened: Int,
                          place: (LayoutSubview, CGPoint, CGFloat) -> Void) -> CGFloat {
+        #if os(macOS)
+        // One comfortable reading width; a wider window gives the room to the shelves.
+        let mainWidth = min(460, width)
+        #else
         // Enough on the left for Play and the four actions, even in a narrow window.
         let mainWidth = min(max((width * 0.42).rounded(), 440), 560, width)
+        #endif
         let sideIndices = subviews.indices.filter { subviews[$0][DetailColumnKey.self] == .side }
         let moved = Set(sideIndices.suffix(widened))
 

@@ -27,6 +27,10 @@ struct MetaDetailView: View {
     /// Taken from the backdrop; the canvas until it's known.
     @State private var tone = Color.canvas
     @State private var isConfirmingSeriesUnwatched = false
+    #if os(macOS)
+    /// Set by the Title menu's Play, which can't follow the page's Play link itself.
+    @State private var isPlayRequested = false
+    #endif
     #if os(tvOS)
     /// Focus starts on Play, whichever button the engine would otherwise pick. A series'
     /// Play arrives with its episodes, after focus has landed, so it's moved there once.
@@ -152,6 +156,10 @@ struct MetaDetailView: View {
         #elseif os(macOS)
         // Otherwise the window title falls back to the app's name.
         .navigationTitle(preview.name)
+        .focusedSceneValue(\.titleActions, titleCommandActions(meta: meta, play: play))
+        .navigationDestination(isPresented: $isPlayRequested) {
+            if let route = play?.route { SourcesView(route: route) }
+        }
         #endif
         #if os(tvOS)
         .fullScreenCover(item: $choosingSource) { SourcesView(route: $0, isChoosing: true) }
@@ -493,25 +501,21 @@ struct MetaDetailView: View {
         }
     }
 
-    /// Everything besides Play, each with its name: circles in equal columns, or on the Mac
-    /// buttons in a row.
+    /// Everything besides Play, each with its name: circles in equal columns; on the Mac small
+    /// worded buttons in a row, in two when the column is too narrow for one.
     private func actions(meta: Meta?, play: PlayAction?) -> some View {
-        let isSaved = library.isSaved(preview.id)
-        let saved = savedPreview(meta)
-        return HStack(alignment: .top, spacing: Self.actionSpacing) {
-            Button(isSaved ? "In Watch Later" : "Watch Later", systemImage: isSaved ? "checkmark" : "plus") {
-                library.toggleSaved(saved)
+        Group {
+            #if os(macOS)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) { actionButtons(meta: meta, play: play) }
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: 8, alignment: .leading)],
+                          alignment: .leading, spacing: 8) {
+                    actionButtons(meta: meta, play: play)
+                }
             }
-            .buttonStyle(RoundButtonStyle(isOn: isSaved))
-            .accessibilityLabel(isSaved ? "Remove from Watch Later" : "Add to Watch Later")
-            if let trailer = trailerURL(meta) {
-                Button("Trailer", systemImage: "play.rectangle") { openURL(trailer) }
-                    .buttonStyle(RoundButtonStyle())
-            }
-            Button("Sources", systemImage: "list.bullet") { chooseSource(play)?() }
-                .buttonStyle(RoundButtonStyle())
-                .disabled(play == nil)
-            watchedButton(meta: meta, play: play)
+            #else
+            HStack(alignment: .top, spacing: Self.actionSpacing) { actionButtons(meta: meta, play: play) }
+            #endif
         }
         .confirmationDialog("Mark \(preview.name) as unwatched?", isPresented: $isConfirmingSeriesUnwatched,
                             titleVisibility: .visible) {
@@ -522,6 +526,57 @@ struct MetaDetailView: View {
             Text("Progress and watched marks for all its episodes are removed.")
         }
     }
+
+    @ViewBuilder
+    private func actionButtons(meta: Meta?, play: PlayAction?) -> some View {
+        let isSaved = library.isSaved(preview.id)
+        let saved = savedPreview(meta)
+        Button(isSaved ? "In Watch Later" : "Watch Later", systemImage: isSaved ? "checkmark" : "plus") {
+            library.toggleSaved(saved)
+        }
+        .buttonStyle(RoundButtonStyle(isOn: isSaved))
+        .accessibilityLabel(isSaved ? "Remove from Watch Later" : "Add to Watch Later")
+        if let trailer = trailerURL(meta) {
+            Button("Trailer", systemImage: "play.rectangle") { openURL(trailer) }
+                .buttonStyle(RoundButtonStyle())
+        }
+        Button("Sources", systemImage: "list.bullet") { chooseSource(play)?() }
+            .buttonStyle(RoundButtonStyle())
+            .disabled(play == nil)
+        watchedButton(meta: meta, play: play)
+    }
+
+    #if os(macOS)
+    /// The page's buttons for the Title menu, which works on the title in the key window.
+    private func titleCommandActions(meta: Meta?, play: PlayAction?) -> TitleCommandActions {
+        let saved = savedPreview(meta)
+        let isWatched: Bool
+        let toggleWatched: (() -> Void)?
+        if preview.type == MediaType.series {
+            let released = (meta?.videos ?? []).filter { $0.isReleased() && $0.season != 0 }
+            isWatched = !released.isEmpty && released.allSatisfy { library.isWatched($0.id) }
+            toggleWatched = released.isEmpty ? nil
+                : isWatched ? { isConfirmingSeriesUnwatched = true }
+                : { library.markWatched(released.map { route(for: $0).item }) }
+        } else if let item = play?.route.item {
+            isWatched = library.isWatched(item.id)
+            toggleWatched = { [isWatched] in
+                if isWatched { library.markUnwatched([item.id]) } else { library.markWatched([item]) }
+            }
+        } else {
+            isWatched = false
+            toggleWatched = nil
+        }
+        return TitleCommandActions(
+            playLabel: play?.label ?? "Play",
+            play: play == nil ? nil : { isPlayRequested = true },
+            isSaved: library.isSaved(preview.id),
+            toggleSaved: { library.toggleSaved(saved) },
+            chooseSource: chooseSource(play),
+            isWatched: isWatched,
+            toggleWatched: toggleWatched)
+    }
+    #endif
 
     /// A movie's mark, or for a series every episode out so far; taking a series' marks
     /// away clears all its progress, so that asks first.

@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Mouse navigation on Mac, with the native touch and remote scrolling on other platforms.
+/// Mouse and keyboard navigation on Mac (page buttons; ← and → once Tab has reached the
+/// shelf), with the native touch and remote scrolling on other platforms.
 struct HorizontalShelf<Content: View>: View {
     let label: String
     private let content: Content
@@ -41,6 +42,10 @@ struct HorizontalShelf<Content: View>: View {
                     pageButton(forward: true).padding(.trailing, 2)
                 }
             }
+            // Reached with Tab, not by clicking, which opens the title under the pointer.
+            .focusable(interactions: .activate)
+            .onKeyPress(.leftArrow) { page(forward: false); return .handled }
+            .onKeyPress(.rightArrow) { page(forward: true); return .handled }
             #else
             .scrollIndicators(.hidden)
             #endif
@@ -52,15 +57,17 @@ struct HorizontalShelf<Content: View>: View {
     }
 
     #if os(macOS)
+    private func page(forward: Bool) {
+        let geometry = latest.geometry
+        let distance = max(1, geometry.width - Metrics.gutter * 2)
+        let target = min(geometry.maximum, max(0, geometry.offset + (forward ? distance : -distance)))
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.22)) {
+            position.scrollTo(x: target)
+        }
+    }
+
     private func pageButton(forward: Bool) -> some View {
-        Button {
-            let geometry = latest.geometry
-            let distance = max(1, geometry.width - Metrics.gutter * 2)
-            let target = min(geometry.maximum, max(0, geometry.offset + (forward ? distance : -distance)))
-            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.22)) {
-                position.scrollTo(x: target)
-            }
-        } label: {
+        Button { page(forward: forward) } label: {
             Image(systemName: forward ? "chevron.right" : "chevron.left")
                 .font(.system(size: 13, weight: .semibold))
                 .frame(width: 28, height: 44)
