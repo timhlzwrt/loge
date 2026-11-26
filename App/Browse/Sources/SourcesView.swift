@@ -394,7 +394,7 @@ struct SourcesView: View {
             #if !os(tvOS)
             // What Play starts by itself, then the rest best first, each row saying its resolution.
             let pick = playPick(providers)
-            if let pick { picked(pick, isSelected: pick.id == selectedID) }
+            if let pick { picked(pick, isRecommended: pick.id == recommended, isSelected: pick.id == selectedID) }
             VStack(alignment: .leading, spacing: 0) {
                 if pick != nil, !groups.isEmpty {
                     Text("Other sources")
@@ -793,15 +793,15 @@ struct SourcesView: View {
 
     /// Play's choice on its own panel, with Play, so the usual source is one tap away. The
     /// Mac's sheet selects it like any row, for its own Play.
-    private func picked(_ entry: ListedSource, isSelected: Bool) -> some View {
+    private func picked(_ entry: ListedSource, isRecommended: Bool, isSelected: Bool) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Play picks")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             #if os(macOS)
-            row(entry, isLastPlayed: false, isRecommended: false, isSelected: isSelected)
+            row(entry, isLastPlayed: false, isRecommended: isRecommended, isSelected: isSelected)
             #else
-            StreamRow(entry: entry, isLastPlayed: false, connectionSpeed: nil)
+            StreamRow(entry: entry, isLastPlayed: false, connectionSpeed: isRecommended ? connectionSpeed : nil)
             Button { choose(entry) } label: {
                 Label("Play", systemImage: "play.fill").frame(maxWidth: .infinity)
             }
