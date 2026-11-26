@@ -113,7 +113,8 @@ logs; Instruments over the network to it drops after about a second.
 (need `Tools/test-addon.py --port 8769 --many --delay 5`), `sources-empty(-sheet)`,
 `settings-review|failed|old-server`, `carousel-resume` (a series started: the phone's resume
 hero), `home-empty` (first launch: nothing watched, no addons), `search-results` (with a TMDB
-person), `catalog` (See All), `my-lists-artwork`, `home-shelves`, `addons`, `settings`, `person`. `details` and `series` take
+person), `catalog` (See All), `my-lists-artwork`, `home-shelves`, `addons`, `settings`, `person`, `root`
+(the whole window, with the tabs and the Mac's toolbar). `details` and `series` take
 Cinemeta rather than the simulator's addons; `series` has S1 E1 watched and E2 started.
 `DiscoverySnapshotTests` captures them on iPhone, iPad and Apple TV (`TEST_RUNNER_DISCOVERY_SCREENSHOT_DIR`, `_SCREENS`,
 `_SETTLE` seconds, `_SCROLLS`). Fixture screens run with throwaway settings and an offline sync
@@ -134,7 +135,7 @@ The fixtures leave `loge.*-fixture` plists in `~/Library/Preferences`. The playb
   don't ask for or schedule hardware checks, and name what a simulator can't establish (HDR,
   display matching, remote swipes, screen lock, physical cross-device handoff) as a limit.
   macOS has no simulator: check Mac screens with the fixtures as described under Commands,
-  and report what they don't reach (toolbar tabs and search, hover, the player) as unverified.
+  and report what they don't reach (typing into search, hover, the player) as unverified.
 - Reuse the existing tests and fixtures (`LibraryStoreTests`, `EpisodeScheduleTests`, `FlowTests`,
   `PlaybackRegressionTests`, `RemoteDriverTests`, `Tools/test-addon.py`, the playback
   fixtures) rather than creating another harness.
@@ -279,7 +280,9 @@ TMDB's top match only). Its filter sentence shows once there's a query or genre.
   anywhere. Search has the search role except on iPhone, where the role would detach it from
   the one pill; the iPad draws it as the magnifier at the pill's trailing end. The Mac has
   Home and My Lists only: search is the toolbar field (⌘F), whose results cover the tab while
-  it has text (`SearchView(toolbarQuery:)`), and Settings is its own window.
+  it has text (`SearchView(toolbarQuery:)`), and Settings is its own window, opened by ⌘, or
+  the gear beside the field. The field is a 220 pt one of the app's own: `.searchable`'s fills
+  all of the Mac toolbar's free space.
 - A series is followed while it has progress in the library: of the 30 most recently watched,
   `EpisodeSchedule` looks up those whose last episode was finished, at most every six hours
   each. An episode aired since then shows in Continue Watching as "New episode".

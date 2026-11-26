@@ -259,7 +259,12 @@ struct LogeApp: App {
         } else if ProcessInfo.processInfo.arguments.contains("--playback-ui-test") {
             PlaybackFixtureView()
         } else if ProcessInfo.processInfo.arguments.contains("--discovery-ui-test") {
-            BrowseStack { DiscoveryFixture.screen }
+            // `root`: the whole window, tabs and the Mac's toolbar search, on the fixture's data.
+            if DiscoveryFixture.screenName == "root" {
+                rootView
+            } else {
+                BrowseStack { DiscoveryFixture.screen }
+            }
         } else if ProcessInfo.processInfo.arguments.contains("--person-role-ui-test") {
             BrowseStack {
                 PersonView(route: PersonRoute(person: Person(name: "Filmography check", roles: [.director])))
@@ -385,8 +390,33 @@ struct RootView: View {
                 BrowseStack { SearchView(toolbarQuery: $searchQuery) }
             }
         }
-        .searchable(text: $searchQuery, placement: .toolbar, prompt: "Search")
-        .searchFocused($isSearchFocused)
+        .toolbar {
+            // Not `.searchable`: on the Mac its field stretches across all of the toolbar's free space.
+            ToolbarItem(placement: .primaryAction) {
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                    TextField("Search", text: $searchQuery)
+                        .textFieldStyle(.plain)
+                        .focused($isSearchFocused)
+                        .onExitCommand { searchQuery = "" }
+                    if !searchQuery.isEmpty {
+                        Button("Clear", systemImage: "xmark.circle.fill") { searchQuery = "" }
+                            .labelStyle(.iconOnly)
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.horizontal, 8)
+                .frame(width: 220)
+            }
+            // Settings is its own window on the Mac; this is the way to it besides ⌘,.
+            ToolbarItem(placement: .primaryAction) {
+                SettingsLink { Label("Settings", systemImage: "gearshape") }
+                    .help("Settings")
+            }
+        }
         .onChange(of: searchRequests) { isSearchFocused = true }
         // Choosing a tab leaves the search for it.
         .onChange(of: selection) { searchQuery = "" }
