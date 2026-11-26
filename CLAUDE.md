@@ -190,7 +190,7 @@ same column on the left (left-aligned, Information under it) and put episodes (2
 with their summaries), Cast & Crew, the collection and More Like This on the right, under the
 backdrop, which takes the top right and fades left into the room. The Mac's left column is a
 fixed 460 pt (a wider window gives the room to the right side), with Play across it and the
-actions as small labelled capsules under it, wrapping to two rows when they don't fit; the
+actions as small worded capsules (no icons) under it, wrapping to two rows when they don't fit; the
 menu bar's Title menu has the same actions (Play ⌘↩, Watch Later ⌘L, Sources ⌘⇧S, Watched)
 for the title in the key window (`TitleCommands`, a focused scene value), and Go has Home ⌘1
 and My Lists ⌘2. Apple TV leads with the logo, facts and two lines of description,

@@ -502,7 +502,7 @@ struct MetaDetailView: View {
     }
 
     /// Everything besides Play, each with its name: circles in equal columns; on the Mac small
-    /// buttons in a row, in two when the column is too narrow for one.
+    /// worded buttons in a row, in two when the column is too narrow for one.
     private func actions(meta: Meta?, play: PlayAction?) -> some View {
         Group {
             #if os(macOS)

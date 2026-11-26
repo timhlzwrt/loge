@@ -92,7 +92,7 @@ struct RoundButtonStyle: ButtonStyle {
             PrimaryButtonStyle(isTranslucent: true).makeBody(configuration: configuration)
             #elseif os(macOS)
             configuration.label
-                .labelStyle(.titleAndIcon)
+                .labelStyle(.titleOnly)
                 .font(.system(size: 12.5, weight: .medium))
                 .foregroundStyle(isOn ? .black : .white)
                 .padding(.horizontal, 11)
