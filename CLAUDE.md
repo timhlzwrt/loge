@@ -188,8 +188,8 @@ clears every aired episode and asks before clearing), then the description in th
 Episodes are rows under season pills; Information is a two-column table. iPad and Mac use the
 same column on the left (left-aligned, Information under it) and put episodes (200 pt stills
 with their summaries), Cast & Crew, the collection and More Like This on the right, under the
-backdrop, which takes the top right and fades left into the room; the Mac sets the actions as
-named buttons beside Play. Apple TV leads with the logo, facts and two lines of description,
+backdrop, which takes the top right and fades left into the room. The Mac's column is the
+iPad's, circles included: worded buttons beside Play didn't fit it. Apple TV leads with the logo, facts and two lines of description,
 then worded buttons (Play focused, Watch Later, Sources, Watched; no Trailer), "31 min left"
 under them, season pills over 390 pt episode cards (the pills take focus only after an
 episode has, so one press down from Play reaches the episodes) and More Like This first
