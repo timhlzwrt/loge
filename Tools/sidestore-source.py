@@ -13,6 +13,9 @@ import re
 import sys
 
 KEPT_VERSIONS = 10
+# Builds before 275 (1.0) are the app under its working name's bundle ID, li.tjh.MediaApp;
+# SideStore refuses a download whose ID doesn't match the listing's.
+FIRST_BUILD = 275
 
 releases_path, pages_url = sys.argv[1], sys.argv[2].rstrip("/")
 with open(releases_path) as file:
@@ -23,6 +26,8 @@ for release in releases:
     name = re.fullmatch(r"(\S+) \((\d+)\)", release.get("name") or "")
     ipa = next((a for a in release.get("assets", []) if a["name"] == "loge-iOS.ipa"), None)
     if release.get("draft") or not release["tag_name"].startswith("build-") or not name or not ipa:
+        continue
+    if int(name[2]) < FIRST_BUILD:
         continue
     versions.append({
         "version": name[1],
