@@ -1,145 +1,150 @@
-# Install and set up loge
+# Install loge
 
 [Back to loge](../README.md)
 
-loge is pre-1.0 and is not in the App Store. Only download official builds from
-[timhlzwrt/loge Releases](https://github.com/timhlzwrt/loge/releases).
-The iOS and tvOS `.ipa` files are unsigned; your sideloading tool signs them.
-A free Apple ID is sufficient, but its signatures expire after seven days.
-Refreshing a signature is separate from updating to a newer loge build.
+loge isn't in the App Store. You install it yourself with a free Apple ID, which takes about
+15 minutes the first time. You need **iOS/iPadOS 26, tvOS 26 or macOS 26** (Apple silicon).
 
-loge needs **iOS/iPadOS 26, tvOS 26 or macOS 26**; the Mac build is for Apple silicon
-only. There is no Android, Windows, Linux or visionOS app: a sideloading tool running on
-those systems doesn't make them loge clients.
+Only download loge from [GitHub Releases](https://github.com/timhlzwrt/loge/releases) or the
+SideStore source below.
 
-## iPhone and iPad
+- [iPhone and iPad with SideStore](#iphone-and-ipad-with-sidestore) (recommended)
+- [iPhone and iPad with iloader only](#iphone-and-ipad-with-iloader-only)
+- [Apple TV](#apple-tv)
+- [Mac](#mac)
+- [First run](#first-run)
+- [Something's wrong](#somethings-wrong)
 
-### Install an IPA from a computer
+## iPhone and iPad with SideStore
 
-1. Download **`loge-iOS.ipa`** from the latest release. The same file supports
-   both iPhone and iPad.
-2. Set up [iloader](https://github.com/nab138/iloader), following its own device,
-   Apple ID and signing instructions. It supports Mac, Windows and Linux.
-3. Connect your device, sign in through the tool and import the IPA.
-4. Complete any device-trust or Developer Mode steps requested by the tool.
-5. Refresh/reinstall the signed app before its signature expires. Import a
-   newer IPA to update loge; avoid deleting the app just to update it.
+SideStore is an app store on your phone that installs apps signed with your own Apple ID. It
+renews them by itself and offers each new loge build as an update. You need a computer once,
+to install SideStore.
 
-Sideloading tools depend on Apple's authentication services. If a tool cannot
-sign in, consult its current documentation rather than changing your addon
-setup or treating it as a loge playback failure. Revoke signing certificates
-only if you understand which other apps depend on them.
+### 1. Prepare the iPhone or iPad
 
-### SideStore / AltStore Classic source
+1. Make sure it has a passcode.
+2. Open **Settings → Privacy & Security → Developer Mode**, turn it on and let it restart.
+3. Install **LocalDevVPN** from the App Store. SideStore uses it to install and renew apps on
+   the device by itself; it doesn't route your traffic anywhere.
 
-If you already use a working [SideStore](https://sidestore.io) or
-[AltStore Classic](https://altstore.io) setup, add this URL under **Sources → +**:
+### 2. Install SideStore from a computer
 
-```text
-https://tjh.li/loge/source.json
-```
+1. On your Mac, Windows or Linux computer, download and open
+   [iloader](https://github.com/nab138/iloader). On Windows, install iTunes first; on Linux,
+   install `usbmuxd`.
+2. Connect the iPhone or iPad with a cable, tap **Trust** and enter its passcode.
+3. In iloader, sign in with your Apple ID. It doesn't have to be the one on the device; many
+   people use a separate free Apple ID for signing. The email is case-sensitive.
+4. Select your device, then **Install SideStore (Stable)**.
+5. On the device, open **Settings → General → VPN & Device Management**, choose your Apple ID
+   under Developer App and trust it.
 
-Install loge from that source. It lists new builds as updates. Signature refresh
-depends on your sideloading tool and its configuration, not on loge. This is an
-AltStore **Classic** source, not an AltStore PAL marketplace listing.
+### 3. Install loge
+
+1. Open **LocalDevVPN** and tap **Connect** (allow the VPN configuration the first time).
+2. Open **SideStore** and sign in with the same Apple ID.
+3. Go to **Sources**, tap **+** and add:
+
+   ```text
+   https://tjh.li/loge/source.json
+   ```
+
+4. Open the loge source and install loge.
+
+That's it. Continue with [First run](#first-run).
+
+### Keeping it working
+
+- Free Apple ID apps run for 7 days. SideStore renews them in the background while
+  LocalDevVPN is connected; open SideStore now and then so it can.
+- If loge stops opening, open LocalDevVPN, then SideStore → **My Apps**, and tap the days
+  counter next to loge to renew it. Don't delete loge: that deletes its library on the device.
+- New builds appear as updates in **My Apps**.
+- A free Apple ID allows 3 sideloaded apps at once, SideStore included.
+- After an iOS update or reset SideStore may lose its pairing file; iloader places it again
+  (see [SideStore's guide](https://docs.sidestore.io)).
+
+## iPhone and iPad with iloader only
+
+Without SideStore you need the computer every 7 days, and you install updates by hand.
+
+1. Do steps 1.1 and 1.2 and steps 2.1–2.3 above.
+2. Download **`loge-iOS.ipa`** from the
+   [latest release](https://github.com/timhlzwrt/loge/releases/latest) (one file for iPhone
+   and iPad).
+3. In iloader, select your device and import the IPA.
+4. Trust your Apple ID as in step 2.5.
+
+Before the 7 days are up, or when there's a new build, import the latest IPA again the same
+way. Installing over the existing app keeps your library.
 
 ## Apple TV
 
-1. Download **`loge-tvOS.ipa`**, not the iOS IPA.
-2. Pair the Apple TV with a tvOS-capable signing/install tool, such as
-   [atvloadly](https://github.com/bitxeno/atvloadly) or
-   [Sideloadly](https://sideloadly.io). Follow that tool's current host-platform
-   and network-pairing instructions.
-3. Install the IPA and arrange refreshes before the free seven-day signature
-   expires. SideStore itself does not run on tvOS.
+SideStore and iloader don't run on Apple TV. Use
+[atvloadly](https://github.com/bitxeno/atvloadly) (runs on a home server or NAS and renews
+the app for you) or [Sideloadly](https://sideloadly.io) (Mac or Windows, renew by hand every
+7 days):
 
-For a source build, [`Tools/install.sh`](../Tools/install.sh) can hand the IPA to an
-atvloadly service. Set `ATVLOADLY` to your own service address; the script's
-developer-machine default is not a public loge service.
+1. Download **`loge-tvOS.ipa`** from the
+   [latest release](https://github.com/timhlzwrt/loge/releases/latest), not the iOS file.
+2. Pair the Apple TV with the tool, following its instructions.
+3. Install the IPA with your Apple ID.
 
 ## Mac
 
-The distributed build is for **Apple silicon**.
+1. Download **`loge-macOS.dmg`** from the
+   [latest release](https://github.com/timhlzwrt/loge/releases/latest), open it and drag
+   loge into Applications.
+2. Open loge. macOS refuses the first time because loge isn't notarized by Apple: close the
+   message, open **System Settings → Privacy & Security** and choose **Open Anyway**.
 
-1. Download **`loge-macOS.dmg`**, open it, and drag **loge** into **Applications**.
-2. Open loge. If macOS refuses the first launch, dismiss the message.
-3. Open **System Settings → Privacy & Security** and use **Open Anyway** for
-   loge, then confirm the launch. Only do this for the official download you
-   intended to install; do not disable Gatekeeper globally.
-
-The app is **self-signed, not Apple-notarized**. Sparkle's Ed25519 update
-verification is separate from Apple's code signing/notarization and does not
-remove the first-install Gatekeeper check.
-
-For subsequent builds, use **loge → Check for Updates…** or **Settings → About**.
-You can enable automatic checks there. Both downloaded updates and the feed are
-signature-verified. An old build without the updater needs one manual DMG
-installation first. Mac installs do not expire after seven days.
+The Mac app doesn't expire. It updates itself: **loge → Check for Updates…**, or turn on
+automatic checks in Settings (⌘,).
 
 ## First run
 
-1. Open **Settings → Addons**. Cinemeta's built-in catalogs work without setup;
-   playback needs an addon that provides direct video streams.
-2. Paste the provider's configured **Manifest URL** ending in `/manifest.json`
-   into **Add addon**, then select **Install**. Do not paste its configuration
-   webpage instead.
-3. Open a title, choose an episode for a series, then select **Sources** and a
-   playable stream. A previously chosen source can be reused when available.
-4. Set preferred audio/subtitle languages and playback preferences in Settings.
+loge shows catalogs from Cinemeta out of the box. To play anything it needs a stream addon:
 
-Addon order affects provider priority. Use **Edit** on iPhone/iPad, drag rows on
-Mac, or choose **Move Up / Move Down** from an addon's menu on Apple TV.
+1. Copy your addon's **manifest URL**, the link ending in `/manifest.json` (not its
+   configuration page).
+2. In loge, tap **Add Addon** on Home, or open Settings and tap the addons value in
+   "takes sources from …".
+3. Paste the URL and choose **Install**.
 
-Configured manifest URLs may contain credentials. Treat the complete URL as a
-secret; never include it in a public issue or screenshot of an editable field.
+Open a title and choose **Play**, or **Sources** to pick a file yourself.
 
-## Optional accounts
+If you already use loge on another device, **Share Setup** there (Settings on iPhone, iPad and
+Mac) and **Import Setup** here copies your addons and preferences in one go.
 
-No account is required for basic browsing and playback. These are three
-separate integrations, not three required setup steps.
+Optional:
 
-### Private sync
+- **TMDB** adds cast, crew and recommendations. In Settings, tap TMDB and paste the
+  **API Read Access Token** (not the API key) from
+  [your TMDB API settings](https://www.themoviedb.org/settings/api). On Apple TV you can type
+  it with your phone's Apple TV Remote keyboard.
+- **Sync** keeps progress, Watch Later, addons and preferences the same on your devices. It
+  needs a server you run yourself; see [Private sync](SYNC.md).
 
-**Settings → Sync** connects to your own HTTPS service using a connection code.
-There is no default server. Your devices can share progress, watched state,
-ordered addons and preferences. To give another person your addons, use
-**Settings → Addons → Share Setup…** instead: a one-time copy, no account needed.
+Your manifest URL can contain your addon's settings and keys. Treat it like a password: don't
+post it in issues or screenshots.
 
-See [Private sync](SYNC.md) for server deployment, joining devices, expiring
-invitations, conflicts and recovery keys. Save the recovery key securely.
-Watch Later and remembered stream URLs remain local.
+## Something's wrong
 
-### TMDB metadata
+- **loge won't open after a week:** renew it (see
+  [Keeping it working](#keeping-it-working)). Don't delete it.
+- **SideStore can't install or renew:** check LocalDevVPN is connected and you're on Wi-Fi.
+  Problems with SideStore or iloader themselves belong with
+  [SideStore](https://docs.sidestore.io), not loge.
+- **No sources for a title:** your stream addon has nothing for it, or none is installed.
+  Catalogs list titles whether or not anything can play them.
+- **A source won't play:** loge plays direct video links. Torrents need an addon or debrid
+  service that turns them into links.
+- **Buffering:** pick a smaller file, or set a maximum bitrate in Settings.
 
-Open **Settings → TMDB → Connect TMDB** and paste the **API Read Access Token**
-from your [TMDB API settings](https://www.themoviedb.org/settings/api). Use the
-read access token, not the API key. loge checks it before storing it in Keychain.
-On Apple TV, your phone's Apple TV Remote keyboard can enter the token.
+**Your build number** is in Settings → About (tap the large "loge"). Builds are numbered
+`build-N` on GitHub.
 
-## Troubleshooting
-
-- **Catalogs load but no sources appear:** install a playback addon, confirm it
-  covers the selected title and check provider availability. A catalog entry is
-  not evidence of an available stream.
-- **Unsupported source:** only direct HTTP(S) video URLs play. Torrents, magnet
-  links and info hashes need a provider/service that resolves them first.
-- **Buffering:** try a smaller file or lower bitrate. Recommendations depend on
-  a download-speed measurement from prior playback; a fresh device may have none.
-- **Different Continue Watching on two devices:** confirm the same account, save
-  progress by pausing/closing, then request sync. Check pending conflicts in
-  Settings → Sync.
-- **No subtitles in PiP:** this is a current renderer limitation, not a setting.
-- **App stops opening after a week:** refresh its iOS/tvOS signature through your
-  sideloading tool. Deleting loge can remove local library data and is not needed
-  just to refresh a signature.
-- **Mac won't open:** follow the first-install Gatekeeper steps above. A signed
-  update feed is not an Apple notarization ticket.
-
-**Identify your build:** Settings → About shows the commit and date, plus a
-GitHub compare link. Releases are `build-N`, with the commit count as the build
-number—not a stable semantic-version release train.
-
-If a problem remains, [open a bug report](https://github.com/timhlzwrt/loge/issues/new/choose)
-with the device/OS, build commit, steps, expected result and actual result.
-Redact credentials, full configured addon/stream URLs, connection codes and
-recovery keys. Provider name/host is enough to identify an addon.
+Still stuck? Ask in [Discussions](https://github.com/timhlzwrt/loge/discussions). Found a
+bug? [Report it](https://github.com/timhlzwrt/loge/issues/new/choose) with your device, OS,
+build and what happened. Name your addon (or its host), never its full URL.

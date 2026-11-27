@@ -1,8 +1,11 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Installation and troubleshooting
+  - name: Questions and installation help
+    url: https://github.com/timhlzwrt/loge/discussions/categories/q-a
+    about: Ask here if loge won't install, sign or renew, or how something works.
+  - name: Installation guide
     url: https://github.com/timhlzwrt/loge/blob/main/docs/INSTALLATION.md
-    about: Signing, updates, addon setup, accounts and common playback problems.
+    about: SideStore, iloader, Apple TV, Mac and first-run setup.
   - name: Roadmap and known limits
     url: https://github.com/timhlzwrt/loge/blob/main/ROADMAP.md
     about: Check shipped work, testing scope and deferred features.
